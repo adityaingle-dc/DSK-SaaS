@@ -1,0 +1,14 @@
+{
+  "name": "@dsk/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Valuation master data, input-sheet schema and calculation engine shared by server, web and mobile",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  }
+}

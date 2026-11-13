@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+
+# Source workbooks contain customer PII and an embedded API key – keep them out of git
+*.xlsm
+*.xlsx
+~$*
+uploads/
+
+# Sample bank reports contain customer PII
+/valuation-print.pdf
