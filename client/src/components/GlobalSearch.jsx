@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import StatusBadge, { inr } from './StatusBadge.jsx';
 import { initials } from './Layout.jsx';
 import { IconChevron, IconClock, IconPlus, IconSearch } from './Icons.jsx';
-import { DuoHome, DuoKey, DuoList, DuoPulse, DuoUsers } from './DuoIcons.jsx';
+import { DuoContact, DuoHome, DuoKey, DuoList, DuoPulse, DuoSheet, DuoUsers } from './DuoIcons.jsx';
 
 // ---------- open/close from anywhere (sidebar, dashboard, Ctrl/⌘+K) ----------
 const SearchContext = createContext({ openSearch: () => {} });
@@ -69,7 +69,7 @@ function SearchDialog({ onClose }) {
   const listRef = useRef(null);
   const reqId = useRef(0);
   const [q, setQ] = useState('');
-  const [found, setFound] = useState({ valuations: [], members: [], total: 0 });
+  const [found, setFound] = useState({ valuations: [], members: [], customers: [], total: 0 });
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState(0);
   const [recent] = useState(readRecent);
@@ -85,7 +85,7 @@ function SearchDialog({ onClose }) {
   // search as you type (short debounce; stale responses are ignored)
   useEffect(() => {
     if (term.length < 2) {
-      setFound({ valuations: [], members: [], total: 0 });
+      setFound({ valuations: [], members: [], customers: [], total: 0 });
       setLoading(false);
       return undefined;
     }
@@ -93,14 +93,15 @@ function SearchDialog({ onClose }) {
     const id = ++reqId.current;
     const t = setTimeout(async () => {
       try {
-        const [v, m] = await Promise.all([
+        const [v, m, c] = await Promise.all([
           api.listValuations({ q: term, limit: 6 }),
           isSuperadmin ? api.listUsers({ q: term }) : Promise.resolve({ items: [] }),
+          isSuperadmin ? api.listCustomers({ q: term, limit: 5 }) : Promise.resolve({ items: [] }),
         ]);
         if (id !== reqId.current) return;
-        setFound({ valuations: v.items || [], members: (m.items || []).slice(0, 5), total: v.total || 0 });
+        setFound({ valuations: v.items || [], members: (m.items || []).slice(0, 5), customers: (c.items || []).slice(0, 5), total: v.total || 0 });
       } catch {
-        if (id === reqId.current) setFound({ valuations: [], members: [], total: 0 });
+        if (id === reqId.current) setFound({ valuations: [], members: [], customers: [], total: 0 });
       } finally {
         if (id === reqId.current) setLoading(false);
       }
@@ -110,7 +111,7 @@ function SearchDialog({ onClose }) {
 
   const actions = useMemo(() => {
     const all = [
-      { label: 'New valuation', to: '/valuations/new', icon: <IconPlus size={18} />, keywords: 'create add start sheet' },
+      ...(isSuperadmin ? [{ label: 'New valuation', to: '/valuations/new', icon: <IconPlus size={18} />, keywords: 'create add start sheet' }] : []),
       { label: 'Dashboard', to: '/', icon: <DuoHome size={18} />, keywords: 'home overview' },
       { label: 'All valuations', to: '/valuations', icon: <DuoList size={18} />, keywords: 'list sheets' },
       { label: 'Drafts', to: '/valuations?status=draft', icon: <DuoList size={18} />, keywords: 'draft unfinished' },
@@ -118,6 +119,9 @@ function SearchDialog({ onClose }) {
       { label: 'Approved', to: '/valuations?status=approved', icon: <DuoList size={18} />, keywords: 'approved signed' },
       { label: 'Rejected', to: '/valuations?status=rejected', icon: <DuoList size={18} />, keywords: 'rejected returned' },
       ...(isSuperadmin ? [
+        { label: 'Customers', to: '/customers', icon: <DuoContact size={18} />, keywords: 'clients enquiry customer contacts' },
+        { label: 'Reports', to: '/reports', icon: <DuoSheet size={18} />, keywords: 'reports generated stored pdf print' },
+        { label: 'Generate report', to: '/reports/new', icon: <DuoSheet size={18} />, keywords: 'generate create report bank print' },
         { label: 'Team', to: '/team', icon: <DuoUsers size={18} />, keywords: 'members users staff' },
         { label: 'Pending approvals', to: '/team?status=pending', icon: <DuoUsers size={18} />, keywords: 'approve signup accounts' },
         { label: 'Activity', to: '/activity', icon: <DuoPulse size={18} />, keywords: 'audit log feed report' },
@@ -143,6 +147,9 @@ function SearchDialog({ onClose }) {
         items.push({ id: 'v:all', kind: 'all', label: `See all ${found.total.toLocaleString('en-IN')} results`, to: `/valuations?q=${encodeURIComponent(term)}` });
       }
       g.push({ title: 'Valuations', items });
+    }
+    if (found.customers.length) {
+      g.push({ title: 'Customers', items: found.customers.map((c) => ({ id: `c:${c._id}`, kind: 'customer', c, to: `/customers/${c._id}` })) });
     }
     if (found.members.length) {
       g.push({ title: 'Team members', items: found.members.map((u) => ({ id: `u:${u._id}`, kind: 'member', u, to: `/team/${u._id}` })) });
@@ -173,7 +180,7 @@ function SearchDialog({ onClose }) {
   };
 
   let index = -1;
-  const noResults = term.length >= 2 && !loading && !found.valuations.length && !found.members.length && !actions.length;
+  const noResults = term.length >= 2 && !loading && !found.valuations.length && !found.members.length && !found.customers.length && !actions.length;
 
   return (
     <div className="gs-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -185,7 +192,7 @@ function SearchDialog({ onClose }) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={isSuperadmin ? 'Search valuations, team members or actions…' : 'Search valuations or actions…'}
+            placeholder={isSuperadmin ? 'Search valuations, customers, team or actions…' : 'Search valuations or actions…'}
             role="combobox"
             aria-expanded="true"
             aria-controls="gs-results"
@@ -255,6 +262,19 @@ function ResultRow({ item }) {
             {v.summary?.fairMarketValue > 0 && <span className="gs-amount">{inr(v.summary.fairMarketValue)}</span>}
             <StatusBadge status={v.status} />
           </span>
+        </>
+      );
+    }
+    case 'customer': {
+      const { c } = item;
+      return (
+        <>
+          <span className="gs-icon"><DuoContact size={17} /></span>
+          <span className="gs-main">
+            <strong>{c.name}</strong>
+            <small>{[c.phone1, c.district, `${c.stats?.total || 0} valuation${c.stats?.total === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}</small>
+          </span>
+          <IconChevron size={16} className="gs-go" />
         </>
       );
     }

@@ -13,6 +13,14 @@ export const ACTIONS = [
   'valuation.rejected',
   'valuation.deleted',
   'valuation.report_edited',
+  'valuation.assigned',
+  'customer.created',
+  'customer.updated',
+  'customer.deleted',
+  'customer.imported',
+  'report.generated',
+  'report.edited',
+  'report.deleted',
   'file.uploaded',
   'file.deleted',
   'user.created',
@@ -29,7 +37,7 @@ const activitySchema = new mongoose.Schema(
     actorName: String, // denormalised so the log stays readable if a user is renamed
     actorRole: String,
     action: { type: String, enum: ACTIONS, required: true, index: true },
-    entityType: { type: String, enum: ['valuation', 'file', 'user', 'auth'] },
+    entityType: { type: String, enum: ['valuation', 'file', 'user', 'auth', 'customer', 'report'] },
     entityId: { type: mongoose.Schema.Types.ObjectId },
     summary: { type: String, maxlength: 300 }, // human-readable one-liner
     meta: { type: mongoose.Schema.Types.Mixed },

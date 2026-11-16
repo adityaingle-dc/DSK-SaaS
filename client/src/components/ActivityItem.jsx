@@ -17,6 +17,14 @@ const LOOK = {
   'valuation.report_edited': ['blue', IconDraft, 'Report edited'],
   'file.uploaded': ['slate', IconList, 'Uploaded file'],
   'file.deleted': ['slate', IconList, 'Deleted file'],
+  'customer.created': ['blue', IconUser, 'Customer added'],
+  'customer.updated': ['slate', IconUser, 'Customer updated'],
+  'customer.deleted': ['red', IconX, 'Customer deleted'],
+  'customer.imported': ['blue', IconUser, 'Customers imported'],
+  'valuation.assigned': ['blue', IconDraft, 'Assigned'],
+  'report.generated': ['green', IconDraft, 'Report generated'],
+  'report.edited': ['slate', IconDraft, 'Report edited'],
+  'report.deleted': ['red', IconX, 'Report deleted'],
   'user.created': ['blue', IconUser, 'User created'],
   'user.updated': ['slate', IconUser, 'User updated'],
   'user.approved': ['green', IconUser, 'User approved'],
@@ -31,7 +39,9 @@ export default function ActivityItem({ item, showActor = true }) {
   const [tone, Icon] = LOOK[item.action] || ['slate', IconBolt];
   const link =
     item.entityType === 'valuation' && item.action !== 'valuation.deleted' ? `/valuations/${item.entityId}`
-      : item.entityType === 'user' ? `/team/${item.entityId}` : null;
+      : item.entityType === 'user' ? `/team/${item.entityId}`
+      : item.entityType === 'customer' && item.entityId && item.action !== 'customer.deleted' ? `/customers/${item.entityId}`
+      : item.entityType === 'report' && item.entityId && item.action !== 'report.deleted' ? `/reports/${item.entityId}` : null;
   const body = (
     <>
       <span className={`act-icon tone-${tone}`}><Icon size={17} /></span>

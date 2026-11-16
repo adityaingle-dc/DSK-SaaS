@@ -1,72 +1,82 @@
-import { IconBolt, IconCheck, IconKey, IconPulse, IconShield, Logo } from './Icons.jsx';
-import SectionIcon from './SectionIcons.jsx';
+import Brand from './Brand.jsx';
+import PoweredBy from './PoweredBy.jsx';
+import { IconCheck, IconKey, IconShield, IconTick } from './Icons.jsx';
 
-// How a valuation moves through the system (shown on the sign-in screen)
-const STEPS = [
-  { icon: <SectionIcon section={{ key: 'property' }} size={18} />, title: 'Site inspection', text: 'Capture land, building, documents and photos on site' },
-  { icon: <IconBolt size={18} />, title: 'Live calculation', text: 'Fair market, realizable and distress values as you type' },
-  { icon: <IconCheck size={18} />, title: 'Review & approval', text: 'Valuers approve or return sheets with notes' },
-  { icon: <SectionIcon section={{ key: 'documents' }} size={18} />, title: 'Bank-ready report', text: 'Print-perfect A4 report, signed off and audit-logged' },
-];
+// Sign-in / sign-up frame: a quiet form column on the left, a product panel on the right.
+// The panel's numbers are an illustrative sample of a valuation summary (decorative, hidden from screen readers).
+function ValuationPreview() {
+  return (
+    <div className="ap-stage" aria-hidden="true">
+      <div className="ap-card">
+        <div className="ap-card-head">
+          <span className="ap-ref">Valuation · Sample</span>
+          <span className="ap-chip"><IconTick size={12} strokeWidth={2.6} /> Approved</span>
+        </div>
+        <span className="ap-label">Fair market value</span>
+        <strong className="ap-value">₹2,06,40,000</strong>
+        <div className="ap-split">
+          <div><span>Realizable</span><b>₹1,85,76,000</b></div>
+          <div><span>Distress</span><b>₹1,65,12,000</b></div>
+        </div>
+        <div className="ap-bars">
+          <div className="ap-bar-row"><span>Land</span><i style={{ '--w': '62%' }} /><b>62%</b></div>
+          <div className="ap-bar-row"><span>Building</span><i style={{ '--w': '31%' }} /><b>31%</b></div>
+          <div className="ap-bar-row"><span>Amenities</span><i style={{ '--w': '7%' }} /><b>7%</b></div>
+        </div>
+        <div className="ap-card-foot">
+          <span className="ap-avatar">EV</span>
+          <span className="ap-who"><b>Field evaluator</b><small>Site visit · photos · documents</small></span>
+          <span className="ap-verified"><IconCheck size={15} /></span>
+        </div>
+      </div>
+      <div className="ap-toast">
+        <span className="ap-toast-icon"><IconTick size={14} strokeWidth={2.6} /></span>
+        <span><b>Bank report generated</b><small>A4 · frozen copy stored</small></span>
+      </div>
+    </div>
+  );
+}
 
-export default function AuthShell({ title, subtitle, children }) {
+export default function AuthShell({ title, subtitle, eyebrow, children }) {
+  const year = new Date().getFullYear();
   return (
     <div className="auth">
-      <section className="auth-hero" aria-label="About DSK Valuations">
-        {/* faint dot grid for texture (solid dots, no gradients) */}
-        <svg className="auth-pattern" viewBox="0 0 360 360" aria-hidden="true">
-          <defs>
-            <pattern id="auth-dots" width="24" height="24" patternUnits="userSpaceOnUse">
-              <circle cx="2" cy="2" r="1.4" />
-            </pattern>
-          </defs>
-          <rect width="360" height="360" fill="url(#auth-dots)" />
-        </svg>
+      <main className="auth-main">
+        <header className="auth-top">
+          <Brand height={22} caption={null} />
+        </header>
 
-        <div className="brand light">
-          <Logo size={38} />
-          <span className="brand-text"><span><strong>DSK</strong> Valuations</span><small>Valuation desk</small></span>
-        </div>
-
-        <div className="auth-hero-body">
-          <span className="auth-eyebrow">Property valuation platform</span>
-          <h2>Bank-grade property valuations, from site visit to sign-off.</h2>
-          <p className="auth-lede">One secure workspace for field evaluators, valuers and reviewers.</p>
-
-          <ol className="auth-steps">
-            {STEPS.map((s, i) => (
-              <li key={s.title}>
-                <span className="auth-step-icon" aria-hidden="true">{s.icon}</span>
-                <span className="auth-step-text">
-                  <strong><span className="auth-step-n">0{i + 1}</span>{s.title}</strong>
-                  <small>{s.text}</small>
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
-
-        <div className="auth-hero-foot">
-          <div className="auth-trust">
-            <span><IconKey size={14} /> Encrypted sign-in</span>
-            <span><IconShield size={14} /> Role-based access</span>
-            <span><IconPulse size={14} /> Full audit trail</span>
-          </div>
-          <small>© {new Date().getFullYear()} DSK Valuations</small>
-        </div>
-      </section>
-
-      <section className="auth-panel">
-        <div>
+        <div className="auth-body">
           <div className="auth-form">
-            <div className="brand mobile-only"><Logo /><span><strong>DSK</strong> Valuations</span></div>
+            {eyebrow && <span className="auth-eyebrow">{eyebrow}</span>}
             <h1>{title}</h1>
-            {subtitle && <p className="muted">{subtitle}</p>}
+            {subtitle && <p className="auth-sub">{subtitle}</p>}
             {children}
           </div>
-          <p className="auth-foot">Authorised personnel only. Activity on this system is monitored.</p>
         </div>
-      </section>
+
+        <footer className="auth-bottom">
+          <span>© {year} DSKRISHNA · Authorised personnel only</span>
+          <span className="auth-secure"><IconKey size={13} /> Encrypted · audit-logged</span>
+          <PoweredBy className="auth-powered" />
+        </footer>
+      </main>
+
+      <aside className="auth-aside" aria-label="About DSKRISHNA">
+        <span className="auth-aside-top">Property valuation platform</span>
+
+        <ValuationPreview />
+
+        <div className="auth-aside-copy">
+          <h2>Valuations your bank can sign off on.</h2>
+          <p>Site inspection, live calculation, review and a bank-ready report in one secure workspace.</p>
+          <ul className="auth-points">
+            <li><IconShield size={15} /> Role-based access</li>
+            <li><IconCheck size={15} /> Two-step review</li>
+            <li><IconKey size={15} /> Full audit trail</li>
+          </ul>
+        </div>
+      </aside>
     </div>
   );
 }

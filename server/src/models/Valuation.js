@@ -27,6 +27,12 @@ const valuationSchema = new mongoose.Schema(
     },
     status: { type: String, enum: STATUSES, default: 'draft', index: true },
     evaluator: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    // the customer this job is for (Customers module); linked automatically by applicant phone/name
+    customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', index: true },
+    // task tracking for the evaluator's dashboard
+    assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    assignedAt: Date,
+    startedAt: Date, // first time the assigned evaluator saved the sheet
     submittedAt: Date,
     reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     reviewedAt: Date,

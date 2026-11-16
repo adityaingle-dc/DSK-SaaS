@@ -3,6 +3,7 @@ import User from '../models/User.js';
 import { protect, signToken } from '../middleware/auth.js';
 import { asyncHandler, HttpError } from '../utils/asyncHandler.js';
 import { logActivity } from '../services/activity.js';
+import { emailProblem, normaliseEmail } from '../utils/email.js';
 
 const router = Router();
 
@@ -13,9 +14,15 @@ router.post(
     const { name, email, password, branch, employeeId, phone } = req.body || {};
     if (!name || !email || !password) throw new HttpError(400, 'Name, email and password are required');
     if (String(password).length < 6) throw new HttpError(400, 'Password must be at least 6 characters');
-    if (await User.exists({ email: String(email).toLowerCase().trim() })) throw new HttpError(409, 'Email already registered');
+    const problem = await emailProblem(email);
+    if (problem) {
+      const err = new HttpError(422, problem);
+      err.details = [{ field: 'email', message: problem }];
+      throw err;
+    }
+    if (await User.exists({ email: normaliseEmail(email) })) throw new HttpError(409, 'Email already registered');
 
-    const user = await User.create({ name, email, password, branch, employeeId, phone, role: 'evaluator', status: 'pending' });
+    const user = await User.create({ name, email: normaliseEmail(email), password, branch, employeeId, phone, role: 'evaluator', status: 'pending' });
     await logActivity(req, 'auth.register', { actor: user, entityType: 'user', entityId: user._id, summary: `${user.name} requested an evaluator account` });
     res.status(201).json({ pending: true, message: 'Account created. A superadmin must approve it before you can sign in.' });
   })

@@ -2,7 +2,6 @@
    Bank valuation report – A4 print layout (matches valuation-print.pdf)
    ========================================================= */
 .report-page { display: flex; flex-direction: column; gap: 14px; }
-.content:has(.report-page) { max-width: none; }
 
 .report-toolbar {
   position: sticky; top: 12px; z-index: 15; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;

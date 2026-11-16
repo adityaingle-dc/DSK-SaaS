@@ -9,6 +9,7 @@ export default function Login() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showPw, setShowPw] = useState(false);
 
   if (user) return <Navigate to="/" replace />;
 
@@ -27,7 +28,7 @@ export default function Login() {
   };
 
   return (
-    <AuthShell title="Welcome back" subtitle="Sign in to continue to your valuations">
+    <AuthShell eyebrow="Secure sign-in" title="Welcome back" subtitle="Sign in to your valuation workspace.">
       <form className="stack" onSubmit={submit}>
         {error && <div className="alert">{error}</div>}
         <label>
@@ -36,11 +37,14 @@ export default function Login() {
         </label>
         <label>
           Password
-          <input type="password" autoComplete="current-password" required placeholder="••••••••" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+          <span className="pw-field">
+            <input type={showPw ? 'text' : 'password'} autoComplete="current-password" required placeholder="Enter your password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+            <button type="button" className="pw-toggle" aria-label={showPw ? 'Hide password' : 'Show password'} aria-pressed={showPw} onClick={() => setShowPw((v) => !v)}>{showPw ? 'Hide' : 'Show'}</button>
+          </span>
         </label>
         <button className="btn primary lg block" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
         <p className="muted center-text">
-          New evaluator? <Link to="/register">Create an account</Link>
+          New field evaluator? <Link to="/register">Request access</Link>
         </p>
       </form>
     </AuthShell>

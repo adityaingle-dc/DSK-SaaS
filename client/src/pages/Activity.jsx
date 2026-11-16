@@ -4,7 +4,7 @@ import { api } from '../api/client.js';
 import ActivityItem from '../components/ActivityItem.jsx';
 import { inr } from '../components/StatusBadge.jsx';
 import { initials } from '../components/Layout.jsx';
-import { IconSearch } from '../components/Icons.jsx';
+import SearchBox from '../components/SearchBox.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import Segmented from '../components/Segmented.jsx';
 import { DuoPulse } from '../components/DuoIcons.jsx';
@@ -15,11 +15,15 @@ import { UserStatus } from './Team.jsx';
 const GROUPS = [
   ['', 'All actions'],
   ['valuation', 'Valuations'],
+  ['valuation.assigned', '— Assigned'],
   ['valuation.submitted', '— Submitted'],
   ['valuation.approved', '— Approved'],
   ['valuation.rejected', '— Rejected'],
   ['auth', 'Sign-ins & security'],
   ['auth.login_failed', '— Failed sign-ins'],
+  ['customer', 'Customers'],
+  ['report', 'Reports'],
+  ['report.generated', '— Generated'],
   ['file', 'Files'],
   ['user', 'Team changes'],
 ];
@@ -38,7 +42,6 @@ export default function Activity() {
     q: params.get('q') || '',
     page: params.get('page') || 1,
   };
-  const [q, setQ] = useState(filters.q);
   const [users, setUsers] = useState([]);
   const [feed, setFeed] = useState(null);
   const [report, setReport] = useState(null);
@@ -55,9 +58,9 @@ export default function Activity() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
 
-  const update = (patch) => {
+  const update = (patch, { replace = false } = {}) => {
     const next = { view, ...filters, page: 1, ...patch };
-    setParams(Object.fromEntries(Object.entries(next).filter(([k, v]) => v && v !== 1 && !(k === 'view' && v === 'feed'))));
+    setParams(Object.fromEntries(Object.entries(next).filter(([k, v]) => v && v !== 1 && !(k === 'view' && v === 'feed'))), { replace });
   };
 
   const exportCsv = () => api.downloadActivityCsv({ ...filters, page: undefined }).catch((e) => setError(e.message));
@@ -74,7 +77,7 @@ export default function Activity() {
         label="View"
         options={[{ value: 'feed', label: 'Activity feed' }, { value: 'report', label: 'Team report' }]}
         value={view}
-        onChange={(v) => update({ view: v })}
+        onChange={(v) => update({ view: v }, { replace: true })}
       />
 
       <div className="card filters-card">
@@ -104,14 +107,11 @@ export default function Activity() {
               return <button key={label} type="button" className={`chip${on ? ' on' : ''}`} onClick={() => update({ from: isoDay(days), to: isoDay(0) })}>{label}</button>;
             })}
             {(filters.from || filters.to || filters.actor || filters.action || filters.q) && (
-              <button type="button" className="chip" onClick={() => { setQ(''); setParams(view === 'feed' ? {} : { view }); }}>Clear filters</button>
+              <button type="button" className="chip" onClick={() => setParams(view === 'feed' ? {} : { view })}>Clear filters</button>
             )}
           </div>
           {view === 'feed' && (
-            <form className="search compact" onSubmit={(e) => { e.preventDefault(); update({ q }); }}>
-              <IconSearch size={16} />
-              <input placeholder="Search reference, applicant, user…" value={q} onChange={(e) => setQ(e.target.value)} onBlur={() => q !== filters.q && update({ q })} />
-            </form>
+            <SearchBox className="compact" value={filters.q} onSearch={(q) => update({ q }, { replace: true })} label="Search activity" placeholder="Search reference, applicant, user…" />
           )}
         </div>
       </div>

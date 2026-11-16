@@ -6,6 +6,7 @@ import ActivityLog from '../models/ActivityLog.js';
 import { protect, requireSuperadmin } from '../middleware/auth.js';
 import { asyncHandler, HttpError } from '../utils/asyncHandler.js';
 import { logActivity } from '../services/activity.js';
+import { emailProblem } from '../utils/email.js';
 import { EMPTY_STATS, evaluatorStats } from '../services/teamStats.js';
 
 // Team management – superadmin only
@@ -75,6 +76,8 @@ router.post(
   asyncHandler(async (req, res) => {
     const { name, email, role = 'evaluator', branch, employeeId, phone } = req.body || {};
     if (!name || !email) throw new HttpError(400, 'Name and email are required');
+    const problem = await emailProblem(email);
+    if (problem) throw new HttpError(422, problem);
     if (!ROLES.includes(role)) throw new HttpError(400, 'Invalid role');
     if (await User.exists({ email: String(email).toLowerCase().trim() })) throw new HttpError(409, 'Email already registered');
 

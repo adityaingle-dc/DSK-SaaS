@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { ROLE_LABELS, useAuth } from '../context/AuthContext.jsx';
-import { IconChevronDown, IconKey, IconLogout, IconPlus, Logo } from './Icons.jsx';
-import { DuoHome, DuoList, DuoPulse, DuoUsers } from './DuoIcons.jsx';
+import { IconChevronDown, IconKey, IconLogout, IconPlus } from './Icons.jsx';
+import Brand from './Brand.jsx';
+import PoweredBy from './PoweredBy.jsx';
+import { DuoContact, DuoHome, DuoList, DuoPulse, DuoSheet, DuoUsers } from './DuoIcons.jsx';
 import { SearchProvider } from './GlobalSearch.jsx';
 
 export const initials = (name = '') =>
@@ -62,32 +64,43 @@ export default function Layout() {
     api.listUsers({ status: 'pending' }).then((r) => setPending(r.counts?.pending || 0)).catch(() => {});
   }, [isSuperadmin, pathname]);
 
+  // evaluators: number of tasks needing action (new + returned)
+  const isEvaluator = user.role === 'evaluator';
+  const [taskCount, setTaskCount] = useState(0);
+  useEffect(() => {
+    if (!isEvaluator) return;
+    api.myTasks().then((r) => setTaskCount((r.counts?.new || 0) + (r.counts?.returned || 0))).catch(() => {});
+  }, [isEvaluator, pathname]);
+  const taskBadge = taskCount > 0 && <span className="nav-badge" title="Tasks needing action">{taskCount}</span>;
+
   const badge = pending > 0 && <span className="nav-badge">{pending}</span>;
 
   return (
     <SearchProvider>
     <div className={`shell${isSuperadmin ? ' is-super' : ''}`}>
       <aside className="sidebar">
-        <Link to="/" className="brand">
-          <Logo size={32} />
-          <span className="brand-text"><span><strong>DSK</strong> Valuations</span><small>Valuation desk</small></span>
+        <Link to="/" className="brand" aria-label="DSKRISHNA – home">
+          <Brand height={21} />
         </Link>
-        {pathname !== '/valuations/new' && (
+        {isSuperadmin && pathname !== '/valuations/new' && (
           <Link to="/valuations/new" className="btn primary block side-cta"><IconPlus size={16} /> New valuation</Link>
         )}
         <nav className="side-nav">
           <div className="nav-section">Workspace</div>
-          <NavLink to="/" end><DuoHome size={19} /> Dashboard</NavLink>
+          <NavLink to="/" end><DuoHome size={19} /> Dashboard {taskBadge}</NavLink>
           <NavLink to="/valuations" end><DuoList size={19} /> Valuations</NavLink>
+          {isSuperadmin && <NavLink to="/reports"><DuoSheet size={19} /> Reports</NavLink>}
           {isSuperadmin && (
             <>
               <div className="nav-section">Administration</div>
+              <NavLink to="/customers"><DuoContact size={19} /> Customers</NavLink>
               <NavLink to="/team"><DuoUsers size={19} /> Team {badge}</NavLink>
               <NavLink to="/activity"><DuoPulse size={19} /> Activity</NavLink>
             </>
           )}
         </nav>
         <UserMenu user={user} logout={logout} />
+        <PoweredBy className="side-powered" />
       </aside>
 
       <main className="content">
@@ -95,10 +108,10 @@ export default function Layout() {
       </main>
 
       <nav className="tabbar">
-        <NavLink to="/" end><DuoHome size={22} /><span>Home</span></NavLink>
+        <NavLink to="/" end><span className="tab-icon"><DuoHome size={22} />{taskBadge}</span><span>Home</span></NavLink>
         {isSuperadmin && <NavLink to="/team"><span className="tab-icon"><DuoUsers size={22} />{badge}</span><span>Team</span></NavLink>}
-        <Link to="/valuations/new" className="fab" aria-label="New valuation"><IconPlus size={24} /></Link>
-        {isSuperadmin && <NavLink to="/activity"><DuoPulse size={22} /><span>Activity</span></NavLink>}
+        {isSuperadmin && <Link to="/valuations/new" className="fab" aria-label="New valuation"><IconPlus size={24} /></Link>}
+        {isSuperadmin && <NavLink to="/customers"><DuoContact size={22} /><span>Customers</span></NavLink>}
         <NavLink to="/valuations" end><DuoList size={22} /><span>Valuations</span></NavLink>
       </nav>
     </div>

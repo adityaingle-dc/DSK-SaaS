@@ -1,5 +1,4 @@
-import { Link } from 'react-router-dom';
-import { IconChevronLeft } from './Icons.jsx';
+import BackLink from './BackLink.jsx';
 
 // One heading pattern for every page:
 //   back link (detail pages) or eyebrow (top-level pages)
@@ -10,7 +9,7 @@ export default function PageHeader({ icon: Icon, back, eyebrow, title, meta, sub
     <header className="page-header">
       <div className="page-header-main">
         {back ? (
-          <Link to={back.to} className="page-back"><IconChevronLeft size={15} /> {back.label}</Link>
+          <BackLink to={back.to} label={back.label} />
         ) : (
           eyebrow && <div className="page-eyebrow">{eyebrow}</div>
         )}

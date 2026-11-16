@@ -2,10 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { computeValuation, emptyValuation, getContext, sanitize, sectionPath, validate, visibleSections } from '@dsk/shared';
 import { api } from '../api/client.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import SchemaSection from '../components/SchemaForm.jsx';
 import { LivePanel, LiveSheet, LiveSummaryButton, useLiveValuation } from '../components/LiveValuation.jsx';
 import SectionIcon from '../components/SectionIcons.jsx';
 import PageHeader from '../components/PageHeader.jsx';
+import { CustomerInline } from '../components/CustomerContact.jsx';
+import { SiteLine, siteFromProperty } from '../components/SiteInfo.jsx';
 import { DuoSheet } from '../components/DuoIcons.jsx';
 
 // Merge a saved sheet over the defaults so every input stays controlled and new schema fields appear
@@ -18,6 +21,7 @@ function hydrate(saved = {}) {
 export default function ValuationForm() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { isSuperadmin } = useAuth();
   const [data, setData] = useState(() => (id ? null : emptyValuation()));
   const [meta, setMeta] = useState(null);
   const [active, setActive] = useState('general');
@@ -86,15 +90,18 @@ export default function ValuationForm() {
 
   goToFieldRef.current = goToField;
 
-  const save = async (submit) => {
+  // status: undefined = keep current, 'submitted' (evaluator) or 'approved' (superadmin: no review step needed)
+  const save = async (status) => {
     setMessage('');
     setServerErrors([]);
-    const payload = { data: sanitize(data), ...(submit ? { status: 'submitted' } : {}) };
-    if (submit) {
+    const payload = { data: sanitize(data), ...(status ? { status } : {}) };
+    // submitted / approved sheets must stay complete
+    const complete = status || ['submitted', 'approved'].includes(meta?.status);
+    if (complete) {
       const errs = validate(payload.data, { mode: 'submit' });
       if (errs.length) {
         setShowAllErrors(true);
-        setMessage(`Please complete ${errs.length} required / invalid field${errs.length > 1 ? 's' : ''} before submitting.`);
+        setMessage(`Please complete ${errs.length} required / invalid field${errs.length > 1 ? 's' : ''} before ${status === 'approved' ? 'approving' : status ? 'submitting' : 'saving'}.`);
         goToField(errs[0].field);
         return;
       }
@@ -102,7 +109,7 @@ export default function ValuationForm() {
     setBusy(true);
     try {
       const saved = id ? await api.updateValuation(id, payload) : await api.createValuation(payload);
-      navigate(`/valuations/${saved._id}`);
+      navigate(`/valuations/${saved._id}`, { replace: true });
     } catch (err) {
       setMessage(err.message);
       if (err.errors?.length) {
@@ -121,6 +128,12 @@ export default function ValuationForm() {
         back={id ? { to: `/valuations/${id}`, label: 'Valuation details' } : { to: '/valuations', label: 'Valuations' }}
         title={id ? 'Edit valuation' : 'New valuation'}
         meta={meta?.referenceNo && <span className="badge">{meta.referenceNo}</span>}
+        subtitle={meta?.customer && (
+          <span className="form-sub">
+            <CustomerInline customer={meta.customer} />
+            <SiteLine site={siteFromProperty(data.property)} />
+          </span>
+        )}
       />
       <nav className="stepper" aria-label="Form sections">
         <ol className="stepper-track">
@@ -156,8 +169,19 @@ export default function ValuationForm() {
           <button type="button" className="btn" disabled={idx >= sections.length - 1} onClick={() => setActive(sections[idx + 1].key)}>Next ›</button>
           <span className="spacer" />
           <button type="button" className="btn btn-cancel" onClick={() => navigate(-1)} disabled={busy}>Cancel</button>
-          <button type="button" className="btn" onClick={() => save(false)} disabled={busy}>Save draft</button>
-          <button type="button" className="btn primary" onClick={() => save(true)} disabled={busy}>{busy ? 'Saving…' : 'Submit for review'}</button>
+          {!isSuperadmin ? (
+            <>
+              <button type="button" className="btn" onClick={() => save()} disabled={busy}>Save draft</button>
+              <button type="button" className="btn primary" onClick={() => save('submitted')} disabled={busy}>{busy ? 'Saving…' : 'Submit for review'}</button>
+            </>
+          ) : meta?.status === 'approved' ? (
+            <button type="button" className="btn primary" onClick={() => save()} disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button>
+          ) : (
+            <>
+              <button type="button" className="btn" onClick={() => save()} disabled={busy}>{meta?.status === 'submitted' ? 'Save changes' : 'Save draft'}</button>
+              <button type="button" className="btn primary" onClick={() => save('approved')} disabled={busy}>{busy ? 'Saving…' : 'Save & approve'}</button>
+            </>
+          )}
         </div>
       </section>
 

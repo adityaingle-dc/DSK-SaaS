@@ -5,7 +5,8 @@ import { inr } from '../components/StatusBadge.jsx';
 import { initials } from '../components/Layout.jsx';
 import TableSkeleton from '../components/TableSkeleton.jsx';
 import Modal, { TempPasswordNotice } from '../components/Modal.jsx';
-import { IconPlus, IconSearch } from '../components/Icons.jsx';
+import { IconPlus } from '../components/Icons.jsx';
+import SearchBox from '../components/SearchBox.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import Segmented from '../components/Segmented.jsx';
 import { DuoUsers } from '../components/DuoIcons.jsx';
@@ -25,7 +26,14 @@ export default function Team() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const status = params.get('status') || '';
-  const [q, setQ] = useState('');
+  const q = params.get('q') || '';
+  const role = params.get('role') || '';
+  // change one filter, keep the others (empty values are dropped from the URL)
+  const setFilter = (patch, opts = { replace: true }) => {
+    const next = { status, q, role, ...patch };
+    setParams(Object.fromEntries(Object.entries(next).filter(([, v]) => v)), opts);
+  };
+  const filtered = Boolean(status || q || role);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [showAdd, setShowAdd] = useState(false);
@@ -34,10 +42,10 @@ export default function Team() {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
-    api.listUsers({ status, q }).then(setData).catch((e) => setError(e.message));
-  }, [status, q]);
+    api.listUsers({ status, q, role }).then(setData).catch((e) => setError(e.message));
+  }, [status, q, role]);
 
-  useEffect(load, [status]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(load, [load]);
 
   const approve = async (e, u) => {
     e.stopPropagation();
@@ -89,30 +97,43 @@ export default function Team() {
       </div>
 
       <div className="toolbar">
-        <form className="search" onSubmit={(e) => { e.preventDefault(); load(); }}>
-          <IconSearch size={18} />
-          <input placeholder="Search name, email, branch, employee ID…" value={q} onChange={(e) => setQ(e.target.value)} onBlur={load} />
-        </form>
+        <SearchBox value={q} onSearch={(v) => setFilter({ q: v })} label="Search team" placeholder="Search name, email, phone, branch, employee ID…" />
+        <select className="select-pill" aria-label="Role" value={role} onChange={(e) => setFilter({ role: e.target.value }, {})}>
+          <option value="">All roles</option>
+          {Object.entries(ROLE_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+        </select>
       </div>
 
-      <Segmented
-        label="Member status"
-        options={TABS.map(([value, label]) => ({ value, label, badge: value === 'pending' && counts.pending > 0 && <span className="tab-count">{counts.pending}</span> }))}
-        value={status}
-        onChange={(value) => setParams(value ? { status: value } : {})}
-      />
+      <div className="toolbar-row">
+        <Segmented
+          label="Member status"
+          options={TABS.map(([value, label]) => ({ value, label, badge: value === 'pending' && counts.pending > 0 && <span className="tab-count">{counts.pending}</span> }))}
+          value={status}
+          onChange={(value) => setFilter({ status: value })}
+        />
+        {data && (
+          <span className="result-count" aria-live="polite">
+            <span><b>{items.length}</b> member{items.length === 1 ? '' : 's'}</span>
+            {filtered && <button type="button" className="linklike" onClick={() => setParams({}, { replace: true })}>Clear filters</button>}
+          </span>
+        )}
+      </div>
 
       {error && <div className="alert">{error}</div>}
 
       {data && items.length === 0 ? (
-        <div className="card empty"><strong>No members here</strong><p className="muted">Try another filter, or add a member.</p></div>
+        <div className="card empty">
+          <strong>{q ? <>No members match “{q}”</> : 'No members here'}</strong>
+          <p className="muted">Try another search or filter, or add a member.</p>
+          {filtered && <button type="button" className="btn" onClick={() => setParams({}, { replace: true })}>Clear filters</button>}
+        </div>
       ) : (
         <div className="card flush">
           <div className="table-wrap desktop-only">
             <table className="table">
               <thead>
                 <tr>
-                  <th>Member</th><th>Role</th><th className="col-opt">Branch</th><th className="num">Valuations</th><th className="num">Approval</th>
+                  <th>Member</th><th className="col-opt2">Role</th><th className="col-opt">Branch</th><th className="num">Valuations</th><th className="num col-opt2">Approval</th>
                   <th className="num col-opt">Avg. time to submit</th><th className="col-opt">Last active</th><th>Status</th><th><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
@@ -126,13 +147,13 @@ export default function Team() {
                         <span><Link to={`/team/${u._id}`} onClick={(e) => e.stopPropagation()}><strong>{u.name}</strong></Link><small className="muted block">{u.email}</small></span>
                       </div>
                     </td>
-                    <td className="nowrap">{ROLE_LABELS[u.role]}</td>
+                    <td className="nowrap col-opt2">{ROLE_LABELS[u.role]}</td>
                     <td className="col-opt">{u.branch || '—'}{u.employeeId && <small className="muted block">{u.employeeId}</small>}</td>
                     <td className="num">
                       <strong>{u.stats.total}</strong>
                       <small className="muted block nowrap">{u.stats.approved} approved · {u.stats.rejected} rejected</small>
                     </td>
-                    <td className="num">{u.stats.approvalRate == null ? '—' : `${u.stats.approvalRate}%`}</td>
+                    <td className="num col-opt2">{u.stats.approvalRate == null ? '—' : `${u.stats.approvalRate}%`}</td>
                     <td className="num col-opt">{duration(u.stats.avgSubmitHours)}</td>
                     <td className="muted nowrap col-opt">{timeAgo(u.lastActiveAt)}</td>
                     <td><UserStatus status={u.status} /></td>

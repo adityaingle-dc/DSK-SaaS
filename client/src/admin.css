@@ -106,6 +106,7 @@ a.act-item:hover { background: var(--surface-2); color: var(--ink); }
 }
 @media (max-width: 900px) {
   .shell.is-super .tabbar { grid-template-columns: 1fr 1fr 76px 1fr 1fr; }
+  .shell:not(.is-super) .tabbar { grid-template-columns: 1fr 1fr; }
   .tabbar a span:not(.tab-icon) { font-size: 0.68rem; }
   .profile { gap: 14px; }
   .avatar.xl { width: 56px; height: 56px; font-size: 1.1rem; border-radius: 18px; }

@@ -57,3 +57,13 @@ export const DuoKey = ({ size = 20 }) => (
     <path d="m11.2 11.8 8.8-8.8M16.5 6.5l3 3M13.8 9.2l2 2" />
   </Duo>
 );
+
+// customers: a contact card
+export const DuoContact = ({ size = 20 }) => (
+  <Duo size={size}>
+    <rect className="duo" x="3" y="4.5" width="18" height="15" rx="2.5" />
+    <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
+    <circle cx="9" cy="11" r="2.3" />
+    <path d="M5.8 16.5a3.4 3.4 0 0 1 6.4 0M14.5 10h4M14.5 13.5h3" />
+  </Duo>
+);

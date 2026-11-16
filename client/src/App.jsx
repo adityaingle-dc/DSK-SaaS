@@ -10,6 +10,11 @@ import ValuationView from './pages/ValuationView.jsx';
 import Team from './pages/Team.jsx';
 import TeamMember from './pages/TeamMember.jsx';
 import Activity from './pages/Activity.jsx';
+import Customers from './pages/Customers.jsx';
+import CustomerView from './pages/CustomerView.jsx';
+import Reports from './pages/Reports.jsx';
+import GenerateReport from './pages/GenerateReport.jsx';
+import StoredReport from './report/StoredReport.jsx';
 import ChangePassword from './pages/ChangePassword.jsx';
 import ReportPage from './report/ReportPage.jsx';
 
@@ -42,14 +47,19 @@ export default function App() {
       >
         <Route index element={<Dashboard />} />
         <Route path="valuations" element={<ValuationList />} />
-        <Route path="valuations/new" element={<ValuationForm />} />
+        <Route path="valuations/new" element={<SuperadminOnly><ValuationForm /></SuperadminOnly>} />
         <Route path="valuations/:id" element={<ValuationView />} />
         <Route path="valuations/:id/edit" element={<ValuationForm />} />
-        <Route path="valuations/:id/report" element={<ReportPage />} />
+        <Route path="valuations/:id/report" element={<SuperadminOnly><ReportPage /></SuperadminOnly>} />
         <Route path="change-password" element={<ChangePassword />} />
         <Route path="team" element={<SuperadminOnly><Team /></SuperadminOnly>} />
         <Route path="team/:id" element={<SuperadminOnly><TeamMember /></SuperadminOnly>} />
         <Route path="activity" element={<SuperadminOnly><Activity /></SuperadminOnly>} />
+        <Route path="customers" element={<SuperadminOnly><Customers /></SuperadminOnly>} />
+        <Route path="customers/:id" element={<SuperadminOnly><CustomerView /></SuperadminOnly>} />
+        <Route path="reports" element={<SuperadminOnly><Reports /></SuperadminOnly>} />
+        <Route path="reports/new" element={<SuperadminOnly><GenerateReport /></SuperadminOnly>} />
+        <Route path="reports/:id" element={<SuperadminOnly><StoredReport /></SuperadminOnly>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

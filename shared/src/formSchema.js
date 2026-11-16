@@ -58,9 +58,9 @@ export const SECTIONS = [
     fields: [
       { key: 'valuationDate', label: 'Date of valuation', type: 'date', required: true, default: 'today' },
       { key: 'inspectionDate', label: 'Date of inspection', type: 'date', required: true },
-      { key: 'bankName', label: 'Bank name', type: 'text', required: true, suggestions: ['Canara Bank', 'State Bank of India', 'Union Bank of India', 'Bank of Baroda', 'Indian Bank'] },
+      { key: 'ifsc', label: 'IFSC code', type: 'text', widget: 'ifsc', pattern: '^[A-Z]{4}0[A-Z0-9]{6}$', patternMessage: 'IFSC format: ABCD0123456', uppercase: true, hint: 'Enter the 11-character IFSC to fill the bank and branch' },
+      { key: 'bankName', label: 'Bank name', type: 'text', widget: 'bank', required: true },
       { key: 'branch', label: 'Branch', type: 'text', required: true },
-      { key: 'ifsc', label: 'IFSC code', type: 'text', pattern: '^[A-Z]{4}0[A-Z0-9]{6}$', patternMessage: 'IFSC format: ABCD0123456', uppercase: true },
       { key: 'bankEmail', label: 'Bank email', type: 'email' },
       { key: 'contactPerson', label: 'Bank contact person', type: 'text' },
       { key: 'propertyType', label: 'Type of property', type: 'select', options: L.propertyType, required: true },

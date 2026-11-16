@@ -89,8 +89,27 @@ export const api = {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   },
 
+  // superadmin – reports module (generated, stored reports)
+  reportTypes: () => request('/reports/types'),
+  listReports: (query) => request('/reports', { query }),
+  getReport: (id) => request(`/reports/${id}`),
+  generateReport: (valuation, type) => request('/reports', { method: 'POST', body: { valuation, type } }),
+  saveStoredReportOverrides: (id, overrides) => request(`/reports/${id}/overrides`, { method: 'PUT', body: { overrides } }),
+  deleteReport: (id) => request(`/reports/${id}`, { method: 'DELETE' }),
+
+  // superadmin – customers (entry point of a valuation job)
+  listCustomers: (query) => request('/customers', { query }),
+  getCustomer: (id) => request(`/customers/${id}`),
+  createCustomer: (payload) => request('/customers', { method: 'POST', body: payload }),
+  updateCustomer: (id, patch) => request(`/customers/${id}`, { method: 'PATCH', body: patch }),
+  deleteCustomer: (id) => request(`/customers/${id}`, { method: 'DELETE' }),
+  startCustomerValuation: (id, evaluator, fromValuation, site) => request(`/customers/${id}/valuations`, { method: 'POST', body: { evaluator, fromValuation, site } }),
+  importCustomers: () => request('/customers/import', { method: 'POST' }),
+
+  myTasks: () => request('/valuations/tasks'),
   stats: (query) => request('/valuations/stats', { query }),
   listValuations: (query) => request('/valuations', { query }),
+  lookupIfsc: (code) => request(`/valuations/ifsc/${encodeURIComponent(code)}`),
   getValuation: (id) => request(`/valuations/${id}`),
   createValuation: (payload) => request('/valuations', { method: 'POST', body: payload }),
   updateValuation: (id, payload) => request(`/valuations/${id}`, { method: 'PUT', body: payload }),

@@ -7,6 +7,7 @@ import { initials, UserMenu } from '../components/Layout.jsx';
 import ActivityItem from '../components/ActivityItem.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import { SearchTrigger } from '../components/GlobalSearch.jsx';
+import EvaluatorDashboard from './EvaluatorDashboard.jsx';
 import PeriodPicker from '../components/PeriodPicker.jsx';
 import { compareLabel, periodLabel, periodRange, prevParams, rangeParams } from '../utils/period.js';
 import { DuoHome } from '../components/DuoIcons.jsx';
@@ -33,7 +34,7 @@ const greeting = () => {
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
 };
 
-export default function Dashboard() {
+function OverviewDashboard() {
   const { user, logout, isReviewer, isSuperadmin } = useAuth();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -87,7 +88,7 @@ export default function Dashboard() {
 
   const tiles = [
     { key: 'draft', to: withPeriod('/valuations?status=draft'), label: 'Drafts', caption: 'Work in progress', icon: <IconDraft size={18} />, count: s.draft, tone: 'slate' },
-    { key: 'submitted', to: withPeriod('/valuations?status=submitted'), label: 'In review', caption: isReviewer ? 'Awaiting your decision' : 'With the reviewer', icon: <IconClock size={18} />, count: s.submitted, tone: 'amber' },
+    { key: 'submitted', to: withPeriod('/valuations?status=submitted'), label: 'In review', caption: isSuperadmin ? 'Awaiting your decision' : 'With the superadmin', icon: <IconClock size={18} />, count: s.submitted, tone: 'amber' },
     { key: 'approved', to: withPeriod('/valuations?status=approved'), label: 'Approved', caption: 'Signed off', icon: <IconCheck size={18} />, count: s.approved, tone: 'green' },
     { key: 'rejected', to: withPeriod('/valuations?status=rejected'), label: 'Rejected', caption: 'Returned for changes', icon: <IconX size={18} />, count: s.rejected, tone: 'red' },
   ];
@@ -251,11 +252,12 @@ export default function Dashboard() {
 }
 
 function EmptyState() {
+  const { isSuperadmin } = useAuth();
   return (
     <div className="empty">
       <div className="empty-icon"><IconDraft size={24} /></div>
       <strong>No valuations yet</strong>
-      <p className="muted">Use <strong>New valuation</strong> to start your first input sheet. Values are calculated as you type.</p>
+      <p className="muted">{isSuperadmin ? <>Start a valuation from <strong>Customers</strong>, or use <strong>New valuation</strong>.</> : 'Valuations assigned to you by the superadmin appear here.'}</p>
     </div>
   );
 }
@@ -269,4 +271,10 @@ function DashboardSkeleton() {
       <div className="skeleton" style={{ height: 300 }} />
     </div>
   );
+}
+
+// Field evaluators see the tasks assigned to them; the superadmin and admins see the overview
+export default function Dashboard() {
+  const { user } = useAuth();
+  return user.role === 'evaluator' ? <EvaluatorDashboard /> : <OverviewDashboard />;
 }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { parseLatLon } from '@dsk/shared';
 import { inr } from './StatusBadge.jsx';
 import FilesInput from './FilesInput.jsx';
+import { BankInput, IfscInput } from './BankFields.jsx';
 
 // Renders one section of the @dsk/shared input-sheet schema.
 // values = data[sectionPath]; onChange(key, value) updates one field.
@@ -16,6 +17,8 @@ export default function SchemaSection({ section, values = {}, onChange, errors =
               field={f}
               value={values[f.key] ?? (values[f.key] === undefined || values[f.key] === '' ? f.defaultFrom?.(ctx, data) : undefined)}
               onChange={(v) => onChange(f.key, v)}
+              setField={onChange}
+              values={values}
               errors={errors}
               name={`${path}.${f.key}`}
             />
@@ -45,7 +48,10 @@ function FieldRow({ field, error, children }) {
 
 const str = (v) => (v === undefined || v === null ? '' : String(v));
 
-export function FieldInput({ field, value, onChange, errors = {}, name }) {
+export function FieldInput({ field, value, onChange, errors = {}, name, setField, values }) {
+  // special inputs for plain-text fields (stored as text, so validation / reports are unchanged)
+  if (field.widget === 'bank') return <BankInput value={value} onChange={onChange} />;
+  if (field.widget === 'ifsc' && setField) return <IfscInput value={value} onChange={onChange} setField={setField} values={values} />;
   switch (field.type) {
     case 'textarea':
       return <textarea rows={3} value={str(value)} onChange={(e) => onChange(e.target.value)} />;

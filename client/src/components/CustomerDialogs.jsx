@@ -1,0 +1,251 @@
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { SECTIONS } from '@dsk/shared';
+import { api } from '../api/client.js';
+import Modal from './Modal.jsx';
+import { initials } from './Layout.jsx';
+import { parseLatLon } from './SiteInfo.jsx';
+import { ROLE_LABELS } from '../context/AuthContext.jsx';
+
+const applicantOptions = (key) => SECTIONS.find((s) => s.key === 'applicant')?.fields.find((f) => f.key === key)?.options || [];
+export const CUSTOMER_SOURCES = ['Walk-in', 'Phone call', 'Bank referral', 'Existing customer', 'Website', 'Other'];
+
+const EMPTY = {
+  salutation: 'Sri.', name: '', relation: '', relativeName: '', occupation: '', phone1: '', phone2: '', email: '',
+  houseNo: '', street: '', locality: '', district: '', pincode: '', bankName: '', branch: '', source: 'Phone call', notes: '',
+};
+
+// Add / edit a customer. On a duplicate phone the server answers 409 with the existing customer's id.
+export function CustomerFormModal({ customer, onClose, onSaved }) {
+  const [form, setForm] = useState(() => ({ ...EMPTY, ...(customer || {}) }));
+  const [error, setError] = useState('');
+  const [dupeId, setDupeId] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setDupeId(null);
+    setBusy(true);
+    try {
+      const payload = Object.fromEntries(Object.keys(EMPTY).map((k) => [k, form[k] ?? '']));
+      const saved = customer ? await api.updateCustomer(customer._id, payload) : await api.createCustomer(payload);
+      onSaved(saved);
+    } catch (err) {
+      setError(err.message);
+      setDupeId(err.errors?.[0]?.customerId || null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title={customer ? 'Edit customer' : 'Add customer'} onClose={onClose}>
+      <form className="stack customer-form" onSubmit={submit}>
+        {error && (
+          <div className="alert">
+            {error}
+            {dupeId && <> · <Link to={`/customers/${dupeId}`} onClick={onClose}>Open that customer</Link></>}
+          </div>
+        )}
+
+        <fieldset>
+          <legend>Contact</legend>
+          <div className="row salute-row">
+            <label>Title
+              <select value={form.salutation} onChange={set('salutation')}>
+                {applicantOptions('salutation').map((o) => <option key={o}>{o}</option>)}
+              </select>
+            </label>
+            <label><span>Full name <span className="req">*</span></span>
+              <input required autoFocus value={form.name} onChange={set('name')} placeholder="e.g. Ramesh Kulkarni" />
+            </label>
+          </div>
+          <div className="row">
+            <label><span>Phone <span className="req">*</span></span>
+              <input required type="tel" inputMode="tel" value={form.phone1} onChange={set('phone1')} placeholder="10-digit mobile" />
+            </label>
+            <label>Alternate phone
+              <input type="tel" inputMode="tel" value={form.phone2} onChange={set('phone2')} />
+            </label>
+          </div>
+          <label>Email
+            <input type="email" value={form.email} onChange={set('email')} placeholder="name@example.com" />
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Valuation request</legend>
+          <div className="row">
+            <label>Bank
+              <input value={form.bankName} onChange={set('bankName')} placeholder="Bank receiving the report" list="bank-suggestions" />
+            </label>
+            <label>Branch
+              <input value={form.branch} onChange={set('branch')} />
+            </label>
+          </div>
+          <datalist id="bank-suggestions">
+            {['Canara Bank', 'State Bank of India', 'Union Bank of India', 'Bank of Baroda', 'Indian Bank', 'Bank of Maharashtra'].map((b) => <option key={b} value={b} />)}
+          </datalist>
+          <label>How did they reach us?
+            <select value={form.source} onChange={set('source')}>
+              {CUSTOMER_SOURCES.map((o) => <option key={o}>{o}</option>)}
+            </select>
+          </label>
+          <label>Notes
+            <textarea rows={3} value={form.notes} onChange={set('notes')} placeholder="What they asked for, property details, preferred visit time…" />
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Address</legend>
+          <div className="row">
+            <label>Plot / H.No.<input value={form.houseNo} onChange={set('houseNo')} /></label>
+            <label>Road / street / colony<input value={form.street} onChange={set('street')} /></label>
+          </div>
+          <div className="row">
+            <label>Village / mandal / municipality<input value={form.locality} onChange={set('locality')} /></label>
+            <label>District<input value={form.district} onChange={set('district')} /></label>
+          </div>
+          <div className="row">
+            <label>Pincode<input inputMode="numeric" value={form.pincode} onChange={set('pincode')} /></label>
+            <label>Occupation<input value={form.occupation} onChange={set('occupation')} /></label>
+          </div>
+          <div className="row">
+            <label>Relation
+              <select value={form.relation} onChange={set('relation')}>
+                <option value="">—</option>
+                {applicantOptions('relation').map((o) => <option key={o}>{o}</option>)}
+              </select>
+            </label>
+            <label>Father / husband name<input value={form.relativeName} onChange={set('relativeName')} /></label>
+          </div>
+        </fieldset>
+
+        <p className="muted small">These details are copied into the input sheet when you start a valuation for this customer.</p>
+        <div className="actions">
+          <button type="button" className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn primary" disabled={busy}>{busy ? 'Saving…' : customer ? 'Save changes' : 'Add customer'}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// Start a valuation for a customer and assign it to a team member
+// properties: groups from groupByProperty(); initialFrom: valuation id of the property to re-value (or '' for a new one)
+export function AssignValuationModal({ customer, properties = [], initialFrom = '', onClose, onAssigned }) {
+  const [people, setPeople] = useState(null);
+  const [pick, setPick] = useState('');
+  const [from, setFrom] = useState(initialFrom);
+  const known = properties.filter((g) => g.identified);
+  // site address for a new property (what the evaluator will visit)
+  const [site, setSite] = useState({ description: '', number: '', surveyNo: '', street: '', village: '', district: '', pincode: '', landmark: '', gps: '' });
+  const setS = (k) => (e) => setSite((x) => ({ ...x, [k]: e.target.value }));
+  const newProperty = !from;
+  const siteOk = !newProperty || site.street.trim() || site.village.trim();
+  const gps = site.gps.trim() ? parseLatLon(site.gps) : null;
+  const gpsBad = site.gps.trim() && !gps;
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.listUsers({ status: 'active' })
+      .then((r) => {
+        const order = { evaluator: 0, admin: 1, superadmin: 2 };
+        const list = (r.items || []).filter((u) => u.status === 'active').sort((a, b) => order[a.role] - order[b.role] || a.name.localeCompare(b.name));
+        setPeople(list);
+        if (list.length === 1) setPick(list[0]._id);
+      })
+      .catch((e) => setError(e.message));
+  }, []);
+
+  const assign = async () => {
+    if (!pick || !siteOk || gpsBad) return;
+    setBusy(true);
+    setError('');
+    try {
+      const { gps: _gps, ...fields } = site;
+      const sitePayload = newProperty ? { ...Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, v.trim()])), ...(gps ? { location: gps } : {}) } : undefined;
+      onAssigned(await api.startCustomerValuation(customer._id, pick, from || undefined, sitePayload));
+    } catch (e) {
+      setError(e.message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title="Start a valuation" onClose={onClose}>
+      <div className="stack">
+        <p className="muted">A draft input sheet for <strong>{customer.name}</strong> is created with their details filled in, and appears in the chosen person's valuations.</p>
+        {error && <div className="alert">{error}</div>}
+        {known.length > 0 && (
+          <div className="assign-step">
+            <div className="assign-step-title">1. Which property?</div>
+            <div className="assign-list" role="radiogroup" aria-label="Property">
+              <label className={`assign-opt${!from ? ' on' : ''}`}>
+                <input type="radio" name="property" checked={!from} onChange={() => setFrom('')} />
+                <span className="assign-text"><strong>A new property</strong><small>Enter its site address below</small></span>
+              </label>
+              {known.map((g) => (
+                <label key={g.key} className={`assign-opt${from === g.latest._id ? ' on' : ''}`}>
+                  <input type="radio" name="property" checked={from === g.latest._id} onChange={() => setFrom(g.latest._id)} />
+                  <span className="assign-text">
+                    <strong>{g.address}</strong>
+                    <small>Re-valuation · last valued {new Date(g.latest.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · location & boundaries copied</small>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+        {newProperty && (
+          <div className="assign-step">
+            <div className="assign-step-title">{known.length > 0 ? 'Site address of the new property' : '1. Site address'}</div>
+            <p className="muted small">Where the evaluator should go. It's copied into the sheet's "Property location".</p>
+            <div className="site-form">
+              <label className="wide">Property description<input value={site.description} onChange={setS('description')} placeholder="e.g. Independent house, G+1" /></label>
+              <label>Plot / H.No. / Flat No.<input value={site.number} onChange={setS('number')} /></label>
+              <label>Sy.No. / LP No.<input value={site.surveyNo} onChange={setS('surveyNo')} /></label>
+              <label><span>Road / street / colony <span className="req">*</span></span><input value={site.street} onChange={setS('street')} /></label>
+              <label>Village / area<input value={site.village} onChange={setS('village')} /></label>
+              <label>District<input value={site.district} onChange={setS('district')} /></label>
+              <label>Pincode<input inputMode="numeric" value={site.pincode} onChange={setS('pincode')} /></label>
+              <label className="wide">Landmark<input value={site.landmark} onChange={setS('landmark')} placeholder="e.g. Opposite the post office" /></label>
+              <label className="wide">Google Maps location (optional)
+                <input value={site.gps} onChange={setS('gps')} placeholder='Paste "lat, lon", e.g. 18.5602, 73.8076' />
+                {gpsBad && <span className="error-text">Paste it as "latitude, longitude", e.g. 18.5602, 73.8076</span>}
+              </label>
+            </div>
+            {!siteOk && <span className="hint">Enter at least the street or village so the evaluator can find the site.</span>}
+          </div>
+        )}
+        <div className="assign-step-title">2. Who will do it?</div>
+        {!people ? (
+          <div className="skeleton" style={{ height: 160 }} />
+        ) : people.length === 0 ? (
+          <p className="muted">No active team members yet. Add one under Team first.</p>
+        ) : (
+          <div className="assign-list" role="radiogroup" aria-label="Assign to">
+            {people.map((u) => (
+              <label key={u._id} className={`assign-opt${pick === u._id ? ' on' : ''}`}>
+                <input type="radio" name="assignee" value={u._id} checked={pick === u._id} onChange={() => setPick(u._id)} />
+                <span className="avatar soft sm">{initials(u.name)}</span>
+                <span className="assign-text">
+                  <strong>{u.name}</strong>
+                  <small>{ROLE_LABELS[u.role]}{u.branch ? ` · ${u.branch}` : ''}</small>
+                </span>
+                {u.stats && <span className="assign-load" title="Valuations handled">{u.stats.total} done</span>}
+              </label>
+            ))}
+          </div>
+        )}
+        <div className="actions">
+          <button type="button" className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" className="btn primary" onClick={assign} disabled={!pick || busy || !siteOk || gpsBad}>{busy ? 'Assigning…' : 'Assign & create sheet'}</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}

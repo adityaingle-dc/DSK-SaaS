@@ -6,6 +6,8 @@ import userRoutes from './routes/users.js';
 import valuationRoutes from './routes/valuations.js';
 import fileRoutes from './routes/files.js';
 import activityRoutes from './routes/activity.js';
+import customerRoutes from './routes/customers.js';
+import reportRoutes from './routes/reports.js';
 import { errorHandler, notFound } from './middleware/error.js';
 
 const app = express();
@@ -21,6 +23,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/valuations', valuationRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/activity', activityRoutes);
+app.use('/api/customers', customerRoutes);
+app.use('/api/reports', reportRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
