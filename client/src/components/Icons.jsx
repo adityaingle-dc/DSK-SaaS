@@ -23,14 +23,22 @@ export const IconPulse = (p) => <Svg {...p}><path d="M3 12h4l3-7 4 14 3-7h4" /><
 export const IconKey = (p) => <Svg {...p}><circle cx="8" cy="15" r="4" /><path d="m11 12 9-9M17 6l3 3M14 9l2 2" /></Svg>;
 export const IconUser = (p) => <Svg {...p}><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></Svg>;
 
+// Brand mark: a roofline over rising value bars ("property value"), on a flat blue tile
 export function Logo({ size = 34 }) {
   return (
-    <span className="logo-mark" style={{ width: size, height: size }} aria-hidden="true">
-      <svg width={size * 0.56} height={size * 0.56} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 11 12 4l9 7" />
-        <path d="M6 10v9h12v-9" />
-        <path d="m9.5 14.5 2 2 3.5-4" />
-      </svg>
-    </span>
+    <svg className="logo-mark" width={size} height={size} viewBox="0 0 40 40" aria-hidden="true">
+      <rect width="40" height="40" rx="11" fill="#2563eb" />
+      <path d="M9.5 19.5 20 11l10.5 8.5" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="13" y="24" width="3.4" height="6" rx="1.2" fill="#fff" fillOpacity="0.75" />
+      <rect x="18.3" y="20.5" width="3.4" height="9.5" rx="1.2" fill="#fff" fillOpacity="0.88" />
+      <rect x="23.6" y="17.5" width="3.4" height="12.5" rx="1.2" fill="#fff" />
+      <path d="M11.5 32.5h17" stroke="#fff" strokeOpacity="0.5" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
   );
 }
+export const IconChevronDown = (p) => <Svg {...p}><path d="m6 9 6 6 6-6" /></Svg>;
+export const IconRupee = (p) => <Svg {...p}><path d="M7 4h11M7 9h11M7 4c6 0 7 2.5 7 5s-2 5-7 5h-.5L14 21" /></Svg>;
+export const IconTick = (p) => <Svg {...p}><path d="m5 12.5 4.5 4.5L19 7.5" /></Svg>;
+
+export const IconChevronLeft = (p) => <Svg {...p}><path d="m15 6-6 6 6 6" /></Svg>;
+export const IconCalendar = (p) => <Svg {...p}><rect x="3.5" y="5" width="17" height="15.5" rx="2.5" /><path d="M3.5 10h17M8 3v4M16 3v4" /></Svg>;

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { IconShield } from '../components/Icons.jsx';
+import PageHeader from '../components/PageHeader.jsx';
+import { DuoKey } from '../components/DuoIcons.jsx';
 
 function strength(p) {
   let s = 0;
@@ -15,7 +16,7 @@ function strength(p) {
 const LABELS = ['Too weak', 'Weak', 'Fair', 'Good', 'Strong'];
 
 export default function ChangePassword() {
-  const { user, changePassword } = useAuth();
+  const { user, changePassword, logout } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ current: '', next: '', confirm: '' });
   const [error, setError] = useState('');
@@ -43,14 +44,12 @@ export default function ChangePassword() {
 
   return (
     <div className="page narrow">
+      <PageHeader
+        icon={DuoKey}
+        title={forced ? 'Set your password' : 'Change password'}
+        subtitle={forced && 'You signed in with a temporary password. Choose your own to continue.'}
+      />
       <section className="card">
-        <div className="section-head">
-          <span className="section-step"><IconShield size={18} /></span>
-          <div>
-            <h2>{forced ? 'Set your password' : 'Change password'}</h2>
-            {forced && <p className="muted small">You signed in with a temporary password. Choose your own to continue.</p>}
-          </div>
-        </div>
         {done ? (
           <div className="alert success">Password updated. Taking you to the dashboard…</div>
         ) : (
@@ -72,6 +71,7 @@ export default function ChangePassword() {
               <input type="password" required autoComplete="new-password" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} />
             </label>
             <button className="btn primary lg block" disabled={busy}>{busy ? 'Saving…' : 'Update password'}</button>
+            {forced && <button type="button" className="btn ghost block" onClick={logout}>Log out</button>}
           </form>
         )}
       </section>

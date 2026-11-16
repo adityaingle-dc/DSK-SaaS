@@ -6,6 +6,8 @@ import StatusBadge, { inr } from '../components/StatusBadge.jsx';
 import ResultsPanel from '../components/ResultsPanel.jsx';
 import { FileThumb } from '../components/FilesInput.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import PageHeader from '../components/PageHeader.jsx';
+import { DuoBuilding } from '../components/DuoIcons.jsx';
 
 const isEmpty = (v) =>
   v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length) || (typeof v === 'object' && !Array.isArray(v) && !Object.values(v).some((x) => !isEmpty(x)));
@@ -30,16 +32,16 @@ function display(field, v) {
       );
     case 'table':
       return (
-        <table className="table small">
+        <table className="table small stack-sm">
           <thead><tr>{field.columns.map((c) => <th key={c.key}>{c.label}</th>)}</tr></thead>
-          <tbody>{v.map((row, i) => <tr key={i}>{field.columns.map((c) => <td key={c.key}>{isEmpty(row[c.key]) ? '' : display(c, row[c.key])}</td>)}</tr>)}</tbody>
+          <tbody>{v.map((row, i) => <tr key={i}>{field.columns.map((c) => <td key={c.key} data-label={c.label}>{isEmpty(row[c.key]) ? '—' : display(c, row[c.key])}</td>)}</tr>)}</tbody>
         </table>
       );
     case 'grid':
       return (
-        <table className="table small">
+        <table className="table small stack-sm">
           <thead><tr><th />{field.columns.map((c) => <th key={c.key}>{c.label}</th>)}</tr></thead>
-          <tbody>{field.rows.map((r) => <tr key={r}><th>{r}</th>{field.columns.map((c) => <td key={c.key}>{v[r.toLowerCase()]?.[c.key] || ''}</td>)}</tr>)}</tbody>
+          <tbody>{field.rows.map((r) => <tr key={r}><th scope="row">{r}</th>{field.columns.map((c) => <td key={c.key} data-label={c.label}>{v[r.toLowerCase()]?.[c.key] || '—'}</td>)}</tr>)}</tbody>
         </table>
       );
     case 'tiers':
@@ -102,24 +104,23 @@ export default function ValuationView() {
   const s = v.results?.summary || {};
   return (
     <div className="page">
-      <div className="page-head">
-        <div>
-          <Link to="/valuations" className="link-sm">‹ Valuations</Link>
-          <h1>{v.summary?.applicantName || 'Unnamed applicant'}</h1>
-          <p className="muted">
-            {v.referenceNo} · {v.summary?.bankName} {v.summary?.branch} · {v.evaluator?.name}
-          </p>
-        </div>
-        <div className="actions no-print">
-          {canEdit && <Link className="btn primary" to={`/valuations/${id}/edit`}>Edit</Link>}
-          <Link className="btn" to={`/valuations/${id}/report`}>{isSuperadmin ? 'Report · edit & print' : 'Bank report'}</Link>
-          {canDelete && <button className="btn danger" onClick={remove}>Delete</button>}
-        </div>
-      </div>
+      <PageHeader
+        icon={DuoBuilding}
+        back={{ to: '/valuations', label: 'Valuations' }}
+        title={v.summary?.applicantName || 'Unnamed applicant'}
+        meta={<StatusBadge status={v.status} />}
+        subtitle={[v.referenceNo, [v.summary?.bankName, v.summary?.branch].filter(Boolean).join(' '), v.evaluator?.name].filter(Boolean).join(' · ')}
+        actions={
+          <div className="actions no-print">
+            {canDelete && <button className="btn danger" onClick={remove}>Delete</button>}
+            <Link className="btn" to={`/valuations/${id}/report`}>{isSuperadmin ? 'Report · edit & print' : 'Bank report'}</Link>
+            {canEdit && <Link className="btn primary" to={`/valuations/${id}/edit`}>Edit</Link>}
+          </div>
+        }
+      />
 
       <section className="hero-card receipt">
         <div className="receipt-top">
-          <StatusBadge status={v.status} />
           <span className="badge on-dark">{s.reportTemplate} · {v.results?.context?.report?.title}</span>
         </div>
         <div className="hero-label">Fair market value</div>

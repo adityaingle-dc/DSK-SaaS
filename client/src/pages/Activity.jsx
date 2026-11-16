@@ -5,6 +5,9 @@ import ActivityItem from '../components/ActivityItem.jsx';
 import { inr } from '../components/StatusBadge.jsx';
 import { initials } from '../components/Layout.jsx';
 import { IconSearch } from '../components/Icons.jsx';
+import PageHeader from '../components/PageHeader.jsx';
+import Segmented from '../components/Segmented.jsx';
+import { DuoPulse } from '../components/DuoIcons.jsx';
 import { ROLE_LABELS } from '../context/AuthContext.jsx';
 import { duration, timeAgo } from '../utils/format.js';
 import { UserStatus } from './Team.jsx';
@@ -61,20 +64,18 @@ export default function Activity() {
 
   return (
     <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Activity</h1>
-          <p className="muted">Everything your team does, as it happens</p>
-        </div>
-        <div className="actions">
-          <button className="btn" onClick={exportCsv}>Export CSV</button>
-        </div>
-      </div>
+      <PageHeader
+        icon={DuoPulse}
+        title="Activity"
+        actions={<button className="btn" onClick={exportCsv}>Export CSV</button>}
+      />
 
-      <div className="segmented" role="tablist">
-        <button role="tab" aria-selected={view === 'feed'} className={view === 'feed' ? 'on' : ''} onClick={() => update({ view: 'feed' })}>Activity feed</button>
-        <button role="tab" aria-selected={view === 'report'} className={view === 'report' ? 'on' : ''} onClick={() => update({ view: 'report' })}>Team report</button>
-      </div>
+      <Segmented
+        label="View"
+        options={[{ value: 'feed', label: 'Activity feed' }, { value: 'report', label: 'Team report' }]}
+        value={view}
+        onChange={(v) => update({ view: v })}
+      />
 
       <div className="card filters-card">
         <div className="filter-grid">
@@ -185,12 +186,13 @@ function TeamReport({ report }) {
       )}
 
       <section className="card flush">
-        <div className="table-wrap">
-          <table className="table">
+        <div className="card-head"><h2>Team performance</h2></div>
+        <div className="table-wrap desktop-only">
+          <table className="table dense">
             <thead>
               <tr>
                 <th>Member</th><th className="num">Started</th><th className="num">Submitted</th><th className="num">Approved</th><th className="num">Rejected</th>
-                <th className="num">Approval</th><th className="num">Avg. submit</th><th className="num">Value</th><th className="num">Sign-ins</th><th>Last active</th>
+                <th className="num">Approval</th><th className="num col-opt">Avg. submit</th><th className="num">Value</th><th className="num col-opt">Sign-ins</th><th className="col-opt">Last active</th>
               </tr>
             </thead>
             <tbody>
@@ -207,15 +209,37 @@ function TeamReport({ report }) {
                   <td className="num">{r.stats.approved}</td>
                   <td className="num">{r.stats.rejected}</td>
                   <td className="num">{r.stats.approvalRate == null ? '—' : `${r.stats.approvalRate}%`}</td>
-                  <td className="num">{duration(r.stats.avgSubmitHours)}</td>
+                  <td className="num col-opt">{duration(r.stats.avgSubmitHours)}</td>
                   <td className="num">{inr(r.stats.totalValue)}</td>
-                  <td className="num">{r.actions['auth.login'] || 0}{r.actions['auth.login_failed'] ? <small className="warn block">{r.actions['auth.login_failed']} failed</small> : null}</td>
-                  <td className="nowrap">{timeAgo(r.lastActiveAt)}{r.status !== 'active' && <div><UserStatus status={r.status} /></div>}</td>
+                  <td className="num col-opt">{r.actions['auth.login'] || 0}{r.actions['auth.login_failed'] ? <small className="warn block">{r.actions['auth.login_failed']} failed</small> : null}</td>
+                  <td className="nowrap col-opt">{timeAgo(r.lastActiveAt)}{r.status !== 'active' && <div><UserStatus status={r.status} /></div>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+
+        {/* phones: one card per member */}
+        <ul className="list mobile-only">
+          {rows.map((r) => (
+            <li key={r._id}>
+              <Link to={`/team/${r._id}`} className="list-item report-item">
+                <span className="avatar soft">{initials(r.name)}</span>
+                <span className="list-main">
+                  <strong>{r.name}</strong>
+                  <small>{ROLE_LABELS[r.role]}{r.branch && ` · ${r.branch}`} · active {timeAgo(r.lastActiveAt)}</small>
+                  <span className="report-stats">
+                    <span><b>{r.stats.total}</b> started</span>
+                    <span><b>{r.stats.approved}</b> approved</span>
+                    <span><b>{r.stats.rejected}</b> rejected</span>
+                    <span><b>{r.stats.approvalRate == null ? '—' : `${r.stats.approvalRate}%`}</b> approval</span>
+                  </span>
+                </span>
+                <span className="list-end"><strong className="amount">{inr(r.stats.totalValue)}</strong></span>
+              </Link>
+            </li>
+          ))}
+        </ul>
       </section>
     </>
   );

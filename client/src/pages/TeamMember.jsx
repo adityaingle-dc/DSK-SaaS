@@ -8,6 +8,7 @@ import Modal, { TempPasswordNotice } from '../components/Modal.jsx';
 import { ROLE_LABELS, useAuth } from '../context/AuthContext.jsx';
 import { dateTime, duration, timeAgo } from '../utils/format.js';
 import { Kpi, UserStatus } from './Team.jsx';
+import { IconChevronLeft } from '../components/Icons.jsx';
 
 function last30Days(activeDays) {
   const counts = Object.fromEntries(activeDays.map((d) => [d._id, d.n]));
@@ -60,7 +61,7 @@ export default function TeamMember() {
 
   return (
     <div className="page">
-      <Link to="/team" className="link-sm">‹ Team</Link>
+      <Link to="/team" className="page-back"><IconChevronLeft size={15} /> Team</Link>
 
       <section className="card profile">
         <span className="avatar xl">{initials(u.name)}</span>

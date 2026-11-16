@@ -3,8 +3,12 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { inr } from '../components/StatusBadge.jsx';
 import { initials } from '../components/Layout.jsx';
+import TableSkeleton from '../components/TableSkeleton.jsx';
 import Modal, { TempPasswordNotice } from '../components/Modal.jsx';
 import { IconPlus, IconSearch } from '../components/Icons.jsx';
+import PageHeader from '../components/PageHeader.jsx';
+import Segmented from '../components/Segmented.jsx';
+import { DuoUsers } from '../components/DuoIcons.jsx';
 import { ROLE_LABELS } from '../context/AuthContext.jsx';
 import { duration, timeAgo } from '../utils/format.js';
 
@@ -71,13 +75,11 @@ export default function Team() {
 
   return (
     <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Team</h1>
-          <p className="muted">Manage field evaluators and reviewers, and track their work</p>
-        </div>
-        <button className="btn primary" onClick={() => setShowAdd(true)}><IconPlus size={18} /> Add member</button>
-      </div>
+      <PageHeader
+        icon={DuoUsers}
+        title="Team"
+        actions={<button className="btn primary" onClick={() => setShowAdd(true)}><IconPlus size={16} /> Add member</button>}
+      />
 
       <div className="kpis">
         <Kpi label="Active members" value={counts.active || 0} />
@@ -93,14 +95,12 @@ export default function Team() {
         </form>
       </div>
 
-      <div className="segmented" role="tablist">
-        {TABS.map(([value, label]) => (
-          <button key={label} role="tab" aria-selected={status === value} className={status === value ? 'on' : ''} onClick={() => setParams(value ? { status: value } : {})}>
-            {label}
-            {value === 'pending' && counts.pending > 0 && <span className="tab-count">{counts.pending}</span>}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        label="Member status"
+        options={TABS.map(([value, label]) => ({ value, label, badge: value === 'pending' && counts.pending > 0 && <span className="tab-count">{counts.pending}</span> }))}
+        value={status}
+        onChange={(value) => setParams(value ? { status: value } : {})}
+      />
 
       {error && <div className="alert">{error}</div>}
 
@@ -112,11 +112,12 @@ export default function Team() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Member</th><th>Role</th><th>Branch</th><th className="num">Valuations</th><th className="num">Approval</th>
-                  <th className="num">Avg. time to submit</th><th>Last active</th><th>Status</th><th />
+                  <th>Member</th><th>Role</th><th className="col-opt">Branch</th><th className="num">Valuations</th><th className="num">Approval</th>
+                  <th className="num col-opt">Avg. time to submit</th><th className="col-opt">Last active</th><th>Status</th><th><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
+                {!data && <TableSkeleton cols={9} />}
                 {items.map((u) => (
                   <tr key={u._id} className="clickable" onClick={() => navigate(`/team/${u._id}`)}>
                     <td>
@@ -126,14 +127,14 @@ export default function Team() {
                       </div>
                     </td>
                     <td className="nowrap">{ROLE_LABELS[u.role]}</td>
-                    <td>{u.branch || '—'}{u.employeeId && <small className="muted block">{u.employeeId}</small>}</td>
+                    <td className="col-opt">{u.branch || '—'}{u.employeeId && <small className="muted block">{u.employeeId}</small>}</td>
                     <td className="num">
                       <strong>{u.stats.total}</strong>
                       <small className="muted block nowrap">{u.stats.approved} approved · {u.stats.rejected} rejected</small>
                     </td>
                     <td className="num">{u.stats.approvalRate == null ? '—' : `${u.stats.approvalRate}%`}</td>
-                    <td className="num">{duration(u.stats.avgSubmitHours)}</td>
-                    <td className="muted nowrap">{timeAgo(u.lastActiveAt)}</td>
+                    <td className="num col-opt">{duration(u.stats.avgSubmitHours)}</td>
+                    <td className="muted nowrap col-opt">{timeAgo(u.lastActiveAt)}</td>
                     <td><UserStatus status={u.status} /></td>
                     <td className="num">
                       {u.status === 'pending' && <button className="btn small primary" onClick={(e) => approve(e, u)}>Approve</button>}

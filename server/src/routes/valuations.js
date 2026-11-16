@@ -46,10 +46,22 @@ function prepare(body, submit) {
   return data;
 }
 
+// Optional period filter on the date a valuation was created.
+// `from` (inclusive) and `to` (exclusive) are ISO timestamps computed in the user's browser,
+// so "today" / "this month" follow the user's local calendar, not the server's time zone.
+function createdRange(query) {
+  const range = {};
+  const from = query.from ? new Date(String(query.from)) : null;
+  const to = query.to ? new Date(String(query.to)) : null;
+  if (from && !Number.isNaN(from.getTime())) range.$gte = from;
+  if (to && !Number.isNaN(to.getTime())) range.$lt = to;
+  return Object.keys(range).length ? { createdAt: range } : {};
+}
+
 router.get(
   '/stats',
   asyncHandler(async (req, res) => {
-    const match = scope(req.user);
+    const match = { ...scope(req.user), ...createdRange(req.query) };
     const [byStatus, byTemplate, totals] = await Promise.all([
       Valuation.aggregate([{ $match: match }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
       Valuation.aggregate([
@@ -71,8 +83,12 @@ router.get(
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const { status, template, q, evaluator, page = 1, limit = 20 } = req.query;
-    const filter = { ...scope(req.user) };
+    const { status, template, q, evaluator, page = 1, limit = 20, sort, dir } = req.query;
+    // whitelisted sort keys; default is most recently updated first
+    const SORTS = { updated: 'updatedAt', applicant: 'summary.applicantName', value: 'summary.fairMarketValue' };
+    const sortField = SORTS[sort] || 'updatedAt';
+    const sortSpec = { [sortField]: dir === 'asc' ? 1 : -1, _id: -1 };
+    const filter = { ...scope(req.user), ...createdRange(req.query) };
     if (evaluator && isReviewer(req.user) && mongoose.isValidObjectId(evaluator)) filter.evaluator = evaluator;
     if (status) filter.status = String(status);
     if (template) filter['summary.reportTemplate'] = String(template);
@@ -84,7 +100,7 @@ router.get(
     const lim = Math.min(100, Math.max(1, Number(limit) || 20));
     const [items, total] = await Promise.all([
       Valuation.find(filter)
-        .sort({ updatedAt: -1 })
+        .sort(sortSpec)
         .skip((pageNum - 1) * lim)
         .limit(lim)
         .select('referenceNo summary status updatedAt evaluator')

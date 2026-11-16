@@ -89,7 +89,7 @@ export const api = {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   },
 
-  stats: () => request('/valuations/stats'),
+  stats: (query) => request('/valuations/stats', { query }),
   listValuations: (query) => request('/valuations', { query }),
   getValuation: (id) => request(`/valuations/${id}`),
   createValuation: (payload) => request('/valuations', { method: 'POST', body: payload }),

@@ -171,9 +171,9 @@ function GridInput({ field, value, onChange }) {
             const k = r.toLowerCase();
             return (
               <tr key={k}>
-                <th>{r}</th>
+                <th scope="row">{r}</th>
                 {field.columns.map((c) => (
-                  <td key={c.key}><input value={str(value[k]?.[c.key])} onChange={(e) => set(k, c.key, e.target.value)} /></td>
+                  <td key={c.key} data-label={c.label}><input aria-label={`${r} – ${c.label}`} value={str(value[k]?.[c.key])} onChange={(e) => set(k, c.key, e.target.value)} /></td>
                 ))}
               </tr>
             );
@@ -193,12 +193,15 @@ function TableInput({ field, value, onChange, errors, name }) {
           <tr>{field.columns.map((c) => <th key={c.key}>{c.label}</th>)}<th /></tr>
         </thead>
         <tbody>
+          {value.length === 0 && (
+            <tr className="empty-row"><td colSpan={field.columns.length + 1}>No rows added</td></tr>
+          )}
           {value.map((row, i) => (
             <tr key={i}>
               {field.columns.map((c) => {
                 const err = errors[`${name}.${i}.${c.key}`];
                 return (
-                  <td key={c.key} className={err ? 'has-error' : ''} title={err || ''}>
+                  <td key={c.key} data-label={c.label} className={err ? 'has-error' : ''} title={err || ''}>
                     <FieldInput field={c} value={row[c.key]} onChange={(v) => setCell(i, c.key, v)} />
                   </td>
                 );
@@ -210,7 +213,7 @@ function TableInput({ field, value, onChange, errors, name }) {
           ))}
         </tbody>
       </table>
-      <button type="button" className="btn small" onClick={() => onChange([...value, {}])}>+ Add row</button>
+      <button type="button" className="btn small add-row" onClick={() => onChange([...value, {}])}>+ Add row</button>
     </div>
   );
 }
@@ -235,20 +238,20 @@ function TiersInput({ field, value, onChange }) {
             const amount = rate * (item.unit ? Number(sel.qty) || 0 : 1);
             return (
               <tr key={item.key} className={tier ? 'selected' : ''}>
-                <td>{item.label}</td>
-                <td>
-                  <select value={tier} onChange={(e) => set(item.key, { tier: Number(e.target.value) })}>
+                <th scope="row" className="cell-title">{item.label}</th>
+                <td data-label="Grade">
+                  <select aria-label={`${item.label} – grade`} value={tier} onChange={(e) => set(item.key, { tier: Number(e.target.value) })}>
                     {field.tiers.map((t, i) => (
                       <option key={t} value={i}>{i ? `${t} – ${item.ranges[i - 1] || inr(item.rates[i - 1])}` : t}</option>
                     ))}
                   </select>
                 </td>
-                <td className="num">
+                <td className="num" data-label="Qty">
                   {item.unit ? (
                     <input type="number" min="0" step="any" placeholder={item.unit} value={str(sel.qty)} disabled={!tier} onChange={(e) => set(item.key, { qty: e.target.value })} />
                   ) : '—'}
                 </td>
-                <td className="num">{tier ? inr(amount) : ''}</td>
+                <td className="num cell-amount" data-label="Amount">{tier ? inr(amount) : '—'}</td>
               </tr>
             );
           })}
@@ -268,10 +271,10 @@ function StagesInput({ field, value, onChange }) {
         <tbody>
           {field.items.map((s) => (
             <tr key={s.key}>
-              <td>{s.label}</td>
-              <td className="num">{Math.round(s.weight * 100)}%</td>
-              <td>
-                <select value={value[s.key] || 'Not Started'} onChange={(e) => onChange({ ...value, [s.key]: e.target.value })}>
+              <th scope="row" className="cell-title">{s.label}</th>
+              <td className="num" data-label="Weight">{Math.round(s.weight * 100)}%</td>
+              <td data-label="Status">
+                <select aria-label={`${s.label} – status`} value={value[s.key] || 'Not Started'} onChange={(e) => onChange({ ...value, [s.key]: e.target.value })}>
                   {field.options.map((o) => <option key={o}>{o}</option>)}
                 </select>
               </td>

@@ -1,11 +1,14 @@
 import { inr } from './StatusBadge.jsx';
+import { IconChevronDown } from './Icons.jsx';
 
 const n2 = (v) => (v == null || Number.isNaN(v) ? '—' : Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 }));
 
-// Live calculation output (same engine on server, web and mobile)
-export default function ResultsPanel({ results, compact = false, hideHeadline = false, onWarningClick }) {
+// Live calculation output (same engine on server, web and mobile).
+// collapsible: breakdown groups fold into <details> showing only their total; hideWarnings: caller renders them.
+export default function ResultsPanel({ results, compact = false, hideHeadline = false, collapsible = false, hideWarnings = false, onWarningClick }) {
   if (!results?.summary) return null;
   const { summary: s, land, building, flat, progress, proposed, fee, warnings = [], context } = results;
+  const G = (props) => <Group collapsible={collapsible} {...props} />;
 
   return (
     <div className="results">
@@ -26,18 +29,18 @@ export default function ResultsPanel({ results, compact = false, hideHeadline = 
       )}
 
       {land && (
-        <Group title="Land">
+        <G title="Land" total={inr(land.fairMarketValue)}>
           <Line k="Site area considered" v={`${n2(land.siteArea)} sq.yd (${n2(land.siteAreaSqm)} sq.m)`} />
           <Line k="Value @ GLR" v={inr(land.glrValue)} />
           <Line k="Value @ PMR" v={inr(land.pmrValue)} />
           {land.extras > 0 && <Line k="Extra items" v={inr(land.extras)} />}
           {(land.plus > 0 || land.minus > 0) && <Line k="Add / less factors" v={`+${inr(land.plus)} / −${inr(land.minus)}`} />}
           <Line k="Land value (rounded)" v={inr(land.fairMarketValue)} strong />
-        </Group>
+        </G>
       )}
 
       {building && (
-        <Group title="Building">
+        <G title="Building" total={inr(building.netTotal)}>
           <Line k="Age / life" v={building.age == null ? '—' : `${building.age} / ${building.life} yrs`} />
           <Line k="Depreciation" v={`${n2(building.depreciationPct)}%`} />
           <Line k="Plinth area" v={`${n2(building.plinthTotal)} sq.ft`} />
@@ -46,11 +49,11 @@ export default function ResultsPanel({ results, compact = false, hideHeadline = 
           <Line k="Net building value" v={inr(building.netTotal)} strong />
           <Line k="Amenities" v={inr(building.amenities.total)} />
           <Line k="Services" v={inr(building.services.total)} />
-        </Group>
+        </G>
       )}
 
       {flat && (
-        <Group title="Flat">
+        <G title="Flat" total={`${inr(flat.compositeRate)}/sq.ft`}>
           {flat.underConstruction ? (
             <>
               <Line k="Value on completion" v={inr(flat.completionValue)} />
@@ -67,35 +70,35 @@ export default function ResultsPanel({ results, compact = false, hideHeadline = 
           <Line k="Land (UDS) cost" v={inr(flat.landCost)} />
           <Line k="Composite rate" v={`${inr(flat.compositeRate)}/sq.ft`} strong />
           {flat.extras > 0 && <Line k="Extra items" v={inr(flat.extras)} />}
-        </Group>
+        </G>
       )}
 
       {progress && (
-        <Group title="Construction progress">
+        <G title="Construction progress" total={inr(progress.workDoneValue)}>
           <Line k="Work completed" v={`${n2(progress.completionPct)}%`} />
           <Line k="Value of work done" v={inr(progress.workDoneValue)} strong />
-        </Group>
+        </G>
       )}
 
       {proposed && (
-        <Group title="Proposed building (GO 168)">
+        <G title="Proposed building (GO 168)" total={proposed.maxFloors != null ? `${proposed.maxFloors} floors` : null}>
           <Line k="Setbacks front / side" v={`${proposed.setbacks.frontFt} ft / ${proposed.setbacks.sideFt} ft`} />
           <Line k="Max floors permitted" v={proposed.maxFloors ?? '—'} />
           <Line k="Buildable L × B" v={`${n2(proposed.buildableLength)} × ${n2(proposed.buildableBreadth)} ft`} />
           <Line k="Built-up / floor" v={`${n2(proposed.builtupPerFloor)} sq.ft`} />
           <Line k="Slab area" v={`${n2(proposed.slabArea)} sq.ft`} />
           {proposed.roomsTotal > 0 && <Line k="Rooms total" v={`${n2(proposed.roomsTotal)} sq.ft`} />}
-        </Group>
+        </G>
       )}
 
       {fee && !compact && (
-        <Group title="Professional fee">
+        <G title="Professional fee" total={inr(fee.payable)}>
           <Line k="As per slab" v={inr(fee.fee)} />
           <Line k="Payable" v={inr(fee.payable)} strong />
-        </Group>
+        </G>
       )}
 
-      {warnings.length > 0 && (
+      {!hideWarnings && warnings.length > 0 && (
         <div className="warnings">
           <strong>Check these</strong>
           <ul>
@@ -111,7 +114,19 @@ export default function ResultsPanel({ results, compact = false, hideHeadline = 
   );
 }
 
-function Group({ title, children }) {
+function Group({ title, total, collapsible, children }) {
+  if (collapsible) {
+    return (
+      <details className="group collapsible">
+        <summary>
+          <span className="group-title">{title}</span>
+          {total != null && <span className="group-total">{total}</span>}
+          <IconChevronDown size={16} className="group-caret" />
+        </summary>
+        <div className="group-body">{children}</div>
+      </details>
+    );
+  }
   return (
     <div className="group">
       <div className="group-title">{title}</div>

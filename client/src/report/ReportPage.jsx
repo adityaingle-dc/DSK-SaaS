@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -17,6 +17,9 @@ export default function ReportPage() {
   const [draft, setDraft] = useState({}); // overrides being edited (superadmin)
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState('');
+  // preview zoom: A4 sheets (210mm) are scaled down to fit narrow screens; printing always uses 100%
+  const pageRef = useRef(null);
+  const [zoom, setZoom] = useState(1);
 
   useEffect(() => {
     api.getValuation(id).then((x) => {
@@ -24,6 +27,23 @@ export default function ReportPage() {
       setDraft(x.reportOverrides || {});
     }).catch((e) => setError(e.message));
   }, [id]);
+
+  useLayoutEffect(() => {
+    const el = pageRef.current;
+    if (!el) return undefined;
+    const probe = Object.assign(document.createElement('div'), { style: 'position:absolute;visibility:hidden;width:210mm' });
+    document.body.appendChild(probe);
+    const sheetPx = probe.getBoundingClientRect().width;
+    probe.remove();
+    const fit = () => {
+      const avail = el.clientWidth;
+      setZoom(Math.min(1, Math.max(0.3, Math.floor((avail / sheetPx) * 100) / 100)));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [v]);
 
   // flag sheets taller than one A4 page so the superadmin can trim them before printing
   useEffect(() => {
@@ -33,7 +53,8 @@ export default function ReportPage() {
       const a4 = probe.getBoundingClientRect().height;
       probe.remove();
       document.querySelectorAll('.sheet').forEach((el) => {
-        if (el.getBoundingClientRect().height > a4 * 1.01) el.setAttribute('data-overflow', '');
+        // measured size includes the preview zoom; compare at true A4 scale
+        if (el.getBoundingClientRect().height / zoom > a4 * 1.01) el.setAttribute('data-overflow', '');
         else el.removeAttribute('data-overflow');
       });
     }, 300);
@@ -113,12 +134,14 @@ export default function ReportPage() {
   };
 
   return (
-    <div className="report-page">
+    <div className="report-page" ref={pageRef}>
       <div className="report-toolbar no-print">
         <div className="rt-left">
           <Link to={`/valuations/${id}`} className="link-sm">‹ Back to valuation</Link>
           <div className="rt-title">
-            <strong>{v.summary?.applicantName}</strong> <span className="muted">· {v.referenceNo} · {c.tpl.title}</span> <StatusBadge status={v.status} />
+            <strong>{v.summary?.applicantName}</strong>
+            <span className="rt-meta muted">{v.referenceNo} · {c.tpl.title}</span>
+            <StatusBadge status={v.status} />
           </div>
           {v.reportEditedAt && <small className="muted">Last edited {dateTime(v.reportEditedAt)}{v.reportEditedBy?.name ? ` by ${v.reportEditedBy.name}` : ''}</small>}
         </div>
@@ -136,7 +159,7 @@ export default function ReportPage() {
               <button className="btn" disabled={!dirty || saving} onClick={save}>{saving ? 'Saving…' : dirty ? 'Save edits' : 'Saved'}</button>
             </>
           )}
-          <button className="btn primary" onClick={print}>Print / Save PDF</button>
+          <button className="btn primary rt-print" onClick={print}>Print / Save PDF</button>
         </div>
       </div>
 
@@ -149,9 +172,14 @@ export default function ReportPage() {
         <div className="edit-hint warn no-print">This valuation is <strong>{v.status}</strong>, so the report prints with a {v.status === 'rejected' ? 'REJECTED' : 'DRAFT'} watermark until it is approved.</div>
       )}
       {error && <div className="alert no-print">{error}</div>}
+      {zoom < 1 && (
+        <p className="fit-note no-print">
+          Preview scaled to {Math.round(zoom * 100)}% to fit your screen{editing ? '. Editing is easier on a larger screen' : ''}. Printing uses full A4 size.
+        </p>
+      )}
 
       <ReportCtx.Provider value={ctx}>
-        <div className={`sheets${ctx.editing ? ' is-editing' : ''}`}>
+        <div className={`sheets${ctx.editing ? ' is-editing' : ''}`} style={{ zoom }}>
           {sheets.map((s, i) => (
             <Sheet key={s.id} n={i + 1} total={sheets.length} c={c} letterhead={s.letterhead}>
               {s.el}
