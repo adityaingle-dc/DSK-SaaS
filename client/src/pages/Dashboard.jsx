@@ -127,7 +127,7 @@ function OverviewDashboard() {
       <div className={`period-body${loading ? ' is-loading' : ''}`}>
       <section className="hero-card">
         <div className="hero-label">
-          {isReviewer ? 'Portfolio value under valuation' : 'Value of my valuations'}
+          {isReviewer ? 'Portfolio value under valuation' : 'Value of my input sheets'}
           {period.period !== 'all' && <span className="hero-period"> · {periodLabel(period.period, period)}</span>}
         </div>
         <div className="hero-value-row">
@@ -135,10 +135,10 @@ function OverviewDashboard() {
           <Delta cur={stats.totalValue} prev={prev?.totalValue} pct vs={vs} />
         </div>
         <div className="hero-words">
-          {period.period === 'all' ? 'Total fair market value across all report types' : `Fair market value of valuations created in this period${prev ? `, compared with ${vs}` : ''}`}
+          {period.period === 'all' ? 'Total fair market value across all report types' : `Fair market value of input sheets created in this period${prev ? `, compared with ${vs}` : ''}`}
         </div>
         <div className="hero-metrics">
-          <div><strong>{stats.total} <Delta cur={stats.total} prev={prev?.total} vs={vs} /></strong><small>Total valuations</small></div>
+          <div><strong>{stats.total} <Delta cur={stats.total} prev={prev?.total} vs={vs} /></strong><small>Total input sheets</small></div>
           <div><strong>{stats.total ? inr(stats.totalValue / stats.total) : '—'}</strong><small>Average value</small></div>
           <div><strong>{approvalRate == null ? '—' : `${approvalRate}%`}</strong><small>Approval rate</small></div>
           <div><strong>{stats.byTemplate.length}</strong><small>Report types in use</small></div>
@@ -222,7 +222,7 @@ function OverviewDashboard() {
             <h2>By report type</h2>
           </div>
           {stats.byTemplate.length === 0 ? (
-            <p className="muted">Report types appear here once valuations are saved.</p>
+            <p className="muted">Report types appear here once input sheets are saved.</p>
           ) : (
             <ul className="bars">
               {stats.byTemplate.map((t) => (
@@ -265,7 +265,7 @@ function EmptyState() {
     <div className="empty">
       <div className="empty-icon"><IconDraft size={24} /></div>
       <strong>No input sheets yet</strong>
-      <p className="muted">{isSuperadmin ? <>Start a valuation from <strong>Customers</strong>: open a customer and use <strong>Start valuation</strong> to assign it to an evaluator.</> : 'Input sheets assigned to you by the superadmin appear here.'}</p>
+      <p className="muted">{isSuperadmin ? <>Use <strong>New input sheet</strong> on <strong>Input Sheets</strong> or a customer's page to assign one to an evaluator.</> : 'Input sheets assigned to you by the superadmin appear here.'}</p>
     </div>
   );
 }

@@ -24,6 +24,7 @@ const userSchema = new mongoose.Schema(
     // legacy: employee number typed in before system IDs existed (still shown when present)
     employeeId: { type: String, trim: true, maxlength: 60 },
     mustChangePassword: { type: Boolean, default: false },
+    emailVerifiedAt: Date, // set when the user first proves the mailbox with an emailed code
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     approvedAt: Date,
@@ -39,7 +40,8 @@ userSchema.pre('save', async function assignCode(next) {
 });
 
 userSchema.pre('save', async function hashPassword(next) {
-  if (!this.isModified('password')) return next();
+  // $locals.passwordIsHash: hashed earlier (account request verified by email code)
+  if (!this.isModified('password') || this.$locals.passwordIsHash) return next();
   this.password = await bcrypt.hash(this.password, 10);
   next();
 });

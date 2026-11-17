@@ -228,7 +228,7 @@ export default function EvaluatorDashboard() {
           <div className="empty">
             <div className="empty-icon"><IconCheck size={24} /></div>
             <strong>No tasks right now</strong>
-            <p className="muted">When the superadmin assigns you a valuation, it appears here.</p>
+            <p className="muted">When the superadmin assigns you an input sheet, it appears here.</p>
           </div>
         ) : (
           <ol className="task-list">{todo.map((t) => <TaskRow key={t._id} t={t} />)}</ol>
@@ -262,7 +262,7 @@ export default function EvaluatorDashboard() {
             {c.approved > 0 && <Link to="/valuations?status=approved" className="link-sm">View all <IconChevron size={14} /></Link>}
           </div>
           {completed.length === 0 ? (
-            <p className="muted card-empty">{data.completed.length ? 'No completed sheets match your search.' : 'Approved valuations appear here.'}</p>
+            <p className="muted card-empty">{data.completed.length ? 'No completed sheets match your search.' : 'Approved input sheets appear here.'}</p>
           ) : (
             <ul className="list">
               {completed.map((t) => (

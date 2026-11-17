@@ -68,7 +68,7 @@ export default function CustomerView() {
     }
   };
 
-  const startButton = <button className="btn primary" onClick={() => openAssign('')}><IconPlus size={16} /> Start valuation</button>;
+  const startButton = <button className="btn primary" onClick={() => openAssign('')}><IconPlus size={16} /> New input sheet</button>;
 
   return (
     <div className="page">
@@ -97,7 +97,7 @@ export default function CustomerView() {
 
       <div className="kpis">
         <div className="kpi"><div className="kpi-value">{properties.filter((g) => g.identified).length}</div><div className="kpi-label">Properties</div></div>
-        <div className="kpi"><div className="kpi-value">{stats.total}</div><div className="kpi-label">Valuations</div></div>
+        <div className="kpi"><div className="kpi-value">{stats.total}</div><div className="kpi-label">Input sheets</div></div>
         <div className="kpi tone-amber"><div className="kpi-value">{stats.open}</div><div className="kpi-label">In progress</div></div>
         <div className="kpi tone-green"><div className="kpi-value">{stats.approved}</div><div className="kpi-label">Approved</div></div>
         <div className="kpi"><div className="kpi-value">{stats.totalValue ? inr(stats.totalValue) : '—'}</div><div className="kpi-label">Total value</div></div>
@@ -146,7 +146,7 @@ export default function CustomerView() {
       {['properties', 'sheets'].includes(tab) && valuations.length === 0 && (
         <div className="card empty">
           <div className="empty-icon"><DuoContact size={24} /></div>
-          <strong>No valuations for {c.name} yet</strong>
+          <strong>No input sheets for {c.name} yet</strong>
           <p className="muted">Start one and assign it to an evaluator. Their details are filled into the input sheet automatically.</p>
           {startButton}
         </div>
@@ -160,7 +160,7 @@ export default function CustomerView() {
               <div>
                 <h2>{g.address}</h2>
                 <p className="muted small">
-                  {[...new Set([g.description, g.type].filter(Boolean))].concat(`${g.valuations.length} valuation${g.valuations.length === 1 ? '' : 's'}`).join(' · ')}
+                  {[...new Set([g.description, g.type].filter(Boolean))].concat(`${g.valuations.length} input sheet${g.valuations.length === 1 ? '' : 's'}`).join(' · ')}
                 </p>
               </div>
             </div>
@@ -177,7 +177,7 @@ export default function CustomerView() {
                   <span className="ph-dot" aria-hidden="true" />
                   <div className="ph-main">
                     <strong>{v.referenceNo}</strong>
-                    <small>{new Date(v.summary?.valuationDate || v.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · {v.evaluator?.name || 'Unassigned'}{i === 0 && g.valuations.length > 1 ? ' · first valuation' : ''}</small>
+                    <small>{new Date(v.summary?.valuationDate || v.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · {v.evaluator?.name || 'Unassigned'}{i === 0 && g.valuations.length > 1 ? ' · first input sheet' : ''}</small>
                   </div>
                   <div className="ph-value">
                     <strong>{fmv(v)}</strong>
@@ -259,7 +259,7 @@ export default function CustomerView() {
           onClose={() => setModal(null)}
           onAssigned={(r) => {
             setModal(null);
-            setNotice({ id: r._id, text: `Valuation ${r.referenceNo} created and assigned to ${r.evaluator.name}.` });
+            setNotice({ id: r._id, text: `Input sheet ${r.referenceNo} created and assigned to ${r.evaluator.name}.` });
             setTab('sheets');
             load();
           }}

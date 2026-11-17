@@ -4,13 +4,15 @@ import { useAuth } from '../context/AuthContext.jsx';
 import AuthShell from '../components/AuthShell.jsx';
 import { IconClock } from '../components/Icons.jsx';
 import { emailError } from '../utils/email.js';
+import OtpStep from '../components/OtpStep.jsx';
 
 export default function Register() {
-  const { user, register } = useAuth();
+  const { user, register, verifyRegistration } = useAuth();
   const [form, setForm] = useState({ name: '', email: '', password: '', phone: '', branch: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState(false);
+  const [challenge, setChallenge] = useState(null);
   const [emailTouched, setEmailTouched] = useState(false);
   const [serverEmailError, setServerEmailError] = useState('');
 
@@ -25,8 +27,7 @@ export default function Register() {
     setBusy(true);
     setError('');
     try {
-      await register({ ...form, email: form.email.trim() });
-      setPending(true);
+      setChallenge(await register({ ...form, email: form.email.trim() }));
     } catch (err) {
       const fieldErr = err.errors?.find((x) => x.field === 'email');
       if (fieldErr) setServerEmailError(fieldErr.message);
@@ -35,6 +36,20 @@ export default function Register() {
       setBusy(false);
     }
   };
+
+  if (challenge && !pending) {
+    return (
+      <AuthShell eyebrow="Request access" title="Verify your email" subtitle="Enter the code we sent to confirm this address is yours.">
+        <OtpStep
+          challenge={challenge}
+          verifyLabel="Verify & send request"
+          backLabel="Edit details"
+          onBack={() => setChallenge(null)}
+          onVerify={async (id, code) => { await verifyRegistration(id, code); setPending(true); }}
+        />
+      </AuthShell>
+    );
+  }
 
   if (pending) {
     return (
@@ -59,7 +74,7 @@ export default function Register() {
           <input type="email" required autoComplete="email" placeholder="you@bank.in" value={form.email} onChange={set('email')} onBlur={() => form.email && setEmailTouched(true)} aria-invalid={Boolean(emailMsg)} aria-describedby={emailMsg ? 'reg-email-err' : undefined} />
           {emailMsg && <small id="reg-email-err" className="field-error">{emailMsg}</small>}
         </label>
-        <label>Password<input type="password" required minLength={6} autoComplete="new-password" placeholder="At least 6 characters" value={form.password} onChange={set('password')} /></label>
+        <label>Password<input type="password" required minLength={8} autoComplete="new-password" placeholder="At least 8 characters" value={form.password} onChange={set('password')} /></label>
         <label>Phone<input type="tel" autoComplete="tel" value={form.phone} onChange={set('phone')} /></label>
         <label>Branch<input value={form.branch} onChange={set('branch')} /></label>
         <button className="btn primary lg block" disabled={busy}>{busy ? 'Sending…' : 'Request account'}</button>

@@ -81,7 +81,7 @@ router.delete(
   '/:id',
   asyncHandler(async (req, res) => {
     const a = await load(req);
-    if (a.valuation) throw new HttpError(409, 'File is attached to a saved valuation; remove it from the sheet instead');
+    if (a.valuation) throw new HttpError(409, 'File is attached to a saved input sheet; remove it from the sheet instead');
     await removeAttachment(a);
     await logActivity(req, 'file.deleted', { entityType: 'file', entityId: a._id, summary: `Deleted ${a.originalName}` });
     res.status(204).end();

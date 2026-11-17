@@ -86,11 +86,11 @@ export default function ValuationList() {
         actions={(
           <div className="lp-head">
             <SearchBox value={query.q} onSearch={(q) => update({ q }, { replace: true })} label="Search input sheets" placeholder="Search applicant, phone, reference, bank, village…" />
-            {isSuperadmin && <button className="btn primary desktop-only" onClick={() => setCreating(true)}><IconPlus size={16} /> New valuation</button>}
+            {isSuperadmin && <button className="btn primary desktop-only" onClick={() => setCreating(true)}><IconPlus size={16} /> New input sheet</button>}
           </div>
         )}
       />
-      {isSuperadmin && <Fab label="New valuation" onClick={() => setCreating(true)} />}
+      {isSuperadmin && <Fab label="New input sheet" onClick={() => setCreating(true)} />}
       {notice && (
         <div className="alert success">
           {notice.text} <Link to={`/valuations/${notice.id}`}>Open the sheet</Link>
@@ -101,7 +101,7 @@ export default function ValuationList() {
           onClose={() => setCreating(false)}
           onAssigned={(r) => {
             setCreating(false);
-            setNotice({ id: r._id, text: `Valuation ${r.referenceNo} created and assigned to ${r.evaluator?.name || 'the evaluator'}.` });
+            setNotice({ id: r._id, text: `Input sheet ${r.referenceNo} created and assigned to ${r.evaluator?.name || 'the evaluator'}.` });
             setReload((n) => n + 1);
           }}
         />
@@ -109,7 +109,7 @@ export default function ValuationList() {
 
       {query.evaluator && !isReviewer && (
         <div className="filter-pill">
-          Showing one evaluator's valuations
+          Showing one evaluator's input sheets
           <button type="button" className="linklike" onClick={() => update({ evaluator: '' })}>Show all</button>
         </div>
       )}
@@ -168,7 +168,7 @@ export default function ValuationList() {
             ) : (
               <>
                 <strong>No input sheets yet</strong>
-                <p className="muted">{isSuperadmin ? <>Use <strong>New valuation</strong> to pick a customer and assign the job to an evaluator.</> : 'Input sheets assigned to you by the superadmin appear here.'}</p>
+                <p className="muted">{isSuperadmin ? <>Use <strong>New input sheet</strong> to pick a customer and assign the job to an evaluator.</> : 'Input sheets assigned to you by the superadmin appear here.'}</p>
               </>
             )}
           </div>

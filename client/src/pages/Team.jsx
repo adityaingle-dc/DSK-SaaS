@@ -9,7 +9,7 @@ import { IconPlus } from '../components/Icons.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import Segmented from '../components/Segmented.jsx';
 import { DuoUsers } from '../components/DuoIcons.jsx';
-import { ROLE_LABELS } from '../context/AuthContext.jsx';
+import { ASSIGNABLE_ROLES, ROLE_LABELS } from '../context/AuthContext.jsx';
 import Fab from '../components/Fab.jsx';
 import CollapsibleSearch from '../components/CollapsibleSearch.jsx';
 import SearchBox from '../components/SearchBox.jsx';
@@ -103,14 +103,14 @@ export default function Team() {
         <Kpi label="Active members" value={counts.active || 0} />
         <Kpi label="Pending approval" value={counts.pending || 0} tone={counts.pending ? 'amber' : ''} />
         <Kpi label="Disabled" value={counts.disabled || 0} />
-        <Kpi label="Team valuations" value={items.reduce((s, u) => s + u.stats.total, 0)} />
+        <Kpi label="Team input sheets" value={items.reduce((s, u) => s + u.stats.total, 0)} />
       </div>
 
       <div className="toolbar team-toolbar">
         <CollapsibleSearch className="csearch-mobile" value={q} onSearch={(v) => setFilter({ q: v })} label="Search team" placeholder="Search name, email, phone, branch, employee ID…" />
         <select className="select-pill team-role-mobile" aria-label="Role" value={role} onChange={(e) => setFilter({ role: e.target.value }, {})}>
           <option value="">All roles</option>
-          {Object.entries(ROLE_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          {ASSIGNABLE_ROLES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
         </select>
       </div>
 
@@ -133,11 +133,11 @@ export default function Team() {
         />
         <select className="select-pill desktop-only team-role-desktop" aria-label="Role" value={role} onChange={(e) => setFilter({ role: e.target.value }, {})}>
           <option value="">All roles</option>
-          {Object.entries(ROLE_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          {ASSIGNABLE_ROLES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
         </select>
         {data && (
           <span className="result-count" aria-live="polite">
-            <span><b>{items.length}</b> member{items.length === 1 ? '' : 's'}<span className="mobile-inline"> · <b>{items.reduce((s, u) => s + u.stats.total, 0)}</b> valuations</span></span>
+            <span><b>{items.length}</b> member{items.length === 1 ? '' : 's'}<span className="mobile-inline"> · <b>{items.reduce((s, u) => s + u.stats.total, 0)}</b> input sheets</span></span>
             {filtered && <button type="button" className="linklike" onClick={() => setParams({}, { replace: true })}>Clear filters</button>}
           </span>
         )}
@@ -157,7 +157,7 @@ export default function Team() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>Member</th><th className="col-opt2">Role</th><th className="col-opt">Branch</th><th className="num">Valuations</th><th className="num col-opt2">Approval</th>
+                  <th>Member</th><th className="col-opt2">Role</th><th className="col-opt">Branch</th><th className="num">Input sheets</th><th className="num col-opt2">Approval</th>
                   <th className="num col-opt" title="Average time from assignment to submission">Avg. submit</th><th className="col-opt">Last active</th><th>Status</th><th><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
@@ -198,7 +198,7 @@ export default function Team() {
                   <span className="list-main">
                     <strong>{u.name}</strong>
                     <small>{[u.code, ROLE_LABELS[u.role], u.branch].filter(Boolean).join(' · ')}</small>
-                    <small>{u.stats.total} valuations · active {timeAgo(u.lastActiveAt)}</small>
+                    <small>{u.stats.total} input sheets · active {timeAgo(u.lastActiveAt)}</small>
                   </span>
                   <span className="list-end">
                     <UserStatus status={u.status} />
@@ -223,9 +223,7 @@ export default function Team() {
                 <label>Phone<input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
                 <label>Role
                   <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-                    <option value="evaluator">Field evaluator</option>
-                    <option value="admin">Valuer · Reviewer</option>
-                    <option value="superadmin">Super admin</option>
+                    {ASSIGNABLE_ROLES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                   </select>
                 </label>
               </div>

@@ -5,7 +5,7 @@ import { inr } from '../components/StatusBadge.jsx';
 import { initials } from '../components/Layout.jsx';
 import ActivityItem from '../components/ActivityItem.jsx';
 import Modal, { TempPasswordNotice } from '../components/Modal.jsx';
-import { ROLE_LABELS, useAuth } from '../context/AuthContext.jsx';
+import { ASSIGNABLE_ROLES, ROLE_LABELS, useAuth } from '../context/AuthContext.jsx';
 import { dateTime, duration, timeAgo } from '../utils/format.js';
 import { Kpi, UserStatus } from './Team.jsx';
 import BackLink from '../components/BackLink.jsx';
@@ -89,7 +89,7 @@ export default function TeamMember() {
       {error && <div className="alert">{error}</div>}
 
       <div className="kpis">
-        <Kpi label="Valuations" value={stats.total} />
+        <Kpi label="Input sheets" value={stats.total} />
         <Kpi label="Approved" value={stats.approved} tone="green" />
         <Kpi label="Rejected" value={stats.rejected} tone={stats.rejected ? 'red' : ''} />
         <Kpi label="In review / drafts" value={`${stats.submitted} / ${stats.draft}`} />
@@ -106,7 +106,7 @@ export default function TeamMember() {
             <span>
               <Link to={`/activity?actor=${u._id}`} className="link-sm">Full log</Link>
               {' · '}
-              <Link to={`/valuations?evaluator=${u._id}`} className="link-sm">Their valuations</Link>
+              <Link to={`/valuations?evaluator=${u._id}`} className="link-sm">Their input sheets</Link>
             </span>
           </div>
           {activity.length === 0 ? <p className="muted">No activity recorded yet.</p> : (
@@ -133,9 +133,8 @@ export default function TeamMember() {
               <label>Phone<input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
               <label>Role
                 <select value={form.role} disabled={isSelf} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-                  <option value="evaluator">Field evaluator</option>
-                  <option value="admin">Valuer · Reviewer</option>
-                  <option value="superadmin">Super admin</option>
+                  {ASSIGNABLE_ROLES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                  {u.role === 'admin' && <option value="admin">Valuer · Reviewer (old role)</option>}
                 </select>
               </label>
             </div>
@@ -159,7 +158,7 @@ export default function TeamMember() {
       {modal === 'disable' && (
         <Modal title="Disable account" onClose={() => setModal(null)}>
           <div className="stack">
-            <p><strong>{u.name}</strong> will be signed out everywhere and won't be able to sign in. Their valuations and history are kept. You can re-enable the account at any time.</p>
+            <p><strong>{u.name}</strong> will be signed out everywhere and won't be able to sign in. Their input sheets and history are kept. You can re-enable the account at any time.</p>
             <button className="btn danger block" disabled={busy} onClick={() => setStatus('disabled')}>Disable account</button>
           </div>
         </Modal>

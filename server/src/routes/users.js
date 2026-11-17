@@ -13,6 +13,8 @@ import { EMPTY_STATS, evaluatorStats } from '../services/teamStats.js';
 const router = Router();
 router.use(protect, requireSuperadmin);
 
+// roles a member can be given (existing 'admin' / Valuer · Reviewer accounts keep working)
+const ASSIGNABLE_ROLES = ['evaluator', 'superadmin'];
 const EDITABLE = ['name', 'phone', 'branch', 'employeeId', 'role', 'status'];
 const pick = (body) => Object.fromEntries(Object.entries(body || {}).filter(([k, v]) => EDITABLE.includes(k) && v !== undefined));
 
@@ -78,7 +80,7 @@ router.post(
     if (!name || !email) throw new HttpError(400, 'Name and email are required');
     const problem = await emailProblem(email);
     if (problem) throw new HttpError(422, problem);
-    if (!ROLES.includes(role)) throw new HttpError(400, 'Invalid role');
+    if (!ASSIGNABLE_ROLES.includes(role)) throw new HttpError(400, 'Role must be Field evaluator or Super admin');
     if (await User.exists({ email: String(email).toLowerCase().trim() })) throw new HttpError(409, 'Email already registered');
 
     const password = tempPassword();
@@ -97,7 +99,7 @@ router.patch(
   asyncHandler(async (req, res) => {
     const user = await load(req.params.id);
     const updates = pick(req.body);
-    if (updates.role && !ROLES.includes(updates.role)) throw new HttpError(400, 'Invalid role');
+    if (updates.role && updates.role !== user.role && !ASSIGNABLE_ROLES.includes(updates.role)) throw new HttpError(400, 'Role must be Field evaluator or Super admin');
     if (updates.status && !USER_STATUSES.includes(updates.status)) throw new HttpError(400, 'Invalid status');
     if (String(user._id) === String(req.user._id) && ((updates.role && updates.role !== user.role) || (updates.status && updates.status !== 'active'))) {
       throw new HttpError(409, 'You cannot change your own role or disable your own account');

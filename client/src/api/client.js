@@ -68,6 +68,12 @@ export const api = {
   deleteFile: (id) => request(`/files/${id}`, { method: 'DELETE' }),
   login: (email, password) => request('/auth/login', { method: 'POST', body: { email, password } }),
   register: (payload) => request('/auth/register', { method: 'POST', body: payload }),
+  // email one-time codes (SendGrid)
+  loginVerify: (challengeId, code) => request('/auth/login/verify', { method: 'POST', body: { challengeId, code } }),
+  registerVerify: (challengeId, code) => request('/auth/register/verify', { method: 'POST', body: { challengeId, code } }),
+  resendOtp: (challengeId) => request('/auth/otp/resend', { method: 'POST', body: { challengeId } }),
+  forgotPassword: (email) => request('/auth/password/forgot', { method: 'POST', body: { email } }),
+  resetPassword: (challengeId, code, password) => request('/auth/password/reset', { method: 'POST', body: { challengeId, code, password } }),
   me: () => request('/auth/me'),
   changePassword: (currentPassword, newPassword) => request('/auth/change-password', { method: 'POST', body: { currentPassword, newPassword } }),
 

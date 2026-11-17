@@ -31,7 +31,7 @@ export default function ValuationView() {
   };
 
   const remove = async () => {
-    if (!confirm('Delete this valuation permanently?')) return;
+    if (!confirm('Delete this input sheet permanently?')) return;
     try {
       await api.deleteValuation(id);
       navigate('/valuations', { replace: true });

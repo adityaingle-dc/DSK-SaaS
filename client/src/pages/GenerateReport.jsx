@@ -239,7 +239,7 @@ export default function GenerateReport() {
         <section className="card">
           <h2>Select an input sheet of {customer.customer.name}</h2>
           {sheets.length === 0 ? (
-            <p className="muted">This customer has no input sheets yet. Start a valuation from their customer page.</p>
+            <p className="muted">This customer has no input sheets yet. Start one from their customer page.</p>
           ) : (
             <>
               {approvedCount === 0 && <p className="hint wizard-hint">None of their sheets are approved yet. A report can be generated once the superadmin approves a sheet.</p>}

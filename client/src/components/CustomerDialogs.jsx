@@ -126,7 +126,7 @@ export function CustomerFormModal({ customer, onClose, onSaved }) {
           </div>
         </fieldset>
 
-        <p className="muted small">These details are copied into the input sheet when you start a valuation for this customer.</p>
+        <p className="muted small">These details are copied into the input sheet when you start an input sheet for this customer.</p>
         <div className="actions">
           <button type="button" className="btn" onClick={onClose} disabled={busy}>Cancel</button>
           <button className="btn primary" disabled={busy}>{busy ? 'Saving…' : customer ? 'Save changes' : 'Add customer'}</button>
@@ -136,9 +136,9 @@ export function CustomerFormModal({ customer, onClose, onSaved }) {
   );
 }
 
-// Start a valuation for a customer and assign it to a team member
-// properties: groups from groupByProperty(); initialFrom: valuation id of the property to re-value (or '' for a new one)
-export function AssignValuationModal({ customer, properties = [], initialFrom = '', onClose, onAssigned, onBack }) {
+// The "new input sheet" form: which property, its site address, and who fills it in.
+// Renders its own sticky footer (Back / Cancel · Create & assign).
+function AssignForm({ customer, properties = [], initialFrom = '', onAssigned, onBack, onCancel }) {
   const [people, setPeople] = useState(null);
   const [pick, setPick] = useState('');
   const [from, setFrom] = useState(initialFrom);
@@ -150,6 +150,7 @@ export function AssignValuationModal({ customer, properties = [], initialFrom = 
   const siteOk = !newProperty || site.street.trim() || site.village.trim();
   const gps = site.gps.trim() ? parseLatLon(site.gps) : null;
   const gpsBad = site.gps.trim() && !gps;
+  const [tried, setTried] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -165,6 +166,7 @@ export function AssignValuationModal({ customer, properties = [], initialFrom = 
   }, []);
 
   const assign = async () => {
+    setTried(true);
     if (!pick || !siteOk || gpsBad) return;
     setBusy(true);
     setError('');
@@ -178,83 +180,114 @@ export function AssignValuationModal({ customer, properties = [], initialFrom = 
     }
   };
 
+  let n = 0; // section numbers
   return (
-    <Modal title="Start a valuation" onClose={onClose}>
-      <div className="stack">
-        {onBack && <button type="button" className="linklike assign-back" onClick={onBack}>‹ Change customer</button>}
-        <p className="muted">A draft input sheet for <strong>{customer.name}</strong> is created with their details filled in, and appears in the chosen person's valuations.</p>
-        {error && <div className="alert">{error}</div>}
-        {known.length > 0 && (
-          <div className="assign-step">
-            <div className="assign-step-title">1. Which property?</div>
-            <div className="assign-list" role="radiogroup" aria-label="Property">
-              <label className={`assign-opt${!from ? ' on' : ''}`}>
-                <input type="radio" name="property" checked={!from} onChange={() => setFrom('')} />
-                <span className="assign-text"><strong>A new property</strong><small>Enter its site address below</small></span>
+    <div className="nv-form">
+      {error && <div className="alert">{error}</div>}
+
+      {known.length > 0 && (
+        <section className="nv-section">
+          <h3 className="nv-section-title"><span>{++n}</span> Property</h3>
+          <div className="nv-options" role="radiogroup" aria-label="Property">
+            <label className={`assign-opt${!from ? ' on' : ''}`}>
+              <input type="radio" name="property" checked={!from} onChange={() => setFrom('')} />
+              <span className="assign-text"><strong>A new property</strong><small>Enter its site address</small></span>
+            </label>
+            {known.map((g) => (
+              <label key={g.key} className={`assign-opt${from === g.latest._id ? ' on' : ''}`}>
+                <input type="radio" name="property" checked={from === g.latest._id} onChange={() => setFrom(g.latest._id)} />
+                <span className="assign-text">
+                  <strong>{g.address}</strong>
+                  <small>Re-valuation · last {new Date(g.latest.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · location & boundaries copied</small>
+                </span>
               </label>
-              {known.map((g) => (
-                <label key={g.key} className={`assign-opt${from === g.latest._id ? ' on' : ''}`}>
-                  <input type="radio" name="property" checked={from === g.latest._id} onChange={() => setFrom(g.latest._id)} />
-                  <span className="assign-text">
-                    <strong>{g.address}</strong>
-                    <small>Re-valuation · last valued {new Date(g.latest.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · location & boundaries copied</small>
-                  </span>
-                </label>
-              ))}
-            </div>
+            ))}
           </div>
-        )}
-        {newProperty && (
-          <div className="assign-step">
-            <div className="assign-step-title">{known.length > 0 ? 'Site address of the new property' : '1. Site address'}</div>
-            <p className="muted small">Where the evaluator should go. It's copied into the sheet's "Property location".</p>
-            <div className="site-form">
-              <label className="wide">Property description<input value={site.description} onChange={setS('description')} placeholder="e.g. Independent house, G+1" /></label>
-              <label>Plot / H.No. / Flat No.<input value={site.number} onChange={setS('number')} /></label>
-              <label>Sy.No. / LP No.<input value={site.surveyNo} onChange={setS('surveyNo')} /></label>
-              <label><span>Road / street / colony <span className="req">*</span></span><input value={site.street} onChange={setS('street')} /></label>
-              <label>Village / area<input value={site.village} onChange={setS('village')} /></label>
-              <label>District<input value={site.district} onChange={setS('district')} /></label>
-              <label>Pincode<input inputMode="numeric" value={site.pincode} onChange={setS('pincode')} /></label>
-              <label className="wide">Landmark<input value={site.landmark} onChange={setS('landmark')} placeholder="e.g. Opposite the post office" /></label>
-              <label className="wide">Google Maps location (optional)
-                <input value={site.gps} onChange={setS('gps')} placeholder='Paste "lat, lon", e.g. 18.5602, 73.8076' />
-                {gpsBad && <span className="error-text">Paste it as "latitude, longitude", e.g. 18.5602, 73.8076</span>}
-              </label>
-            </div>
-            {!siteOk && <span className="hint">Enter at least the street or village so the evaluator can find the site.</span>}
+        </section>
+      )}
+
+      {newProperty && (
+        <section className="nv-section">
+          <h3 className="nv-section-title"><span>{++n}</span> Site address</h3>
+          <p className="nv-section-hint">Where the evaluator goes. It's copied into the sheet's "Property location".</p>
+          <div className="site-form nv-site">
+            <label className="wide">Property description<input value={site.description} onChange={setS('description')} placeholder="e.g. Independent house, G+1" /></label>
+            <label>Plot / H.No. / Flat No.<input value={site.number} onChange={setS('number')} /></label>
+            <label>Sy.No. / LP No.<input value={site.surveyNo} onChange={setS('surveyNo')} /></label>
+            <label className={tried && !siteOk ? 'has-error' : ''}><span>Road / street / colony <span className="req">*</span></span><input value={site.street} onChange={setS('street')} /></label>
+            <label className={tried && !siteOk ? 'has-error' : ''}><span>Village / area <span className="req">*</span></span><input value={site.village} onChange={setS('village')} /></label>
+            <label>District<input value={site.district} onChange={setS('district')} /></label>
+            <label>Pincode<input inputMode="numeric" maxLength={6} value={site.pincode} onChange={setS('pincode')} /></label>
+            <label className="wide">Landmark<input value={site.landmark} onChange={setS('landmark')} placeholder="e.g. Opposite the post office" /></label>
+            <label className={`wide${gpsBad ? ' has-error' : ''}`}><span>Google Maps location <span className="muted small">(optional)</span></span>
+              <input value={site.gps} onChange={setS('gps')} placeholder='Paste "lat, lon", e.g. 18.5602, 73.8076' />
+              {gpsBad && <span className="error-text">Paste it as "latitude, longitude", e.g. 18.5602, 73.8076</span>}
+            </label>
           </div>
-        )}
-        <div className="assign-step-title">2. Who will do it?</div>
+          {tried && !siteOk && <span className="error-text">Enter the street or the village so the evaluator can find the site.</span>}
+        </section>
+      )}
+
+      <section className="nv-section">
+        <h3 className="nv-section-title"><span>{++n}</span> Assign to</h3>
         {!people ? (
-          <div className="skeleton" style={{ height: 160 }} />
+          <div className="skeleton" style={{ height: 120 }} />
         ) : people.length === 0 ? (
           <p className="muted">No active team members yet. Add one under Team first.</p>
         ) : (
-          <div className="assign-list" role="radiogroup" aria-label="Assign to">
+          <div className="nv-options nv-people" role="radiogroup" aria-label="Assign to">
             {people.map((u) => (
               <label key={u._id} className={`assign-opt${pick === u._id ? ' on' : ''}`}>
                 <input type="radio" name="assignee" value={u._id} checked={pick === u._id} onChange={() => setPick(u._id)} />
                 <span className="avatar soft sm">{initials(u.name)}</span>
                 <span className="assign-text">
                   <strong>{u.name}</strong>
-                  <small>{ROLE_LABELS[u.role]}{u.branch ? ` · ${u.branch}` : ''}</small>
+                  <small>{[ROLE_LABELS[u.role], u.branch].filter(Boolean).join(' · ')}</small>
                 </span>
-                {u.stats && <span className="assign-load" title="Valuations handled">{u.stats.total} done</span>}
+                {u.stats && <span className="assign-load" title="Input sheets handled">{u.stats.total} done</span>}
               </label>
             ))}
           </div>
         )}
-        <div className="actions">
-          <button type="button" className="btn" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="button" className="btn primary" onClick={assign} disabled={!pick || busy || !siteOk || gpsBad}>{busy ? 'Assigning…' : 'Assign & create sheet'}</button>
-        </div>
+        {tried && !pick && people?.length > 0 && <span className="error-text">Choose who will fill in the input sheet.</span>}
+      </section>
+
+      <div className="nv-foot">
+        {onBack
+          ? <button type="button" className="btn" onClick={onBack} disabled={busy}>‹ Back</button>
+          : <button type="button" className="btn" onClick={onCancel} disabled={busy}>Cancel</button>}
+        <button type="button" className="btn primary" onClick={assign} disabled={busy || !people?.length}>{busy ? 'Creating…' : 'Create & assign'}</button>
       </div>
+    </div>
+  );
+}
+
+// Customer page → New input sheet (customer already known)
+export function AssignValuationModal({ customer, properties = [], initialFrom = '', onClose, onAssigned }) {
+  return (
+    <Modal title={`New input sheet · ${customer.name}`} onClose={onClose} className="nv-modal">
+      <AssignForm customer={customer} properties={properties} initialFrom={initialFrom} onAssigned={onAssigned} onCancel={onClose} />
     </Modal>
   );
 }
 
-// Valuations → New valuation: ① pick (or add) the customer → ② the usual "Start a valuation" dialog
+function NvSteps({ step, onStep1 }) {
+  return (
+    <ol className="nv-stepper" aria-label="Steps">
+      <li className={step === 1 ? 'on' : 'done'}>
+        <button type="button" onClick={onStep1} disabled={step === 1}>
+          <span className="nv-dot">{step === 1 ? '1' : '✓'}</span> Customer
+        </button>
+      </li>
+      <li className="nv-line" aria-hidden="true" />
+      <li className={step === 2 ? 'on' : ''}>
+        <span className="nv-step-label"><span className="nv-dot">2</span> Property & evaluator</span>
+      </li>
+    </ol>
+  );
+}
+
+// Input Sheets → New input sheet: one dialog, two steps (customer → property & evaluator)
 export function NewValuationFlow({ onClose, onAssigned }) {
   const [step, setStep] = useState('customer'); // customer | add | assign
   const [q, setQ] = useState('');
@@ -280,6 +313,7 @@ export function NewValuationFlow({ onClose, onAssigned }) {
       setStep('assign');
     } catch (e) {
       setError(e.message);
+      setStep('customer');
     } finally {
       setLoadingId('');
     }
@@ -288,44 +322,53 @@ export function NewValuationFlow({ onClose, onAssigned }) {
   if (step === 'add') {
     return <CustomerFormModal onClose={() => setStep('customer')} onSaved={(c) => choose(c._id)} />;
   }
-  if (step === 'assign' && picked) {
-    return (
-      <AssignValuationModal
-        customer={picked.customer}
-        properties={groupByProperty(picked.valuations || [])}
-        onBack={() => setStep('customer')}
-        onClose={onClose}
-        onAssigned={onAssigned}
-      />
-    );
-  }
 
+  const c = picked?.customer;
   return (
-    <Modal title="New valuation" onClose={onClose}>
-      <div className="stack">
-        <div className="nv-steps" aria-hidden="true">
-          <span className="on">1 · Customer</span><span>2 · Property & evaluator</span>
+    <Modal title="New input sheet" onClose={onClose} className="nv-modal">
+      <NvSteps step={step === 'assign' && picked ? 2 : 1} onStep1={() => setStep('customer')} />
+
+      {step === 'assign' && picked ? (
+        <>
+          <div className="nv-customer">
+            <span className="avatar soft">{initials(c.name)}</span>
+            <span className="nv-main">
+              <strong>{c.name}{c.code && <span className="id-code id-inline">{c.code}</span>}</strong>
+              <small>{[c.phone1, c.district, c.bankName].filter(Boolean).join(' · ')}</small>
+            </span>
+            <button type="button" className="btn small" onClick={() => setStep('customer')}>Change</button>
+          </div>
+          <AssignForm
+            key={c._id}
+            customer={c}
+            properties={groupByProperty(picked.valuations || [])}
+            onAssigned={onAssigned}
+            onBack={() => setStep('customer')}
+          />
+        </>
+      ) : (
+        <div className="stack nv-pick-step">
+          {error && <div className="alert">{error}</div>}
+          <SearchBox value={q} onSearch={setQ} autoFocus delay={200} label="Search customers" placeholder="Search name, phone, district…" />
+          <ul className="nv-list">
+            {!found && [0, 1, 2].map((i) => <li key={i}><div className="skeleton" style={{ height: 52 }} /></li>)}
+            {found && found.length === 0 && <li className="muted nv-empty">{q ? `No customer matches “${q}”.` : 'No customers yet.'}</li>}
+            {(found || []).map((x) => (
+              <li key={x._id}>
+                <button type="button" className={`nv-pick${picked?.customer?._id === x._id ? ' on' : ''}`} onClick={() => choose(x._id)} disabled={Boolean(loadingId)}>
+                  <span className="avatar soft sm">{initials(x.name)}</span>
+                  <span className="nv-main">
+                    <strong>{x.name}</strong>
+                    <small>{[x.code, x.phone1, x.district, x.stats?.total ? `${x.stats.total} input sheet${x.stats.total === 1 ? '' : 's'}` : 'New enquiry'].filter(Boolean).join(' · ')}</small>
+                  </span>
+                  {loadingId === x._id ? <span className="muted small">Opening…</span> : <IconChevron size={16} />}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button type="button" className="btn nv-add" onClick={() => setStep('add')}><IconPlus size={16} /> New customer</button>
         </div>
-        {error && <div className="alert">{error}</div>}
-        <SearchBox value={q} onSearch={setQ} autoFocus delay={200} label="Search customers" placeholder="Search name, phone, district…" />
-        <ul className="nv-list">
-          {!found && [0, 1, 2].map((i) => <li key={i}><div className="skeleton" style={{ height: 52 }} /></li>)}
-          {found && found.length === 0 && <li className="muted nv-empty">{q ? `No customer matches “${q}”.` : 'No customers yet.'}</li>}
-          {(found || []).map((c) => (
-            <li key={c._id}>
-              <button type="button" className="nv-pick" onClick={() => choose(c._id)} disabled={Boolean(loadingId)}>
-                <span className="avatar soft sm">{initials(c.name)}</span>
-                <span className="nv-main">
-                  <strong>{c.name}</strong>
-                  <small>{[c.phone1, c.district, c.stats?.total ? `${c.stats.total} valuation${c.stats.total === 1 ? '' : 's'}` : 'New enquiry'].filter(Boolean).join(' · ')}</small>
-                </span>
-                {loadingId === c._id ? <span className="muted small">Opening…</span> : <IconChevron size={16} />}
-              </button>
-            </li>
-          ))}
-        </ul>
-        <button type="button" className="btn nv-add" onClick={() => setStep('add')}><IconPlus size={16} /> New customer</button>
-      </div>
+      )}
     </Modal>
   );
 }

@@ -192,7 +192,7 @@ router.post(
     v.recompute();
     await linkCustomer(v, req.user);
     await v.save();
-    await logActivity(req, 'valuation.created', { entityType: 'valuation', entityId: v._id, summary: `Created valuation ${label(v)}`, meta: valuationMeta(v) });
+    await logActivity(req, 'valuation.created', { entityType: 'valuation', entityId: v._id, summary: `Created input sheet ${label(v)}`, meta: valuationMeta(v) });
     if (approve) await logActivity(req, 'valuation.approved', { entityType: 'valuation', entityId: v._id, summary: `Approved ${label(v)}`, meta: valuationMeta(v) });
     else if (submit) await logActivity(req, 'valuation.submitted', { entityType: 'valuation', entityId: v._id, summary: `Submitted ${label(v)} for review`, meta: valuationMeta(v) });
     res.status(201).json(v);
@@ -242,7 +242,7 @@ router.put(
   asyncHandler(async (req, res) => {
     const v = await load(req);
     if (!isReviewer(req.user) && !['draft', 'rejected'].includes(v.status)) {
-      throw new HttpError(409, 'Only draft or rejected valuations can be edited');
+      throw new HttpError(409, 'Only draft or returned input sheets can be edited');
     }
     const approve = req.body?.status === 'approved';
     if (approve && !isSuperadmin(req.user)) throw new HttpError(403, 'Only the superadmin can approve');
@@ -276,7 +276,7 @@ router.patch(
     const { decision, note } = req.body || {};
     if (!['approved', 'rejected'].includes(decision)) throw new HttpError(400, 'decision must be approved or rejected');
     const v = await load(req);
-    if (v.status !== 'submitted') throw new HttpError(409, 'Only submitted valuations can be reviewed');
+    if (v.status !== 'submitted') throw new HttpError(409, 'Only submitted input sheets can be reviewed');
     Object.assign(v, { status: decision, reviewNote: note ? String(note).slice(0, 2000) : undefined, reviewedBy: req.user._id, reviewedAt: new Date() });
     await v.save();
     await logActivity(req, `valuation.${decision}`, {

@@ -58,7 +58,7 @@ export default function Customers() {
     setImporting(true);
     try {
       const r = await api.importCustomers();
-      setNotice(`Created ${r.created} customer${r.created === 1 ? '' : 's'} from ${r.linked} existing valuation${r.linked === 1 ? '' : 's'}.`);
+      setNotice(`Created ${r.created} customer${r.created === 1 ? '' : 's'} from ${r.linked} existing input sheet${r.linked === 1 ? '' : 's'}.`);
       await load();
     } catch (e) {
       setError(e.message);
@@ -134,13 +134,13 @@ export default function Customers() {
             ) : data.unlinkedValuations > 0 ? (
               <>
                 <strong>Bring in your existing customers</strong>
-                <p className="muted">{data.unlinkedValuations} valuation{data.unlinkedValuations === 1 ? '' : 's'} already exist. Create customer records from their applicant details (grouped by phone number).</p>
-                <button className="btn primary" onClick={runImport} disabled={importing}>{importing ? 'Importing…' : 'Import from existing valuations'}</button>
+                <p className="muted">{data.unlinkedValuations} input sheet{data.unlinkedValuations === 1 ? '' : 's'} already exist. Create customer records from their applicant details (grouped by phone number).</p>
+                <button className="btn primary" onClick={runImport} disabled={importing}>{importing ? 'Importing…' : 'Import from existing input sheets'}</button>
               </>
             ) : (
               <>
                 <strong>No customers yet</strong>
-                <p className="muted">When someone asks for a valuation, add them here and assign the job to an evaluator.</p>
+                <p className="muted">When someone asks for a valuation, add them here and assign an input sheet to an evaluator.</p>
                 <button className="btn primary" onClick={() => setAdding(true)}><IconPlus size={16} /> Add customer</button>
               </>
             )}
@@ -154,7 +154,7 @@ export default function Customers() {
                     <th>Customer</th>
                     <th className="col-opt">Location</th>
                     <th className="col-opt2">Bank</th>
-                    <th className="num">Valuations</th>
+                    <th className="num">Input sheets</th>
                     <th className="num col-opt">Total value</th>
                     <th>Status</th>
                     <th className="col-opt">Last activity</th>
@@ -197,7 +197,7 @@ export default function Customers() {
                       <small>{[c.code, c.phone1, c.district].filter(Boolean).join(' · ')}</small>
                     </span>
                     <span className="list-end">
-                      <span className="list-end-row"><WhatsAppLink phone={c.phone1} name={c.name} variant="icon" /><small className="muted">{c.stats.total} valuation{c.stats.total === 1 ? '' : 's'}</small></span>
+                      <span className="list-end-row"><WhatsAppLink phone={c.phone1} name={c.name} variant="icon" /><small className="muted">{c.stats.total} input sheet{c.stats.total === 1 ? '' : 's'}</small></span>
                       <CustomerStage stats={c.stats} />
                     </span>
                   </Link>

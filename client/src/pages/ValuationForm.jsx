@@ -140,8 +140,8 @@ export default function ValuationForm() {
     <div className="sheet-layout">
       <PageHeader
         icon={DuoSheet}
-        back={returnTo ? { to: returnTo, label: 'Back to report review', exact: true } : id ? { to: `/valuations/${id}`, label: 'Valuation details' } : { to: '/valuations', label: 'Input Sheets' }}
-        title={id ? 'Edit valuation' : 'New valuation'}
+        back={returnTo ? { to: returnTo, label: 'Back to report review', exact: true } : id ? { to: `/valuations/${id}`, label: 'Input sheet' } : { to: '/valuations', label: 'Input Sheets' }}
+        title={id ? 'Edit input sheet' : 'New input sheet'}
         meta={meta?.referenceNo && <span className="badge">{meta.referenceNo}</span>}
         subtitle={meta?.customer && (
           <span className="form-sub">

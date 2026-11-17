@@ -153,7 +153,7 @@ router.post(
   '/import',
   asyncHandler(async (req, res) => {
     const result = await importCustomersFromValuations(req.user);
-    await logActivity(req, 'customer.imported', { entityType: 'customer', summary: `Imported ${result.created} customers from ${result.linked} valuations` });
+    await logActivity(req, 'customer.imported', { entityType: 'customer', summary: `Imported ${result.created} customers from ${result.linked} input sheets` });
     res.json(result);
   })
 );
@@ -199,7 +199,7 @@ router.delete(
   asyncHandler(async (req, res) => {
     const c = await load(req.params.id);
     const count = await Valuation.countDocuments({ customer: c._id });
-    if (count) throw new HttpError(409, 'This customer has valuations and cannot be deleted');
+    if (count) throw new HttpError(409, 'This customer has input sheets and cannot be deleted');
     await c.deleteOne();
     await logActivity(req, 'customer.deleted', { entityType: 'customer', entityId: c._id, summary: `Deleted customer ${c.name}` });
     res.status(204).end();
@@ -221,7 +221,7 @@ router.post(
       ? Object.fromEntries(Object.entries(site).filter(([k, val]) => SITE_FIELDS.includes(k) && val !== '' && val != null))
       : null;
     if (!fromValuation && siteFields && !(siteFields.street || siteFields.village) ) throw new HttpError(422, 'Enter the site street or village so the evaluator can find it');
-    if (!mongoose.isValidObjectId(evaluator)) throw new HttpError(422, 'Choose who will do the valuation');
+    if (!mongoose.isValidObjectId(evaluator)) throw new HttpError(422, 'Choose who will fill in the input sheet');
     const assignee = await User.findById(evaluator);
     if (!assignee || assignee.status !== 'active') throw new HttpError(422, 'That team member is not active');
 

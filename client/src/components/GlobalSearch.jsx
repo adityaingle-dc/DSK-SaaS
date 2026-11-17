@@ -270,7 +270,7 @@ function ResultRow({ item }) {
           <span className="gs-icon"><DuoContact size={17} /></span>
           <span className="gs-main">
             <strong>{c.name}</strong>
-            <small>{[c.code, c.phone1, c.district, `${c.stats?.total || 0} valuation${c.stats?.total === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}</small>
+            <small>{[c.code, c.phone1, c.district, `${c.stats?.total || 0} input sheet${c.stats?.total === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}</small>
           </span>
           <IconChevron size={16} className="gs-go" />
         </>

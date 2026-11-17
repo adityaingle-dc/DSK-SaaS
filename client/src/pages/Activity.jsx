@@ -16,7 +16,7 @@ import { UserStatus } from './Team.jsx';
 
 const GROUPS = [
   ['', 'All actions'],
-  ['valuation', 'Valuations'],
+  ['valuation', 'Input sheets'],
   ['valuation.assigned', '— Assigned'],
   ['valuation.submitted', '— Submitted'],
   ['valuation.approved', '— Approved'],
@@ -174,7 +174,7 @@ function TeamReport({ report }) {
   return (
     <>
       <div className="kpis">
-        <div className="kpi"><div className="kpi-value">{totals.total}</div><div className="kpi-label">Valuations started</div></div>
+        <div className="kpi"><div className="kpi-value">{totals.total}</div><div className="kpi-label">Input sheets started</div></div>
         <div className="kpi"><div className="kpi-value">{totals.submitted}</div><div className="kpi-label">Awaiting review</div></div>
         <div className="kpi tone-green"><div className="kpi-value">{totals.approved}</div><div className="kpi-label">Approved</div></div>
         <div className="kpi tone-red"><div className="kpi-value">{totals.rejected}</div><div className="kpi-label">Rejected</div></div>
