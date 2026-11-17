@@ -11,16 +11,17 @@ function pageList(page, pages) {
 }
 
 // Footer for paged lists: rows per page + page numbers. data = { total, page, pages }
-export default function Pager({ data, limit, onChange }) {
+export default function Pager({ data, limit, onChange, summary = null, className = '' }) {
   if (!data || !data.total) return null;
   return (
-    <div className="pager">
+    <div className={`pager ${className}`.trim()}>
       <label className="page-size">
         Rows
         <select value={limit} onChange={(e) => onChange({ limit: e.target.value })}>
           {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
       </label>
+      {summary}
       {data.pages > 1 && (
         <nav className="pages" aria-label="Pages">
           <button type="button" className="btn" disabled={data.page <= 1} onClick={() => onChange({ page: String(data.page - 1) })} aria-label="Previous page">‹</button>

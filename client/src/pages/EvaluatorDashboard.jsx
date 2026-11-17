@@ -147,8 +147,8 @@ export default function EvaluatorDashboard() {
       eyebrow={today}
       title={`${greeting()}, ${user.name.split(' ')[0]}`}
       subtitle={data ? (data.todo.length ? `You have ${data.todo.length} task${data.todo.length === 1 ? '' : 's'} to work on` : "You're all caught up") : ''}
-      corner={<div className="head-account"><UserMenu user={user} logout={logout} placement="down" compact /></div>}
-      actions={<div className="head-tools"><SearchTrigger className="head-search" /></div>}
+      corner={<div className="head-account"><SearchTrigger iconOnly className="head-search-icon" /><UserMenu user={user} logout={logout} placement="down" compact /></div>}
+      actions={<div className="head-tools desktop-only"><SearchTrigger className="head-search" /></div>}
     />
   );
 
@@ -206,7 +206,7 @@ export default function EvaluatorDashboard() {
           {data.todo.length > 0 && <span className="muted small">{searching ? `${todo.length} of ${data.todo.length}` : 'Most urgent first'}</span>}
         </div>
         {(data.todo.length + data.submitted.length + data.completed.length) > 0 && (
-          <div className="card-toolbar task-toolbar">
+          <div className={`card-toolbar  task-toolbar${data.todo.length <= 5 && !q ? ' few' : ''}`}>
             <SearchBox value={q} onSearch={setQ} delay={150} label="Search my tasks" placeholder="Search applicant, reference, phone, address…" />
             {data.todo.length > 0 && (
               <Segmented

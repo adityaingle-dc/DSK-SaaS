@@ -4,7 +4,7 @@ import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import StatusBadge, { inr } from './StatusBadge.jsx';
 import { initials } from './Layout.jsx';
-import { IconChevron, IconClock, IconPlus, IconSearch } from './Icons.jsx';
+import { IconChevron, IconClock, IconSearch } from './Icons.jsx';
 import { DuoContact, DuoHome, DuoKey, DuoList, DuoPulse, DuoSheet, DuoUsers } from './DuoIcons.jsx';
 
 // ---------- open/close from anywhere (sidebar, dashboard, Ctrl/⌘+K) ----------
@@ -38,13 +38,12 @@ export function SearchProvider({ children }) {
 }
 
 // ---------- triggers ----------
-export function SearchTrigger({ className = '' }) {
+export function SearchTrigger({ className = '', iconOnly = false }) {
   const { openSearch } = useGlobalSearch();
   return (
-    <button type="button" className={`search-trigger ${className}`} onClick={openSearch} aria-label="Search valuations and team">
-      <IconSearch size={16} />
-      <span>Search…</span>
-      <kbd>{SHORTCUT}</kbd>
+    <button type="button" className={`search-trigger${iconOnly ? ' icon-only' : ''} ${className}`} onClick={openSearch} aria-label="Search input sheets, customers and team" title="Search">
+      <IconSearch size={iconOnly ? 19 : 16} />
+      {!iconOnly && <><span>Search…</span><kbd>{SHORTCUT}</kbd></>}
     </button>
   );
 }
@@ -111,9 +110,8 @@ function SearchDialog({ onClose }) {
 
   const actions = useMemo(() => {
     const all = [
-      ...(isSuperadmin ? [{ label: 'New valuation', to: '/valuations/new', icon: <IconPlus size={18} />, keywords: 'create add start sheet' }] : []),
       { label: 'Dashboard', to: '/', icon: <DuoHome size={18} />, keywords: 'home overview' },
-      { label: 'All valuations', to: '/valuations', icon: <DuoList size={18} />, keywords: 'list sheets' },
+      { label: 'Input Sheets', to: '/valuations', icon: <DuoList size={18} />, keywords: 'valuations list sheets input' },
       { label: 'Drafts', to: '/valuations?status=draft', icon: <DuoList size={18} />, keywords: 'draft unfinished' },
       { label: 'In review', to: '/valuations?status=submitted', icon: <DuoList size={18} />, keywords: 'submitted pending review' },
       { label: 'Approved', to: '/valuations?status=approved', icon: <DuoList size={18} />, keywords: 'approved signed' },
@@ -146,7 +144,7 @@ function SearchDialog({ onClose }) {
       if (found.total > found.valuations.length) {
         items.push({ id: 'v:all', kind: 'all', label: `See all ${found.total.toLocaleString('en-IN')} results`, to: `/valuations?q=${encodeURIComponent(term)}` });
       }
-      g.push({ title: 'Valuations', items });
+      g.push({ title: 'Input Sheets', items });
     }
     if (found.customers.length) {
       g.push({ title: 'Customers', items: found.customers.map((c) => ({ id: `c:${c._id}`, kind: 'customer', c, to: `/customers/${c._id}` })) });
@@ -192,7 +190,7 @@ function SearchDialog({ onClose }) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={isSuperadmin ? 'Search valuations, customers, team or actions…' : 'Search valuations or actions…'}
+            placeholder={isSuperadmin ? 'Search input sheets, customers, team or actions…' : 'Search input sheets or actions…'}
             role="combobox"
             aria-expanded="true"
             aria-controls="gs-results"
@@ -272,7 +270,7 @@ function ResultRow({ item }) {
           <span className="gs-icon"><DuoContact size={17} /></span>
           <span className="gs-main">
             <strong>{c.name}</strong>
-            <small>{[c.phone1, c.district, `${c.stats?.total || 0} valuation${c.stats?.total === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}</small>
+            <small>{[c.code, c.phone1, c.district, `${c.stats?.total || 0} valuation${c.stats?.total === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}</small>
           </span>
           <IconChevron size={16} className="gs-go" />
         </>

@@ -51,7 +51,7 @@ export default function ValuationView() {
     <div className="page">
       <PageHeader
         icon={DuoBuilding}
-        back={{ to: '/valuations', label: 'Valuations' }}
+        back={{ to: '/valuations', label: 'Input Sheets' }}
         title={v.summary?.applicantName || 'Unnamed applicant'}
         meta={<StatusBadge status={v.status} />}
         subtitle={

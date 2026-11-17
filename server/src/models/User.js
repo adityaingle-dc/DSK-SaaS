@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import { nextId } from '../services/ids.js';
 
 // superadmin ⊃ admin (valuer / reviewer) ⊃ evaluator (field staff)
 export const ROLES = ['superadmin', 'admin', 'evaluator'];
@@ -18,6 +19,9 @@ const userSchema = new mongoose.Schema(
     status: { type: String, enum: USER_STATUSES, default: 'active', index: true },
     phone: { type: String, trim: true, maxlength: 20 },
     branch: { type: String, trim: true, maxlength: 120 },
+    // system ID, e.g. DSK-EMP-001 (assigned on creation)
+    code: { type: String, unique: true, sparse: true, index: true },
+    // legacy: employee number typed in before system IDs existed (still shown when present)
     employeeId: { type: String, trim: true, maxlength: 60 },
     mustChangePassword: { type: Boolean, default: false },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -28,6 +32,11 @@ const userSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+userSchema.pre('save', async function assignCode(next) {
+  if (!this.code) this.code = await nextId('emp');
+  next();
+});
 
 userSchema.pre('save', async function hashPassword(next) {
   if (!this.isModified('password')) return next();

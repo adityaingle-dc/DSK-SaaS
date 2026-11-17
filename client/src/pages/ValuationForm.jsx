@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { computeValuation, emptyValuation, getContext, sanitize, sectionPath, validate, visibleSections } from '@dsk/shared';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -10,6 +10,7 @@ import PageHeader from '../components/PageHeader.jsx';
 import { CustomerInline } from '../components/CustomerContact.jsx';
 import { SiteLine, siteFromProperty } from '../components/SiteInfo.jsx';
 import { DuoSheet } from '../components/DuoIcons.jsx';
+import { IconChevron, IconChevronDown, IconChevronLeft } from '../components/Icons.jsx';
 
 // Merge a saved sheet over the defaults so every input stays controlled and new schema fields appear
 function hydrate(saved = {}) {
@@ -21,6 +22,10 @@ function hydrate(saved = {}) {
 export default function ValuationForm() {
   const { id } = useParams();
   const navigate = useNavigate();
+  // ?return=/reports/new?... : go back there after saving or cancelling (only in-app paths)
+  const [searchParams] = useSearchParams();
+  const returnTo = (searchParams.get('return') || '').startsWith('/') && !searchParams.get('return').startsWith('//') ? searchParams.get('return') : '';
+  const leave = () => (returnTo ? navigate(returnTo, { replace: true }) : navigate(-1));
   const { isSuperadmin } = useAuth();
   const [data, setData] = useState(() => (id ? null : emptyValuation()));
   const [meta, setMeta] = useState(null);
@@ -109,7 +114,7 @@ export default function ValuationForm() {
     setBusy(true);
     try {
       const saved = id ? await api.updateValuation(id, payload) : await api.createValuation(payload);
-      navigate(`/valuations/${saved._id}`, { replace: true });
+      navigate(returnTo || `/valuations/${saved._id}`, { replace: true });
     } catch (err) {
       setMessage(err.message);
       if (err.errors?.length) {
@@ -121,11 +126,21 @@ export default function ValuationForm() {
     }
   };
 
+  // the bar's actions: one primary (always visible) + secondary ones (menu on phones)
+  const primaryAction = !isSuperadmin
+    ? { label: 'Submit for review', short: 'Submit', run: () => save('submitted') }
+    : meta?.status === 'approved'
+      ? { label: 'Save changes', short: 'Save', run: () => save() }
+      : { label: 'Save & approve', short: 'Approve', run: () => save('approved') };
+  const secondaryActions = !isSuperadmin
+    ? [{ label: 'Save draft', run: () => save() }]
+    : meta?.status === 'approved' ? [] : [{ label: meta?.status === 'submitted' ? 'Save changes' : 'Save draft', run: () => save() }];
+
   return (
     <div className="sheet-layout">
       <PageHeader
         icon={DuoSheet}
-        back={id ? { to: `/valuations/${id}`, label: 'Valuation details' } : { to: '/valuations', label: 'Valuations' }}
+        back={returnTo ? { to: returnTo, label: 'Back to report review', exact: true } : id ? { to: `/valuations/${id}`, label: 'Valuation details' } : { to: '/valuations', label: 'Input Sheets' }}
         title={id ? 'Edit valuation' : 'New valuation'}
         meta={meta?.referenceNo && <span className="badge">{meta.referenceNo}</span>}
         subtitle={meta?.customer && (
@@ -165,23 +180,23 @@ export default function ValuationForm() {
         </div>
         <div className="actions sticky">
           <LiveSummaryButton live={live} onOpen={() => live.setOpen(true)} />
-          <button type="button" className="btn" disabled={idx <= 0} onClick={() => setActive(sections[idx - 1].key)}>‹ Previous</button>
-          <button type="button" className="btn" disabled={idx >= sections.length - 1} onClick={() => setActive(sections[idx + 1].key)}>Next ›</button>
+          <button type="button" className="btn sa-nav sa-prev" aria-label="Previous step" disabled={idx <= 0} onClick={() => setActive(sections[idx - 1].key)}>
+            <IconChevronLeft size={16} /><span className="sa-txt">Previous</span>
+          </button>
+          <button type="button" className="btn sa-nav sa-next" aria-label="Next step" disabled={idx >= sections.length - 1} onClick={() => setActive(sections[idx + 1].key)}>
+            <span className="sa-txt">Next</span><IconChevron size={16} />
+          </button>
           <span className="spacer" />
-          <button type="button" className="btn btn-cancel" onClick={() => navigate(-1)} disabled={busy}>Cancel</button>
-          {!isSuperadmin ? (
-            <>
-              <button type="button" className="btn" onClick={() => save()} disabled={busy}>Save draft</button>
-              <button type="button" className="btn primary" onClick={() => save('submitted')} disabled={busy}>{busy ? 'Saving…' : 'Submit for review'}</button>
-            </>
-          ) : meta?.status === 'approved' ? (
-            <button type="button" className="btn primary" onClick={() => save()} disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button>
-          ) : (
-            <>
-              <button type="button" className="btn" onClick={() => save()} disabled={busy}>{meta?.status === 'submitted' ? 'Save changes' : 'Save draft'}</button>
-              <button type="button" className="btn primary" onClick={() => save('approved')} disabled={busy}>{busy ? 'Saving…' : 'Save & approve'}</button>
-            </>
-          )}
+          <button type="button" className="btn btn-cancel" onClick={leave} disabled={busy}>Cancel</button>
+          {secondaryActions.map((a) => (
+            <button key={a.label} type="button" className="btn sa-secondary" onClick={a.run} disabled={busy}>{a.label}</button>
+          ))}
+          <div className="sa-save">
+            <button type="button" className="btn primary sa-primary" onClick={primaryAction.run} disabled={busy}>
+              {busy ? 'Saving…' : <><span className="sa-full">{primaryAction.label}</span><span className="sa-short">{primaryAction.short}</span></>}
+            </button>
+            <SaveMenu actions={[...secondaryActions, { label: 'Cancel', run: leave, muted: true }]} disabled={busy} />
+          </div>
         </div>
       </section>
 
@@ -189,6 +204,35 @@ export default function ValuationForm() {
         <LivePanel results={results} delta={live.delta} onWarningClick={goToField} />
       </aside>
       <LiveSheet results={results} live={live} />
+    </div>
+  );
+}
+
+// phones: the secondary actions (Save draft, Cancel…) open upward from a caret next to the main button
+function SaveMenu({ actions, disabled }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
+    const key = (e) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', close);
+    document.addEventListener('touchstart', close);
+    document.addEventListener('keydown', key);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('touchstart', close); document.removeEventListener('keydown', key); };
+  }, [open]);
+  return (
+    <div className="sa-more-wrap" ref={ref}>
+      <button type="button" className="btn primary sa-more" aria-label="More save options" aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={() => setOpen((o) => !o)}>
+        <IconChevronDown size={16} />
+      </button>
+      {open && (
+        <div className="sa-menu" role="menu">
+          {actions.map((a) => (
+            <button key={a.label} type="button" role="menuitem" className={a.muted ? 'muted' : ''} onClick={() => { setOpen(false); a.run(); }}>{a.label}</button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

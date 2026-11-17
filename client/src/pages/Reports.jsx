@@ -13,6 +13,7 @@ import MoreFilters from '../components/MoreFilters.jsx';
 import PeriodPicker from '../components/PeriodPicker.jsx';
 import Pager, { ResultCount } from '../components/Pager.jsx';
 import useListParams from '../utils/useListParams.js';
+import Fab from '../components/Fab.jsx';
 import { dateTime, timeAgo } from '../utils/format.js';
 
 const DEFAULTS = { q: '', template: '', type: '', generatedBy: '', period: 'all', start: '', end: '', sort: 'created', dir: 'desc', limit: '20', page: '1' };
@@ -48,14 +49,19 @@ export default function Reports() {
       <PageHeader
         icon={DuoSheet}
         title="Reports"
-        actions={<Link className="btn primary" to="/reports/new"><IconPlus size={16} /> Generate report</Link>}
+        actions={(
+          <div className="lp-head">
+            <Link className="btn primary desktop-only" to="/reports/new"><IconPlus size={16} /> Generate report</Link>
+          </div>
+        )}
       />
+      <Fab label="Generate report" to="/reports/new" />
       {error && <div className="alert">{error}</div>}
 
-      <div className={`card flush list-card${loading && data ? ' is-loading' : ''}`}>
+      <div className={`card flush list-card lp-card${loading && data ? ' is-loading' : ''}`}>
         <div className="card-toolbar">
-          <div className="toolbar">
-            <SearchBox value={query.q} onSearch={(q) => update({ q }, { replace: true })} label="Search reports" placeholder="Search report no., customer, phone, sheet reference, property…" />
+          <div className="toolbar lp-toolbar">
+            <SearchBox className="lp-search" value={query.q} onSearch={(q) => update({ q }, { replace: true })} label="Search reports" placeholder="Search report no., customer, phone, sheet reference, property…" />
             <MoreFilters active={[query.period !== 'all', query.type, query.template, query.generatedBy].filter(Boolean).length}>
               <PeriodPicker value={query} onChange={(p) => update({ period: p.period, start: p.start, end: p.end })} />
               {types.length > 1 && (
@@ -80,9 +86,6 @@ export default function Reports() {
             <select className="select-pill" aria-label="Sort by" value={`${query.sort}:${query.dir}`} onChange={(e) => { const [sort, dir] = e.target.value.split(':'); update({ sort, dir }); }}>
               {SORT_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
-          </div>
-          <div className="toolbar-row">
-            <ResultCount data={data} limit={query.limit} filtered={filtered} onClear={clear} noun={data?.total === 1 ? 'stored report' : 'stored reports'} />
           </div>
         </div>
 
@@ -151,7 +154,7 @@ export default function Reports() {
                 </li>
               ))}
             </ul>
-            <Pager data={data} limit={query.limit} onChange={update} />
+            <Pager className="lp-pager" data={data} limit={query.limit} onChange={update} summary={<ResultCount data={data} limit={query.limit} filtered={filtered} onClear={clear} noun={data?.total === 1 ? 'stored report' : 'stored reports'} />} />
           </>
         )}
       </div>

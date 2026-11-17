@@ -15,6 +15,7 @@ import Pager, { ResultCount } from '../components/Pager.jsx';
 import useListParams from '../utils/useListParams.js';
 import { CustomerFormModal } from '../components/CustomerDialogs.jsx';
 import { WhatsAppLink } from '../components/CustomerContact.jsx';
+import Fab from '../components/Fab.jsx';
 import { timeAgo, dateTime } from '../utils/format.js';
 
 // where a customer stands, from their valuations
@@ -28,7 +29,8 @@ export const CustomerStage = ({ stats }) => {
   return <span className={`status ${s.cls}`}><span className="dot" />{s.label}</span>;
 };
 const DEFAULTS = { q: '', stage: '', source: '', bank: '', district: '', period: 'all', start: '', end: '', sort: 'updated', dir: 'desc', limit: '20', page: '1' };
-const STAGE_TABS = [['', 'All', 'all'], ['new', 'New enquiry', 'new'], ['open', 'In progress', 'open'], ['done', 'Completed', 'done']];
+// [value, label, count key, short label on phones]
+const STAGE_TABS = [['', 'All', 'all', 'All'], ['new', 'New enquiry', 'new', 'New'], ['open', 'In progress', 'open', 'Active'], ['done', 'Completed', 'done', 'Done']];
 const SORT_OPTIONS = [['updated:desc', 'Recently updated'], ['created:desc', 'Newest customers'], ['created:asc', 'Oldest customers'], ['name:asc', 'Name (A–Z)'], ['name:desc', 'Name (Z–A)']];
 const address = (c) => [c.locality, c.district].filter(Boolean).join(', ');
 
@@ -73,16 +75,28 @@ export default function Customers() {
       <PageHeader
         icon={DuoContact}
         title="Customers"
-        actions={<button className="btn primary" onClick={() => setAdding(true)}><IconPlus size={16} /> Add customer</button>}
+        actions={(
+          <div className="lp-head">
+            <SearchBox value={query.q} onSearch={(q) => update({ q }, { replace: true })} label="Search customers" placeholder="Search name, phone, email, locality, district, bank…" />
+            <button className="btn primary desktop-only" onClick={() => setAdding(true)}><IconPlus size={16} /> Add customer</button>
+          </div>
+        )}
       />
+      <Fab label="Add customer" onClick={() => setAdding(true)} />
 
       {notice && <div className="alert success">{notice}</div>}
       {error && <div className="alert">{error}</div>}
 
-      <div className={`card flush list-card${loading && data ? ' is-loading' : ''}`}>
+      <div className={`card flush list-card lp-card${loading && data ? ' is-loading' : ''}`}>
         <div className="card-toolbar">
-          <div className="toolbar">
-            <SearchBox value={query.q} onSearch={(q) => update({ q }, { replace: true })} label="Search customers" placeholder="Search name, phone, email, locality, district, bank…" />
+          <div className="toolbar lp-toolbar">
+            <Segmented
+              label="Stage"
+              className="lp-status"
+              options={STAGE_TABS.map(([value, label, key, short]) => ({ value, label: <><span className="lbl-long">{label}</span><span className="lbl-short">{short}</span></>, badge: data && <span className="tab-num">{stages[key] ?? 0}</span> }))}
+              value={query.stage}
+              onChange={(stage) => update({ stage }, { replace: true })}
+            />
             <MoreFilters active={[query.period !== 'all', query.source, query.bank, query.district].filter(Boolean).length}>
               <PeriodPicker value={query} onChange={(p) => update({ period: p.period, start: p.start, end: p.end })} />
               <select className="select-pill" aria-label="Source" value={query.source} onChange={(e) => update({ source: e.target.value })}>
@@ -105,15 +119,6 @@ export default function Customers() {
             <select className="select-pill" aria-label="Sort by" value={`${query.sort}:${query.dir}`} onChange={(e) => { const [sort, dir] = e.target.value.split(':'); update({ sort, dir }); }}>
               {SORT_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
-          </div>
-          <div className="toolbar-row">
-            <Segmented
-              label="Stage"
-              options={STAGE_TABS.map(([value, label, key]) => ({ value, label, badge: data && <span className="tab-num">{stages[key] ?? 0}</span> }))}
-              value={query.stage}
-              onChange={(stage) => update({ stage }, { replace: true })}
-            />
-            <ResultCount data={data} limit={query.limit} filtered={filtered} onClear={clear} noun="" />
           </div>
         </div>
 
@@ -164,7 +169,7 @@ export default function Customers() {
                         <div className="cell-person">
                           <span className="avatar soft sm">{initials(c.name)}</span>
                           <span>
-                            <Link to={`/customers/${c._id}`} onClick={(e) => e.stopPropagation()}><strong>{c.name}</strong></Link>
+                            <span className="name-line"><Link to={`/customers/${c._id}`} onClick={(e) => e.stopPropagation()}><strong>{c.name}</strong></Link>{c.code && <span className="id-code id-inline">{c.code}</span>}</span>
                             <small className="muted block cell-phone">{c.phone1}{c.phone1 && <WhatsAppLink phone={c.phone1} name={c.name} variant="icon" />}{c.email ? <>&nbsp;· {c.email}</> : ''}</small>
                           </span>
                         </div>
@@ -189,7 +194,7 @@ export default function Customers() {
                     <span className="avatar soft">{initials(c.name)}</span>
                     <span className="list-main">
                       <strong>{c.name}</strong>
-                      <small>{[c.phone1, c.district].filter(Boolean).join(' · ')}</small>
+                      <small>{[c.code, c.phone1, c.district].filter(Boolean).join(' · ')}</small>
                     </span>
                     <span className="list-end">
                       <span className="list-end-row"><WhatsAppLink phone={c.phone1} name={c.name} variant="icon" /><small className="muted">{c.stats.total} valuation{c.stats.total === 1 ? '' : 's'}</small></span>
@@ -200,7 +205,7 @@ export default function Customers() {
               ))}
             </ul>
 
-            <Pager data={data} limit={query.limit} onChange={update} />
+            <Pager className="lp-pager" data={data} limit={query.limit} onChange={update} summary={<ResultCount data={data} limit={query.limit} filtered={filtered} onClear={clear} noun="" />} />
           </>
         )}
       </div>

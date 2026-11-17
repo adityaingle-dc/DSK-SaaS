@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { nextId } from '../services/ids.js';
 
 // A customer is the entry point for work: someone contacts the superadmin and asks for a valuation.
 // Profile fields mirror the "Applicant / owner" section of the input sheet so a new sheet can be prefilled 1:1.
@@ -6,6 +7,8 @@ export const CUSTOMER_SOURCES = ['Walk-in', 'Phone call', 'Bank referral', 'Exis
 
 const customerSchema = new mongoose.Schema(
   {
+    // system ID, e.g. DSK-CIN-0001 (assigned on creation)
+    code: { type: String, unique: true, sparse: true, index: true },
     salutation: { type: String, trim: true, maxlength: 20, default: 'Sri.' },
     name: { type: String, required: true, trim: true, maxlength: 160 },
     relation: { type: String, trim: true, maxlength: 20 },
@@ -40,6 +43,11 @@ export const customerKey = ({ phone1, phone2, name } = {}) => {
   const n = String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
   return n ? `n:${n}` : '';
 };
+
+customerSchema.pre('save', async function assignCode(next) {
+  if (!this.code) this.code = await nextId('cin');
+  next();
+});
 
 customerSchema.pre('save', function setKey(next) {
   this.matchKey = customerKey(this);

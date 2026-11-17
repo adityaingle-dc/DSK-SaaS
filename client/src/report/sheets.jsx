@@ -13,7 +13,8 @@ const dmy = (d) => {
   const x = new Date(d);
   return Number.isNaN(x.getTime()) ? String(d) : `${String(x.getDate()).padStart(2, '0')}-${String(x.getMonth() + 1).padStart(2, '0')}-${x.getFullYear()}`;
 };
-const lines = (...xs) => xs.filter((x) => x !== undefined && x !== null && String(x).trim() !== '').join('\n');
+// joins the non-empty parts on separate lines; skips `false` from `cond && value` parts (it used to print "false")
+const lines = (...xs) => xs.filter((x) => x !== undefined && x !== null && x !== false && String(x).trim() !== '').join('\n');
 const num = (n, d = 2) => (n === undefined || n === null || n === '' ? '' : Number(n).toLocaleString('en-IN', { maximumFractionDigits: d }));
 const amt = (n) => (n ? rs(n) : '');
 

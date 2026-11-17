@@ -10,6 +10,8 @@ import Segmented from '../components/Segmented.jsx';
 import { DuoPulse } from '../components/DuoIcons.jsx';
 import { ROLE_LABELS } from '../context/AuthContext.jsx';
 import { duration, timeAgo } from '../utils/format.js';
+import { IconDownload, IconFilter } from '../components/Icons.jsx';
+import CollapsibleSearch from '../components/CollapsibleSearch.jsx';
 import { UserStatus } from './Team.jsx';
 
 const GROUPS = [
@@ -46,6 +48,8 @@ export default function Activity() {
   const [feed, setFeed] = useState(null);
   const [report, setReport] = useState(null);
   const [error, setError] = useState('');
+  // phones: member / action / dates are tucked behind a Filters button
+  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     api.listUsers().then((r) => setUsers(r.items)).catch(() => {});
@@ -63,6 +67,7 @@ export default function Activity() {
     setParams(Object.fromEntries(Object.entries(next).filter(([k, v]) => v && v !== 1 && !(k === 'view' && v === 'feed'))), { replace });
   };
 
+  const activeFilters = [filters.actor, filters.action, filters.from, filters.to].filter(Boolean).length;
   const exportCsv = () => api.downloadActivityCsv({ ...filters, page: undefined }).catch((e) => setError(e.message));
 
   return (
@@ -70,7 +75,8 @@ export default function Activity() {
       <PageHeader
         icon={DuoPulse}
         title="Activity"
-        actions={<button className="btn" onClick={exportCsv}>Export CSV</button>}
+        actions={<button className="btn desktop-only" onClick={exportCsv}><IconDownload size={16} /> Export CSV</button>}
+        corner={<button type="button" className="icon-btn head-icon-btn" onClick={exportCsv} aria-label="Export CSV" title="Export CSV"><IconDownload size={19} /></button>}
       />
 
       <Segmented
@@ -80,7 +86,15 @@ export default function Activity() {
         onChange={(v) => update({ view: v }, { replace: true })}
       />
 
-      <div className="card filters-card">
+      <div className={`card filters-card${showFilters ? ' open' : ''}`}>
+        <div className="filters-mobile-head">
+          {view === 'feed' && (
+            <CollapsibleSearch className="compact" value={filters.q} onSearch={(q) => update({ q }, { replace: true })} label="Search activity" placeholder="Search reference, applicant, user…" />
+          )}
+          <button type="button" className={`btn filters-toggle${activeFilters ? ' on' : ''}`} aria-expanded={showFilters} onClick={() => setShowFilters((o) => !o)}>
+            <IconFilter size={16} /> Filters{activeFilters > 0 && <span className="tab-num">{activeFilters}</span>}
+          </button>
+        </div>
         <div className="filter-grid">
           {view === 'feed' && (
             <>
@@ -111,7 +125,7 @@ export default function Activity() {
             )}
           </div>
           {view === 'feed' && (
-            <SearchBox className="compact" value={filters.q} onSearch={(q) => update({ q }, { replace: true })} label="Search activity" placeholder="Search reference, applicant, user…" />
+            <SearchBox className="compact filters-desktop-search" value={filters.q} onSearch={(q) => update({ q }, { replace: true })} label="Search activity" placeholder="Search reference, applicant, user…" />
           )}
         </div>
       </div>

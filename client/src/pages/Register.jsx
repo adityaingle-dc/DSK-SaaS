@@ -7,7 +7,7 @@ import { emailError } from '../utils/email.js';
 
 export default function Register() {
   const { user, register } = useAuth();
-  const [form, setForm] = useState({ name: '', email: '', password: '', phone: '', branch: '', employeeId: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', phone: '', branch: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState(false);
@@ -61,10 +61,7 @@ export default function Register() {
         </label>
         <label>Password<input type="password" required minLength={6} autoComplete="new-password" placeholder="At least 6 characters" value={form.password} onChange={set('password')} /></label>
         <label>Phone<input type="tel" autoComplete="tel" value={form.phone} onChange={set('phone')} /></label>
-        <div className="row">
-          <label>Branch<input value={form.branch} onChange={set('branch')} /></label>
-          <label>Employee ID<input value={form.employeeId} onChange={set('employeeId')} /></label>
-        </div>
+        <label>Branch<input value={form.branch} onChange={set('branch')} /></label>
         <button className="btn primary lg block" disabled={busy}>{busy ? 'Sending…' : 'Request account'}</button>
         <p className="muted center-text">
           Already approved? <Link to="/login">Sign in</Link>

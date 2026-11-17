@@ -47,7 +47,7 @@ export default function App() {
       >
         <Route index element={<Dashboard />} />
         <Route path="valuations" element={<ValuationList />} />
-        <Route path="valuations/new" element={<SuperadminOnly><ValuationForm /></SuperadminOnly>} />
+        <Route path="valuations/new" element={<Navigate to="/customers" replace />} />
         <Route path="valuations/:id" element={<ValuationView />} />
         <Route path="valuations/:id/edit" element={<ValuationForm />} />
         <Route path="valuations/:id/report" element={<SuperadminOnly><ReportPage /></SuperadminOnly>} />

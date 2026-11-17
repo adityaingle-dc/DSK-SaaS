@@ -9,7 +9,7 @@ export default function PageHeader({ icon: Icon, back, eyebrow, title, meta, sub
     <header className="page-header">
       <div className="page-header-main">
         {back ? (
-          <BackLink to={back.to} label={back.label} />
+          <BackLink to={back.to} label={back.label} exact={back.exact} />
         ) : (
           eyebrow && <div className="page-eyebrow">{eyebrow}</div>
         )}

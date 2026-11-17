@@ -9,7 +9,7 @@ import './report.css';
 // Used for the live preview of a valuation and for stored reports in the Reports module.
 //   doc       – { referenceNo, status, data, results } (a valuation, or a stored report's frozen copy)
 //   overrides – saved wording edits; onSave(draft) must resolve to { overrides, editedAt, editedBy }
-export default function ReportViewer({ doc, overrides: savedProp, onSave, back, title, meta, badge, edited, docTitle, banner }) {
+export default function ReportViewer({ doc, overrides: savedProp, onSave, back, title, meta, badge, edited, docTitle, banner, previewOnly = false, embedded = false, onDirtyChange, heading }) {
   const { isSuperadmin } = useAuth();
   const [saved, setSaved] = useState(savedProp || {});
   const [draft, setDraft] = useState(savedProp || {});
@@ -53,6 +53,8 @@ export default function ReportViewer({ doc, overrides: savedProp, onSave, back, 
 
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(saved), [draft, saved]);
   const editedCount = Object.keys(draft).length;
+
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const warn = (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
@@ -100,6 +102,55 @@ export default function ReportViewer({ doc, overrides: savedProp, onSave, back, 
   };
   const resetAll = () => { if (confirm('Discard all edits on this report and go back to the calculated values?')) setDraft({}); };
   const print = () => { setEditing(false); setTimeout(() => window.print(), 50); };
+
+  // read-only preview (e.g. Reports → Generate, step 3): just the sheets, scaled to the container
+  if (previewOnly) {
+    return (
+      <div className="report-page report-preview" ref={pageRef}>
+        <ReportCtx.Provider value={{ overrides: saved, editing: false, set: () => {} }}>
+          <div className="sheets" style={{ zoom }}>
+            {sheets.map((s, i) => (
+              <Sheet key={s.id} n={i + 1} total={sheets.length} c={c} letterhead={s.letterhead}>{s.el}</Sheet>
+            ))}
+          </div>
+        </ReportCtx.Provider>
+      </div>
+    );
+  }
+
+  // embedded (Reports → Generate, step 4): wording edits + save, nothing else
+  if (embedded) {
+    return (
+      <div className="report-page report-preview report-embedded" ref={pageRef}>
+        {(heading || (isSuperadmin && onSave)) && (
+          <div className="re-toolbar">
+            {heading}
+            {isSuperadmin && onSave && (<>
+            <label className={`switch${editing ? ' on' : ''}`}>
+              <input type="checkbox" checked={editing} onChange={(e) => setEditing(e.target.checked)} />
+              <span className="switch-track"><span /></span>
+              Edit wording
+            </label>
+            {editedCount > 0 && <span className="badge">{editedCount} edited</span>}
+            <span className="spacer" />
+            {notice && <span className="rt-notice">{notice}</span>}
+            {editedCount > 0 && <button type="button" className="btn small ghost" onClick={resetAll}>Reset all</button>}
+            {(dirty || editedCount > 0) && <button type="button" className={`btn small${dirty ? ' primary' : ''}`} disabled={!dirty || saving} onClick={save}>{saving ? 'Saving…' : dirty ? 'Save edits' : 'Saved'}</button>}
+            </>)}
+          </div>
+        )}
+        {editing && <div className="edit-hint re-hint">Click any text on the report to change it. Enter finishes a line, Esc cancels. Saved edits are copied into the stored report.</div>}
+        {error && <div className="alert">{error}</div>}
+        <ReportCtx.Provider value={ctx}>
+          <div className={`sheets${ctx.editing ? ' is-editing' : ''}`} style={{ zoom }}>
+            {sheets.map((s, i) => (
+              <Sheet key={s.id} n={i + 1} total={sheets.length} c={c} letterhead={s.letterhead}>{s.el}</Sheet>
+            ))}
+          </div>
+        </ReportCtx.Provider>
+      </div>
+    );
+  }
 
   return (
     <div className="report-page" ref={pageRef}>

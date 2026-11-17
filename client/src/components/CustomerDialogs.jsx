@@ -5,6 +5,9 @@ import { api } from '../api/client.js';
 import Modal from './Modal.jsx';
 import { initials } from './Layout.jsx';
 import { parseLatLon } from './SiteInfo.jsx';
+import SearchBox from './SearchBox.jsx';
+import { groupByProperty } from '../utils/properties.js';
+import { IconChevron, IconPlus } from './Icons.jsx';
 import { ROLE_LABELS } from '../context/AuthContext.jsx';
 
 const applicantOptions = (key) => SECTIONS.find((s) => s.key === 'applicant')?.fields.find((f) => f.key === key)?.options || [];
@@ -135,7 +138,7 @@ export function CustomerFormModal({ customer, onClose, onSaved }) {
 
 // Start a valuation for a customer and assign it to a team member
 // properties: groups from groupByProperty(); initialFrom: valuation id of the property to re-value (or '' for a new one)
-export function AssignValuationModal({ customer, properties = [], initialFrom = '', onClose, onAssigned }) {
+export function AssignValuationModal({ customer, properties = [], initialFrom = '', onClose, onAssigned, onBack }) {
   const [people, setPeople] = useState(null);
   const [pick, setPick] = useState('');
   const [from, setFrom] = useState(initialFrom);
@@ -178,6 +181,7 @@ export function AssignValuationModal({ customer, properties = [], initialFrom = 
   return (
     <Modal title="Start a valuation" onClose={onClose}>
       <div className="stack">
+        {onBack && <button type="button" className="linklike assign-back" onClick={onBack}>‹ Change customer</button>}
         <p className="muted">A draft input sheet for <strong>{customer.name}</strong> is created with their details filled in, and appears in the chosen person's valuations.</p>
         {error && <div className="alert">{error}</div>}
         {known.length > 0 && (
@@ -245,6 +249,82 @@ export function AssignValuationModal({ customer, properties = [], initialFrom = 
           <button type="button" className="btn" onClick={onClose} disabled={busy}>Cancel</button>
           <button type="button" className="btn primary" onClick={assign} disabled={!pick || busy || !siteOk || gpsBad}>{busy ? 'Assigning…' : 'Assign & create sheet'}</button>
         </div>
+      </div>
+    </Modal>
+  );
+}
+
+// Valuations → New valuation: ① pick (or add) the customer → ② the usual "Start a valuation" dialog
+export function NewValuationFlow({ onClose, onAssigned }) {
+  const [step, setStep] = useState('customer'); // customer | add | assign
+  const [q, setQ] = useState('');
+  const [found, setFound] = useState(null);
+  const [picked, setPicked] = useState(null); // { customer, valuations }
+  const [error, setError] = useState('');
+  const [loadingId, setLoadingId] = useState('');
+
+  useEffect(() => {
+    if (step !== 'customer') return undefined;
+    let cancelled = false;
+    api.listCustomers({ q, limit: 8 })
+      .then((r) => { if (!cancelled) { setFound(r.items || []); setError(''); } })
+      .catch((e) => !cancelled && setError(e.message));
+    return () => { cancelled = true; };
+  }, [q, step]);
+
+  const choose = async (id) => {
+    setLoadingId(id);
+    setError('');
+    try {
+      setPicked(await api.getCustomer(id));
+      setStep('assign');
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoadingId('');
+    }
+  };
+
+  if (step === 'add') {
+    return <CustomerFormModal onClose={() => setStep('customer')} onSaved={(c) => choose(c._id)} />;
+  }
+  if (step === 'assign' && picked) {
+    return (
+      <AssignValuationModal
+        customer={picked.customer}
+        properties={groupByProperty(picked.valuations || [])}
+        onBack={() => setStep('customer')}
+        onClose={onClose}
+        onAssigned={onAssigned}
+      />
+    );
+  }
+
+  return (
+    <Modal title="New valuation" onClose={onClose}>
+      <div className="stack">
+        <div className="nv-steps" aria-hidden="true">
+          <span className="on">1 · Customer</span><span>2 · Property & evaluator</span>
+        </div>
+        {error && <div className="alert">{error}</div>}
+        <SearchBox value={q} onSearch={setQ} autoFocus delay={200} label="Search customers" placeholder="Search name, phone, district…" />
+        <ul className="nv-list">
+          {!found && [0, 1, 2].map((i) => <li key={i}><div className="skeleton" style={{ height: 52 }} /></li>)}
+          {found && found.length === 0 && <li className="muted nv-empty">{q ? `No customer matches “${q}”.` : 'No customers yet.'}</li>}
+          {(found || []).map((c) => (
+            <li key={c._id}>
+              <button type="button" className="nv-pick" onClick={() => choose(c._id)} disabled={Boolean(loadingId)}>
+                <span className="avatar soft sm">{initials(c.name)}</span>
+                <span className="nv-main">
+                  <strong>{c.name}</strong>
+                  <small>{[c.phone1, c.district, c.stats?.total ? `${c.stats.total} valuation${c.stats.total === 1 ? '' : 's'}` : 'New enquiry'].filter(Boolean).join(' · ')}</small>
+                </span>
+                {loadingId === c._id ? <span className="muted small">Opening…</span> : <IconChevron size={16} />}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <button type="button" className="btn nv-add" onClick={() => setStep('add')}><IconPlus size={16} /> New customer</button>
       </div>
     </Modal>
   );

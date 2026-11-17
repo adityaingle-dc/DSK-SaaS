@@ -67,7 +67,7 @@ export default function TeamMember() {
         <span className="avatar xl">{initials(u.name)}</span>
         <div className="profile-main">
           <h1>{u.name} <UserStatus status={u.status} /></h1>
-          <p className="muted">{ROLE_LABELS[u.role]}{u.branch && ` · ${u.branch}`}{u.employeeId && ` · ${u.employeeId}`}</p>
+          <p className="muted">{u.code && <span className="id-code">{u.code}</span>}{ROLE_LABELS[u.role]}{u.branch && ` · ${u.branch}`}{u.employeeId && ` · Old ID ${u.employeeId}`}</p>
           <p className="profile-contact">
             <a href={`mailto:${u.email}`}>{u.email}</a>
             {u.phone && <a href={`tel:${u.phone}`}>{u.phone}</a>}
@@ -80,7 +80,7 @@ export default function TeamMember() {
         <div className="actions profile-actions">
           {u.status === 'pending' && <button className="btn primary" disabled={busy} onClick={() => setStatus('active')}>Approve</button>}
           {u.status === 'disabled' && <button className="btn primary" disabled={busy} onClick={() => setStatus('active')}>Re-enable</button>}
-          <button className="btn" onClick={() => { setForm({ name: u.name, phone: u.phone || '', branch: u.branch || '', employeeId: u.employeeId || '', role: u.role }); setModal('edit'); }}>Edit</button>
+          <button className="btn" onClick={() => { setForm({ name: u.name, phone: u.phone || '', branch: u.branch || '', role: u.role }); setModal('edit'); }}>Edit</button>
           <button className="btn" onClick={() => { setTemp(null); setModal('reset'); }}>Reset password</button>
           {u.status === 'active' && !isSelf && <button className="btn danger" onClick={() => setModal('disable')}>Disable</button>}
         </div>
@@ -139,10 +139,7 @@ export default function TeamMember() {
                 </select>
               </label>
             </div>
-            <div className="row">
-              <label>Branch<input value={form.branch} onChange={(e) => setForm({ ...form, branch: e.target.value })} /></label>
-              <label>Employee ID<input value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} /></label>
-            </div>
+            <label>Branch<input value={form.branch} onChange={(e) => setForm({ ...form, branch: e.target.value })} /></label>
             <button className="btn primary block" disabled={busy}>Save changes</button>
           </form>
         </Modal>

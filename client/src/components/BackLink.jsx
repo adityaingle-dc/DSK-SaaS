@@ -4,10 +4,11 @@ import { IconChevronLeft } from './Icons.jsx';
 // "Back" that returns to wherever the user actually came from (browser history).
 // If the page was opened directly (bookmark, shared link, refresh as first page), there is no
 // in-app history, so it falls back to the parent page given in `to`.
-export default function BackLink({ to, label, className = 'page-back' }) {
+// exact: always go to `to` with its label (e.g. back to a specific wizard step), not browser history
+export default function BackLink({ to, label, className = 'page-back', exact = false }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const hasHistory = location.key !== 'default';
+  const hasHistory = !exact && location.key !== 'default';
   return (
     <Link
       to={to}

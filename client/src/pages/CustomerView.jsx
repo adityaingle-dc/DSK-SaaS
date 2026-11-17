@@ -77,7 +77,7 @@ export default function CustomerView() {
         back={{ to: '/customers', label: 'Customers' }}
         title={c.name}
         meta={<CustomerStage stats={stats} />}
-        subtitle={[c.phone1, c.district, c.source].filter(Boolean).join(' · ')}
+        subtitle={[c.code, c.phone1, c.district, c.source].filter(Boolean).join(' · ')}
         actions={
           <div className="actions">
             {valuations.length === 0 && <button className="btn danger" onClick={remove}>Delete</button>}

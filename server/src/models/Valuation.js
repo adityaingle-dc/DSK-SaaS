@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { nextId } from '../services/ids.js';
 import { computeValuation, personName, phones } from '@dsk/shared';
 
 export const STATUSES = ['draft', 'submitted', 'approved', 'rejected'];
@@ -71,12 +72,9 @@ valuationSchema.methods.recompute = function recompute() {
   this.markModified('results');
 };
 
-valuationSchema.pre('save', function assignReference(next) {
-  if (!this.referenceNo) {
-    const d = new Date();
-    const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-    this.referenceNo = `DSK-${ymd}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
-  }
+// input sheet number, e.g. DSK-INP-0001 (existing sheets keep their earlier numbers)
+valuationSchema.pre('save', async function assignReference(next) {
+  if (!this.referenceNo) this.referenceNo = await nextId('inp');
   next();
 });
 

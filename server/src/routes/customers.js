@@ -85,7 +85,7 @@ router.get(
     const filter = { ...dateRange(req.query) };
     const rx = searchRx(q);
     if (rx) {
-      filter.$or = [{ name: rx }, { email: rx }, { district: rx }, { bankName: rx }, { branch: rx }, { locality: rx }, { street: rx }, { pincode: rx }];
+      filter.$or = [{ code: rx }, { name: rx }, { email: rx }, { district: rx }, { bankName: rx }, { branch: rx }, { locality: rx }, { street: rx }, { pincode: rx }];
       const digits = searchDigits(q);
       if (digits) filter.$or.push({ phone1: new RegExp(digits) }, { phone2: new RegExp(digits) });
     }

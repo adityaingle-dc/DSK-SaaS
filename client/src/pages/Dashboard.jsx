@@ -99,9 +99,17 @@ function OverviewDashboard() {
         icon={DuoHome}
         eyebrow={today}
         title={`${greeting()}, ${user.name.split(' ')[0]}`}
-        corner={<div className="head-account"><UserMenu user={user} logout={logout} placement="down" compact /></div>}
+        // phones: search is an icon up here; the superadmin's account menu (and Log out) lives in the "More" tab
+        corner={(
+          <div className="head-account">
+            {/* phones: compact period chip (icon only on "All time", label when a period is set) */}
+            <PeriodPicker className="period-compact" value={period} onChange={setPeriod} />
+            <SearchTrigger iconOnly className="head-search-icon" />
+            {!isSuperadmin && <UserMenu user={user} logout={logout} placement="down" compact />}
+          </div>
+        )}
         actions={
-          <div className="head-tools">
+          <div className="head-tools desktop-only">
             <PeriodPicker value={period} onChange={setPeriod} />
             <SearchTrigger className="head-search" />
           </div>
@@ -156,7 +164,7 @@ function OverviewDashboard() {
       <div className="grid-2 wide-left">
         <section className="card flush">
           <div className="card-head">
-            <h2>Recent valuations</h2>
+            <h2>Recent input sheets</h2>
             <Link to={withPeriod('/valuations')} className="link-sm">View all <IconChevron size={14} /></Link>
           </div>
           {recent.length === 0 ? (
@@ -256,8 +264,8 @@ function EmptyState() {
   return (
     <div className="empty">
       <div className="empty-icon"><IconDraft size={24} /></div>
-      <strong>No valuations yet</strong>
-      <p className="muted">{isSuperadmin ? <>Start a valuation from <strong>Customers</strong>, or use <strong>New valuation</strong>.</> : 'Valuations assigned to you by the superadmin appear here.'}</p>
+      <strong>No input sheets yet</strong>
+      <p className="muted">{isSuperadmin ? <>Start a valuation from <strong>Customers</strong>: open a customer and use <strong>Start valuation</strong> to assign it to an evaluator.</> : 'Input sheets assigned to you by the superadmin appear here.'}</p>
     </div>
   );
 }

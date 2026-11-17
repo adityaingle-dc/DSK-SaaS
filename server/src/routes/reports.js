@@ -9,6 +9,7 @@ import { dateRange, options, paging, searchDigits, searchRx, sorting } from '../
 import { protect, requireSuperadmin } from '../middleware/auth.js';
 import { asyncHandler, HttpError } from '../utils/asyncHandler.js';
 import { logActivity } from '../services/activity.js';
+import { nextId } from '../services/ids.js';
 
 // Reports module: select customer → select an approved input sheet → select report type → generate & store.
 const router = Router();
@@ -19,19 +20,14 @@ const LIST_FIELDS = 'reportNo type version customer valuation applicantName repo
 
 async function load(id) {
   if (!mongoose.isValidObjectId(id)) throw new HttpError(400, 'Invalid id');
-  const r = await Report.findById(id).populate('customer', 'name phone1').populate('generatedBy', 'name').populate('editedBy', 'name');
+  const r = await Report.findById(id).populate('customer', 'code name phone1').populate('generatedBy', 'name').populate('editedBy', 'name');
   if (!r) throw new HttpError(404, 'Report not found');
   return r;
 }
 
 // next number for this year: RPT/2026/0001
-async function nextReportNo() {
-  const year = new Date().getFullYear();
-  const prefix = `RPT/${year}/`;
-  const last = await Report.findOne({ reportNo: new RegExp(`^${escapeRx(prefix)}`) }).sort({ reportNo: -1 }).select('reportNo').lean();
-  const n = last ? Number(last.reportNo.slice(prefix.length)) + 1 : 1;
-  return `${prefix}${String(n).padStart(4, '0')}`;
-}
+// report number, e.g. DSK-RPT-0001 (atomic counter)
+const nextReportNo = () => nextId('rpt');
 
 router.get('/types', (_req, res) => res.json({ types: REPORT_TYPES }));
 
@@ -56,7 +52,7 @@ router.get(
     const { page, limit, skip } = paging(req.query);
     const [items, total, templates, authorIds] = await Promise.all([
       Report.find(filter).collation({ locale: 'en' }).sort(sortSpec).skip(skip).limit(limit).select(LIST_FIELDS)
-        .populate('customer', 'name phone1').populate('generatedBy', 'name').lean(),
+        .populate('customer', 'code name phone1').populate('generatedBy', 'name').lean(),
       Report.countDocuments(filter),
       Report.distinct('reportTemplate'),
       Report.distinct('generatedBy'),

@@ -1,17 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { REPORT_TEMPLATES } from '@dsk/shared';
+import { REPORT_TEMPLATES, computeValuation, sanitize, validate } from '@dsk/shared';
 import { api } from '../api/client.js';
 import StatusBadge, { inr } from '../components/StatusBadge.jsx';
 import { initials } from '../components/Layout.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import { DuoContact, DuoSheet } from '../components/DuoIcons.jsx';
+import { DuoSheet } from '../components/DuoIcons.jsx';
 import { IconChevron, IconSearch, IconTick } from '../components/Icons.jsx';
 import SectionIcon from '../components/SectionIcons.jsx';
+import SheetSections from '../components/SheetView.jsx';
+import ReportViewer from '../report/ReportViewer.jsx';
+import SheetEditor, { hydrate } from '../components/SheetEditor.jsx';
 import { propertyLabels, groupByProperty } from '../utils/properties.js';
 
 // Reports → Generate: ① customer → ② approved input sheet → ③ report type → generate & store
-const STEPS = ['Customer', 'Input sheet', 'Report type'];
+const STEPS = ['Customer', 'Input sheet', 'Report type', 'Review & generate'];
 
 export default function GenerateReport() {
   const navigate = useNavigate();
@@ -25,6 +28,27 @@ export default function GenerateReport() {
   const [found, setFound] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // step 3: the complete input sheet (data + results) for the side-by-side preview
+  const [full, setFull] = useState(null);
+  const [previewError, setPreviewError] = useState('');
+  const [reportDirty, setReportDirty] = useState(false); // unsaved wording edits in step 4
+  // step 4: edit the input sheet in place (the report preview follows the edits live)
+  const [editingSheet, setEditingSheet] = useState(false);
+  const [draft, setDraft] = useState(null);
+  const [sheetDirty, setSheetDirty] = useState(false);
+  const [sheetErrors, setSheetErrors] = useState([]);
+  const [showSheetErrors, setShowSheetErrors] = useState(false);
+  const [savingSheet, setSavingSheet] = useState(false);
+  const [sheetNotice, setSheetNotice] = useState('');
+  const liveDraft = useDeferredValue(draft); // keeps typing smooth while the report redraws
+  // step 4 is a full-screen layer: stop the page behind it from scrolling
+  useEffect(() => {
+    if (step !== 3) return undefined;
+    document.body.classList.add('gen-full-open');
+    return () => document.body.classList.remove('gen-full-open');
+  }, [step]);
+  // leaving step 4 ends sheet editing (the Discard/Save buttons only exist there)
+  useEffect(() => { if (step !== 3) { setEditingSheet(false); setDraft(null); setSheetDirty(false); setSheetNotice(''); } }, [step]);
 
   useEffect(() => {
     api.reportTypes().then((r) => { setTypes(r.types); if (r.types.length === 1) setType(r.types[0].key); }).catch(() => {});
@@ -41,7 +65,11 @@ export default function GenerateReport() {
           if (v.customer?._id) {
             const c = await api.getCustomer(v.customer._id);
             setCustomer(c);
-            if (v.status === 'approved') { setSheetId(vid); setStep(2); } else setStep(1);
+            if (v.status === 'approved') {
+              setSheetId(vid);
+              if (params.get('type')) setType(params.get('type'));
+              setStep(params.get('step') === '4' ? 3 : 2);
+            } else setStep(1);
           }
         } else if (cid) {
           setCustomer(await api.getCustomer(cid));
@@ -84,11 +112,80 @@ export default function GenerateReport() {
     }
   };
 
+  useEffect(() => {
+    if (step !== 3 || !sheetId) return undefined;
+    let cancelled = false;
+    setPreviewError('');
+    if (full?._id !== sheetId) setFull(null);
+    api.getValuation(sheetId)
+      .then((v) => { if (!cancelled) setFull(v); })
+      .catch((e) => { if (!cancelled) setPreviewError(e.message); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, sheetId]);
+
   const sheets = customer?.valuations || [];
   const labels = propertyLabels(groupByProperty(sheets));
   const reportsPerSheet = (customer?.reports || []).reduce((m, r) => ({ ...m, [r.valuation]: (m[r.valuation] || 0) + 1 }), {});
   const sheet = sheets.find((v) => v._id === sheetId);
   const approvedCount = sheets.filter((v) => v.status === 'approved').length;
+
+  // report preview: the saved sheet, or the sheet being edited (recalculated as you type)
+  const previewDoc = useMemo(() => {
+    if (!full) return null;
+    if (!editingSheet || !liveDraft) return full;
+    const data = sanitize(liveDraft);
+    return { ...full, data, results: computeValuation(data) };
+  }, [full, editingSheet, liveDraft]);
+
+  const sheetErrorMap = useMemo(() => {
+    if (!editingSheet || !draft) return {};
+    const list = [...(showSheetErrors ? validate(sanitize(draft), { mode: 'submit' }) : []), ...sheetErrors];
+    return list.reduce((m, e) => (m[e.field] ? m : { ...m, [e.field]: e.message }), {});
+  }, [editingSheet, draft, showSheetErrors, sheetErrors]);
+
+  const startEditSheet = () => {
+    setDraft(hydrate(full.data));
+    setSheetDirty(false);
+    setSheetErrors([]);
+    setShowSheetErrors(false);
+    setSheetNotice('');
+    setEditingSheet(true);
+  };
+  const setSheetField = (path, key, value) => {
+    setDraft((d) => ({ ...d, [path]: { ...(d[path] || {}), [key]: value } }));
+    setSheetErrors((errs) => errs.filter((e) => !e.field.startsWith(`${path}.${key}`)));
+    setSheetDirty(true);
+  };
+  const discardSheet = () => {
+    if (sheetDirty && !confirm('Discard your changes to the input sheet?')) return;
+    setEditingSheet(false);
+    setDraft(null);
+    setSheetDirty(false);
+  };
+  const saveSheet = async () => {
+    const data = sanitize(draft);
+    const errs = validate(data, { mode: 'submit' }); // the sheet is approved, so it must stay complete
+    if (errs.length) {
+      setShowSheetErrors(true);
+      setSheetNotice('');
+      return;
+    }
+    setSavingSheet(true);
+    try {
+      const saved = await api.updateValuation(full._id, { data });
+      setFull((f) => ({ ...f, ...saved, reportOverrides: f.reportOverrides }));
+      setEditingSheet(false);
+      setDraft(null);
+      setSheetDirty(false);
+      setSheetNotice('Input sheet saved. The report below uses the new values.');
+    } catch (e) {
+      if (e.errors?.length) setSheetErrors(e.errors);
+      setSheetNotice(e.message);
+    } finally {
+      setSavingSheet(false);
+    }
+  };
 
   return (
     <div className="page">
@@ -186,16 +283,75 @@ export default function GenerateReport() {
               </label>
             ))}
           </div>
-          <div className="generate-summary">
-            <span className="gs-who"><DuoContact size={18} /> {customer.customer.name}</span>
-            <span>{sheet.referenceNo} · {labels[sheet._id]}</span>
-            {reportsPerSheet[sheet._id] > 0 && <span className="muted">This will be version {reportsPerSheet[sheet._id] + 1}; earlier versions are kept.</span>}
-          </div>
           <div className="actions">
             <button type="button" className="btn" onClick={() => setStep(1)}>‹ Back</button>
-            <button type="button" className="btn primary" disabled={!type || busy} onClick={generate}>{busy ? 'Generating…' : 'Generate & store report'}</button>
+            <button type="button" className="btn primary" disabled={!type} onClick={() => setStep(3)}>Next ›</button>
           </div>
         </section>
+      )}
+
+      {step === 3 && sheet && (
+        <div className="gen-full" role="dialog" aria-modal="true" aria-label="Review and generate the report">
+          <header className="gen-full-bar">
+            <button type="button" className="btn" onClick={() => setStep(2)}>‹ Back</button>
+            <div className="gen-full-title">
+              <strong>Review & generate</strong>
+              <small className="muted">{types.find((t) => t.key === type)?.title} · {sheet.referenceNo} · {customer.customer.name}</small>
+            </div>
+            <span className="gen-note">
+              {editingSheet && sheetDirty ? <span className="gen-warn">Save or discard your sheet changes first</span>
+                : reportDirty ? <span className="gen-warn">Save or reset your report edits first</span>
+                : reportsPerSheet[sheet._id] > 0 ? <span className="muted">Creates version {reportsPerSheet[sheet._id] + 1} · earlier versions are kept</span>
+                : null}
+            </span>
+            <button type="button" className="btn primary" disabled={!type || busy || reportDirty || (editingSheet && sheetDirty) || !full} onClick={generate}>{busy ? 'Generating…' : 'Generate'}</button>
+          </header>
+          <div className="gen-full-body">
+          <div className="gen-preview">
+            <section className="gen-pane gen-sheet" aria-label="Input sheet">
+              <div className="gen-pane-head">
+                <span className="gen-pane-title"><strong>Input sheet</strong><span className="muted small">{sheet.referenceNo}</span></span>
+                {full && (editingSheet ? (
+                  <span className="gen-pane-actions">
+                    <button type="button" className="btn small ghost" onClick={discardSheet} disabled={savingSheet}>Discard</button>
+                    <button type="button" className="btn small primary" onClick={saveSheet} disabled={savingSheet || !sheetDirty}>{savingSheet ? 'Saving…' : 'Save'}</button>
+                  </span>
+                ) : (
+                  <button type="button" className="btn small" onClick={startEditSheet}>Edit</button>
+                ))}
+              </div>
+              <div className="gen-pane-body">
+                {sheetNotice && <div className={`alert ${sheetErrors.length ? '' : 'success'} gen-sheet-notice`}>{sheetNotice}</div>}
+                {editingSheet && showSheetErrors && Object.keys(sheetErrorMap).length > 0 && (
+                  <div className="alert gen-sheet-notice">Please complete {Object.keys(sheetErrorMap).length} required / invalid field{Object.keys(sheetErrorMap).length === 1 ? '' : 's'} before saving.</div>
+                )}
+                {!full ? (previewError ? <div className="alert">{previewError}</div> : <div className="skeleton" style={{ height: 320 }} />)
+                  : editingSheet && draft ? <SheetEditor data={draft} onChange={setSheetField} errors={sheetErrorMap} />
+                  : <SheetSections data={full.data} variant="accordion" openFirst />}
+              </div>
+            </section>
+            <section className="gen-pane gen-report" aria-label="Report">
+              <div className="gen-pane-body">
+                {previewDoc ? (
+                  <ReportViewer
+                    key={full._id}
+                    doc={previewDoc}
+                    overrides={full.reportOverrides || {}}
+                    embedded
+                    heading={<span className="re-heading"><strong>Report</strong>{editingSheet && <span className="re-live">Live preview</span>}</span>}
+                    onDirtyChange={setReportDirty}
+                    onSave={async (draft) => {
+                      const res = await api.saveReportOverrides(full._id, draft);
+                      setFull((f) => ({ ...f, reportOverrides: res.reportOverrides }));
+                      return { overrides: res.reportOverrides };
+                    }}
+                  />
+                ) : previewError ? null : <div className="skeleton" style={{ height: 480 }} />}
+              </div>
+            </section>
+          </div>
+          </div>
+        </div>
       )}
     </div>
   );

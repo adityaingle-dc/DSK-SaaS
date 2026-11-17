@@ -40,7 +40,7 @@ router.get(
     if (status && USER_STATUSES.includes(status)) filter.status = status;
     if (q) {
       const rx = new RegExp(String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      filter.$or = [{ name: rx }, { email: rx }, { branch: rx }, { employeeId: rx }, { phone: rx }];
+      filter.$or = [{ name: rx }, { email: rx }, { branch: rx }, { code: rx }, { employeeId: rx }, { phone: rx }];
     }
     const users = await User.find(filter).sort({ status: 1, name: 1 }).populate('createdBy', 'name').lean();
     const stats = await evaluatorStats({ evaluatorIds: users.map((u) => u._id) });

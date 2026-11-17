@@ -15,7 +15,7 @@ export const REPORT_TYPE_KEYS = REPORT_TYPES.map((t) => t.key);
 // so it always prints exactly as issued even if the sheet is edited later (generate a new version then).
 const reportSchema = new mongoose.Schema(
   {
-    reportNo: { type: String, unique: true, index: true }, // RPT/2026/0001
+    reportNo: { type: String, unique: true, index: true }, // DSK-RPT-0001
     type: { type: String, enum: REPORT_TYPE_KEYS, required: true },
     version: { type: Number, default: 1 }, // 1, 2, 3… per input sheet + type
     customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', index: true },
