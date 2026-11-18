@@ -1927,3 +1927,7 @@ body.gen-full-open { overflow: hidden; }
   .cd-actions { flex-direction: column-reverse; width: 100%; }
   .cd-actions .btn { width: 100%; }
 }
+
+.cd-text { min-width: 0; }
+.cd .cd-input { width: 100%; margin-top: 12px; min-height: 84px; resize: vertical; }
+@media (max-width: 520px) { .cd-text { width: 100%; text-align: left; } }

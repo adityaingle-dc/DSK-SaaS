@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { REPORT_TEMPLATES } from '@dsk/shared';
 import { api } from '../api/client.js';
-import { inr } from '../components/StatusBadge.jsx';
+import StatusBadge, { inr } from '../components/StatusBadge.jsx';
 import { initials } from '../components/Layout.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import TableSkeleton from '../components/TableSkeleton.jsx';
@@ -15,14 +15,28 @@ import Pager, { ResultCount } from '../components/Pager.jsx';
 import useListParams from '../utils/useListParams.js';
 import Fab from '../components/Fab.jsx';
 import { dateTime, timeAgo } from '../utils/format.js';
+import Segmented from '../components/Segmented.jsx';
+import ReportBoard from '../components/ReportBoard.jsx';
+import ViewSwitch, { rememberView, storedView } from '../components/ViewSwitch.jsx';
 
-const DEFAULTS = { q: '', template: '', type: '', generatedBy: '', period: 'all', start: '', end: '', sort: 'created', dir: 'desc', limit: '20', page: '1' };
+const VIEW_KEY = 'dsk.reports.view';
+const STATUS_TABS = [['', 'All'], ['draft', 'Draft'], ['review', 'In review'], ['approved', 'Approved']];
+// a draft is an input sheet with saved report edits, not generated yet: it opens in the Generate flow (step 4)
+export const reportHref = (r) => (r.kind === 'draft' ? `/reports/new?valuation=${r.valuation}&type=bank&step=4` : `/reports/${r._id}`);
+// Draft (edited, not generated) · In review (with the bank) · Approved (by the bank); nothing recorded = in review
+export function ReportStatus({ r }) {
+  return <StatusBadge status={r.kind === 'draft' ? 'draft' : r.status === 'approved' ? 'approved' : 'submitted'} />;
+}
+
+const DEFAULTS = { q: '', status: '', template: '', type: '', generatedBy: '', period: 'all', start: '', end: '', sort: 'created', dir: 'desc', limit: '20', page: '1', view: '' };
 const SORT_OPTIONS = [['created:desc', 'Newest first'], ['created:asc', 'Oldest first'], ['value:desc', 'Highest value'], ['value:asc', 'Lowest value'], ['customer:asc', 'Customer (A–Z)'], ['reportNo:desc', 'Report no.']];
 
 // Every generated (stored) report, newest first
 export default function Reports() {
   const navigate = useNavigate();
   const { params, query, update, filtered, clear, apiQuery } = useListParams(DEFAULTS);
+  const view = query.view === 'board' || query.view === 'list' ? query.view : storedView(VIEW_KEY) === 'board' ? 'board' : 'list';
+  const setView = (v) => { rememberView(VIEW_KEY, v); update({ view: v, page: '1' }, { replace: true }); };
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   // customers matching the search, so a customer without a stored report can still be found
@@ -51,6 +65,7 @@ export default function Reports() {
         title="Reports"
         actions={(
           <div className="lp-head">
+            <ViewSwitch view={view} onChange={setView} />
             <Link className="btn primary desktop-only" to="/reports/new"><IconPlus size={16} /> Generate report</Link>
           </div>
         )}
@@ -61,6 +76,9 @@ export default function Reports() {
       <div className={`card flush list-card lp-card${loading && data ? ' is-loading' : ''}`}>
         <div className="card-toolbar">
           <div className="toolbar lp-toolbar">
+            {view === 'list' && (
+              <Segmented label="Status" className="lp-status" options={STATUS_TABS.map(([value, label]) => ({ value, label }))} value={query.status} onChange={(status) => update({ status }, { replace: true })} />
+            )}
             <SearchBox className="lp-search" value={query.q} onSearch={(q) => update({ q }, { replace: true })} label="Search reports" placeholder="Search report no., customer, phone, sheet reference, property…" />
             <MoreFilters active={[query.period !== 'all', query.type, query.template, query.generatedBy].filter(Boolean).length}>
               <PeriodPicker value={query} onChange={(p) => update({ period: p.period, start: p.start, end: p.end })} />
@@ -83,13 +101,15 @@ export default function Reports() {
                 </select>
               )}
             </MoreFilters>
-            <select className="select-pill" aria-label="Sort by" value={`${query.sort}:${query.dir}`} onChange={(e) => { const [sort, dir] = e.target.value.split(':'); update({ sort, dir }); }}>
+            {view === 'list' && <select className="select-pill" aria-label="Sort by" value={`${query.sort}:${query.dir}`} onChange={(e) => { const [sort, dir] = e.target.value.split(':'); update({ sort, dir }); }}>
               {SORT_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+            </select>}
           </div>
         </div>
 
-        {data && items.length === 0 ? (
+        {view === 'board' ? (
+          <div className="kb-wrap"><ReportBoard query={apiQuery(['status'])} /></div>
+        ) : data && items.length === 0 ? (
           <div className="empty">
             <div className="empty-icon"><DuoSheet size={24} /></div>
             {filtered ? (
@@ -113,16 +133,19 @@ export default function Reports() {
                 <thead>
                   <tr>
                     <th>Report</th><th>Customer</th><th className="col-opt2">Input sheet</th><th>Type</th>
-                    <th className="num">Fair market value</th><th className="col-opt">Generated</th><th className="col-go"><span className="sr-only">Open</span></th>
+                    <th className="num">Fair market value</th><th>Status</th><th className="col-opt">Generated</th><th className="col-go"><span className="sr-only">Open</span></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {!data && <TableSkeleton cols={7} />}
+                  {!data && <TableSkeleton cols={8} />}
                   {items.map((r) => (
-                    <tr key={r._id} className="clickable" onClick={() => navigate(`/reports/${r._id}`)}>
+                    <tr key={r._id} className={`clickable${r.kind === 'draft' ? ' is-draft' : ''}`} onClick={() => navigate(reportHref(r))}>
                       <td>
-                        <Link to={`/reports/${r._id}`} onClick={(e) => e.stopPropagation()}><strong>{r.reportNo}</strong></Link>
-                        <small className="muted block">Version {r.version}</small>
+                        {r.kind === 'draft' ? (
+                          <><Link to={reportHref(r)} onClick={(e) => e.stopPropagation()}><strong>Not generated</strong></Link><small className="muted block">Will be version {r.version}</small></>
+                        ) : (
+                          <><Link to={reportHref(r)} onClick={(e) => e.stopPropagation()}><strong>{r.reportNo}</strong></Link><small className="muted block">Version {r.version}</small></>
+                        )}
                       </td>
                       <td>
                         <div className="cell-person">
@@ -131,9 +154,12 @@ export default function Reports() {
                         </div>
                       </td>
                       <td className="col-opt2">{r.snapshot?.referenceNo}<small className="muted block property-cell">{r.propertyAddress}</small></td>
-                      <td><span className="badge" title={r.templateTitle}>{r.reportTemplate}</span><small className="muted block">{(data.types || []).find((t) => t.key === r.type)?.title}</small></td>
+                      <td><span className="badge" title={r.templateTitle}>{r.reportTemplate}</span>{(data.types || []).length > 1 && <small className="muted block">{(data.types || []).find((t) => t.key === r.type)?.title}</small>}</td>
                       <td className="num"><strong>{r.fairMarketValue > 0 ? inr(r.fairMarketValue) : '—'}</strong></td>
-                      <td className="muted nowrap col-opt" title={dateTime(r.createdAt)}>{timeAgo(r.createdAt)}<small className="block">{r.generatedBy?.name}</small></td>
+                      <td><ReportStatus r={r} /></td>
+                      {r.kind === 'draft'
+                        ? <td className="muted nowrap col-opt" title={dateTime(r.editedAt)}>Edited {timeAgo(r.editedAt)}<small className="block">{r.editedBy?.name}</small></td>
+                        : <td className="muted nowrap col-opt" title={dateTime(r.createdAt)}>{timeAgo(r.createdAt)}<small className="block">{r.generatedBy?.name}</small></td>}
                       <td className="col-go" aria-hidden="true"><IconChevron size={16} /></td>
                     </tr>
                   ))}
@@ -143,13 +169,13 @@ export default function Reports() {
             <ul className="list mobile-only">
               {items.map((r) => (
                 <li key={r._id}>
-                  <Link to={`/reports/${r._id}`} className="list-item">
+                  <Link to={reportHref(r)} className="list-item">
                     <span className="avatar soft">{initials(r.customer?.name || r.applicantName)}</span>
                     <span className="list-main">
                       <strong>{r.customer?.name || r.applicantName}</strong>
-                      <small>{r.reportNo} · v{r.version} · {timeAgo(r.createdAt)}</small>
+                      <small>{r.kind === 'draft' ? `Not generated · ${r.snapshot?.referenceNo} · edited ${timeAgo(r.editedAt)}` : `${r.reportNo} · v${r.version} · ${timeAgo(r.createdAt)}`}</small>
                     </span>
-                    <span className="list-end"><strong className="amount">{r.fairMarketValue > 0 ? inr(r.fairMarketValue) : '—'}</strong><span className="badge">{r.reportTemplate}</span></span>
+                    <span className="list-end"><strong className="amount">{r.fairMarketValue > 0 ? inr(r.fairMarketValue) : '—'}</strong><ReportStatus r={r} /></span>
                   </Link>
                 </li>
               ))}

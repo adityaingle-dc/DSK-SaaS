@@ -19,13 +19,15 @@ import { NewValuationFlow } from '../components/CustomerDialogs.jsx';
 import Fab from '../components/Fab.jsx';
 import { IconPlus } from '../components/Icons.jsx';
 import { dateTime, timeAgo } from '../utils/format.js';
+import SheetBoard from '../components/SheetBoard.jsx';
+import ViewSwitch, { rememberView, storedView } from '../components/ViewSwitch.jsx';
 
 const STATUS_TABS = [
   ['', 'All'],
   ['draft', 'Drafts'],
   ['submitted', 'In review'],
-  ['approved', 'Approved'],
   ['rejected', 'Rejected'],
+  ['approved', 'Approved'],
 ];
 // sort options (column headers on desktop, a select on phones); first click on a column uses its natural direction
 const SORTS = {
@@ -33,7 +35,8 @@ const SORTS = {
   applicant: { label: 'Applicant (A–Z)', first: 'asc' },
   value: { label: 'Highest value', first: 'desc' },
 };
-const DEFAULTS = { q: '', status: '', template: '', evaluator: '', bank: '', sort: 'updated', dir: 'desc', limit: '20', page: '1', period: 'all', start: '', end: '' };
+const DEFAULTS = { q: '', status: '', template: '', evaluator: '', bank: '', sort: 'updated', dir: 'desc', limit: '20', page: '1', period: 'all', start: '', end: '', view: '' };
+const VIEW_KEY = 'dsk.sheets.view';
 
 const fmv = (v) => (v.summary?.fairMarketValue > 0 ? inr(v.summary.fairMarketValue) : '—');
 
@@ -60,8 +63,14 @@ export default function ValuationList() {
   const [creating, setCreating] = useState(false);
   const [notice, setNotice] = useState(null);
   const [reload, setReload] = useState(0);
+  const view = query.view === 'board' || query.view === 'list' ? query.view : storedView(VIEW_KEY) === 'board' ? 'board' : 'list';
+  const setView = (v) => {
+    rememberView(VIEW_KEY, v);
+    update({ view: v, page: '1' }, { replace: true });
+  };
 
   useEffect(() => {
+    // the board loads its own cards; this request still supplies the filter options (banks, evaluators)
     setLoading(true);
     api.listValuations(apiQuery())
       .then((d) => { setData(d); setError(''); })
@@ -85,6 +94,7 @@ export default function ValuationList() {
         title="Input Sheets"
         actions={(
           <div className="lp-head">
+            <ViewSwitch view={view} onChange={setView} />
             <SearchBox value={query.q} onSearch={(q) => update({ q }, { replace: true })} label="Search input sheets" placeholder="Search applicant, phone, reference, bank, village…" />
             {isSuperadmin && <button className="btn primary desktop-only" onClick={() => setCreating(true)}><IconPlus size={16} /> New input sheet</button>}
           </div>
@@ -116,16 +126,17 @@ export default function ValuationList() {
 
       {error && <div className="alert">{error}</div>}
 
-      <div className={`card flush list-card lp-card${loading && data ? ' is-loading' : ''}`}>
+      <div className={`card flush list-card lp-card${loading && data ? ' is-loading' : ''}${view === 'board' ? ' kb-card-wrap' : ''}`}>
         <div className="card-toolbar">
           <div className="toolbar lp-toolbar">
-            <Segmented
+            {view === 'board' && <span className="kb-toolbar-note">Drag a card to approve, return or submit it.</span>}
+            {view === 'list' && <Segmented
               label="Status"
               className="lp-status"
               options={STATUS_TABS.map(([value, label]) => ({ value, label }))}
               value={query.status}
               onChange={(status) => update({ status }, { replace: true })}
-            />
+            />}
             <MoreFilters active={[query.period !== 'all', query.template, query.bank, query.evaluator].filter(Boolean).length}>
               <PeriodPicker value={query} onChange={(p) => update({ period: p.period, start: p.start, end: p.end })} />
               <select className="select-pill" aria-label="Report type" value={query.template} onChange={(e) => update({ template: e.target.value })}>
@@ -145,18 +156,20 @@ export default function ValuationList() {
                 </select>
               )}
             </MoreFilters>
-            <select className="select-pill mobile-sort" aria-label="Sort by" value={`${query.sort}:${query.dir}`} onChange={(e) => { const [sort, dir] = e.target.value.split(':'); update({ sort, dir }); }}>
+            {view === 'list' && <select className="select-pill mobile-sort" aria-label="Sort by" value={`${query.sort}:${query.dir}`} onChange={(e) => { const [sort, dir] = e.target.value.split(':'); update({ sort, dir }); }}>
               <option value="updated:desc">Recently updated</option>
               <option value="updated:asc">Oldest first</option>
               <option value="applicant:asc">Applicant (A–Z)</option>
               <option value="applicant:desc">Applicant (Z–A)</option>
               <option value="value:desc">Highest value</option>
               <option value="value:asc">Lowest value</option>
-            </select>
+            </select>}
           </div>
         </div>
 
-        {data && data.items.length === 0 ? (
+        {view === 'board' ? (
+          <div className="kb-wrap"><SheetBoard query={apiQuery()} reloadKey={reload} /></div>
+        ) : data && data.items.length === 0 ? (
           <div className="empty">
             <div className="empty-icon"><IconSearch size={22} /></div>
             {filtered ? (

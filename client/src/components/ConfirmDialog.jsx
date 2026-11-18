@@ -18,9 +18,13 @@ function open(opts) {
 
 export const confirmDialog = (opts = {}) => open({ kind: 'confirm', ...opts });
 export const alertDialog = (opts = {}) => open({ kind: 'alert', ...opts }).then(() => undefined);
+// text answer (e.g. a note for the evaluator): resolves to the text, or null when cancelled
+export const promptDialog = (opts = {}) => open({ kind: 'prompt', ...opts });
 
 export function ConfirmHost() {
   const [req, setReq] = useState(null);
+  const [text, setText] = useState('');
+  const inputRef = useRef(null);
   const okRef = useRef(null);
   const cancelRef = useRef(null);
 
@@ -34,7 +38,8 @@ export function ConfirmHost() {
   }, []);
 
   const close = (value) => {
-    req?.resolve(value);
+    req?.resolve(req?.kind === 'prompt' ? (value ? text.trim() : null) : value);
+    setText('');
     setReq(queue.length ? queue.shift() : null);
   };
 
@@ -42,7 +47,8 @@ export function ConfirmHost() {
     if (!req) return undefined;
     const prevFocus = document.activeElement;
     // dangerous actions focus Cancel, so Enter doesn't delete by accident
-    (req.tone === 'danger' && req.kind === 'confirm' ? cancelRef : okRef).current?.focus();
+    if (req.kind === 'prompt') { setText(req.defaultValue || ''); setTimeout(() => inputRef.current?.focus(), 30); }
+    else (req.tone === 'danger' && req.kind === 'confirm' ? cancelRef : okRef).current?.focus();
     const onKey = (e) => {
       if (e.key === 'Escape') { e.stopPropagation(); close(false); }
     };
@@ -61,10 +67,21 @@ export function ConfirmHost() {
         <div className="cd-text">
           <h2 id="cd-title">{req.title || (isAlert ? 'Something went wrong' : 'Are you sure?')}</h2>
           {req.message && <p id="cd-msg">{req.message}</p>}
+          {req.kind === 'prompt' && (
+            <textarea
+              ref={inputRef}
+              className="cd-input"
+              rows={3}
+              value={text}
+              placeholder={req.placeholder || ''}
+              onChange={(e) => setText(e.target.value)}
+              aria-label={req.title}
+            />
+          )}
         </div>
         <div className="cd-actions">
           {!isAlert && <button ref={cancelRef} type="button" className="btn" onClick={() => close(false)}>{req.cancelLabel || 'Cancel'}</button>}
-          <button ref={okRef} type="button" className={`btn ${danger ? 'danger-solid' : 'primary'}`} onClick={() => close(true)}>
+          <button ref={okRef} type="button" className={`btn ${danger ? 'danger-solid' : 'primary'}`} disabled={req.kind === 'prompt' && req.required && !text.trim()} onClick={() => close(true)}>
             {req.confirmLabel || (isAlert ? 'OK' : 'Confirm')}
           </button>
         </div>

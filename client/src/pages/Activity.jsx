@@ -26,6 +26,7 @@ const GROUPS = [
   ['customer', 'Customers'],
   ['report', 'Reports'],
   ['report.generated', '— Generated'],
+  ['report.approved', '— Approved by bank'],
   ['file', 'Files'],
   ['user', 'Team changes'],
 ];
@@ -106,7 +107,7 @@ export default function Activity() {
               </label>
               <label>Action
                 <select value={filters.action} onChange={(e) => update({ action: e.target.value })}>
-                  {GROUPS.map(([v, l]) => <option key={l} value={v}>{l}</option>)}
+                  {GROUPS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
               </label>
             </>

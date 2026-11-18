@@ -18,7 +18,7 @@ export const ACTIONS = [
   'customer.updated',
   'customer.deleted',
   'customer.imported',
-  'report.generated',
+  'report.generated', 'report.approved', 'report.reopened',
   'report.edited',
   'report.deleted',
   'file.uploaded',

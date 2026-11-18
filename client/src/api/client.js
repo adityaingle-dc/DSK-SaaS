@@ -98,6 +98,8 @@ export const api = {
   // superadmin – reports module (generated, stored reports)
   reportTypes: () => request('/reports/types'),
   listReports: (query) => request('/reports', { query }),
+  reportBoard: (query) => request('/reports/board', { query }),
+  setReportStatus: (id, status) => request(`/reports/${id}/status`, { method: 'PATCH', body: { status } }),
   getReport: (id) => request(`/reports/${id}`),
   generateReport: (valuation, type) => request('/reports', { method: 'POST', body: { valuation, type } }),
   saveStoredReportOverrides: (id, overrides) => request(`/reports/${id}/overrides`, { method: 'PUT', body: { overrides } }),
@@ -116,6 +118,7 @@ export const api = {
   myTasks: () => request('/valuations/tasks'),
   stats: (query) => request('/valuations/stats', { query }),
   listValuations: (query) => request('/valuations', { query }),
+  valuationBoard: (query) => request('/valuations/board', { query }),
   lookupIfsc: (code) => request(`/valuations/ifsc/${encodeURIComponent(code)}`),
   getValuation: (id) => request(`/valuations/${id}`),
   createValuation: (payload) => request('/valuations', { method: 'POST', body: payload }),

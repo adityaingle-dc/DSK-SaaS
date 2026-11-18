@@ -24,6 +24,8 @@ const LOOK = {
   'valuation.assigned': ['blue', IconDraft, 'Assigned'],
   'report.generated': ['green', IconDraft, 'Report generated'],
   'report.edited': ['slate', IconDraft, 'Report edited'],
+  'report.approved': ['green', IconCheck, 'Bank approved report'],
+  'report.reopened': ['amber', IconDraft, 'Report back to in review'],
   'report.deleted': ['red', IconX, 'Report deleted'],
   'user.created': ['blue', IconUser, 'User created'],
   'user.updated': ['slate', IconUser, 'User updated'],

@@ -141,27 +141,62 @@ router.get(
   })
 );
 
+// Search + filters shared by the list and the board (everything except the status tab)
+function listFilter(req) {
+  const { template, q, evaluator, bank } = req.query;
+  const base = scope(req.user);
+  const filter = { ...base, ...createdRange(req.query) };
+  if (evaluator && isReviewer(req.user) && mongoose.isValidObjectId(evaluator)) filter.evaluator = evaluator;
+  if (template) filter['summary.reportTemplate'] = String(template);
+  if (bank) filter['summary.bankName'] = String(bank);
+  const rx = searchRx(q);
+  if (rx) {
+    filter.$or = [
+      { 'summary.applicantName': rx }, { 'summary.phone': rx }, { referenceNo: rx }, { 'summary.bankName': rx }, { 'summary.branch': rx },
+      { 'summary.district': rx }, { 'summary.propertyType': rx }, { 'summary.loanType': rx }, { 'data.property.village': rx }, { 'data.property.street': rx },
+    ];
+    const digits = searchDigits(q, 4);
+    if (digits) filter.$or.push({ 'summary.phone': new RegExp(digits) });
+  }
+  return { base, filter };
+}
+
+// Kanban board: the same search / filters, grouped into workflow columns.
+// new = draft never opened by the evaluator · inProgress = draft being filled · submitted · rejected (returned) · approved
+const BOARD_COLUMNS = {
+  new: { status: 'draft', startedAt: null },
+  inProgress: { status: 'draft', startedAt: { $ne: null } },
+  submitted: { status: 'submitted' },
+  rejected: { status: 'rejected' },
+  approved: { status: 'approved' },
+};
+const BOARD_LIMIT = 60; // per column; the count shows how many there are in total
+router.get(
+  '/board',
+  asyncHandler(async (req, res) => {
+    const { filter } = listFilter(req);
+    const fields = 'referenceNo summary status updatedAt createdAt startedAt submittedAt reviewedAt assignedAt evaluator';
+    const keys = Object.keys(BOARD_COLUMNS);
+    const results = await Promise.all(keys.map((k) => {
+      const f = { ...filter, ...BOARD_COLUMNS[k] };
+      return Promise.all([
+        Valuation.find(f).sort({ updatedAt: -1 }).limit(BOARD_LIMIT).select(fields).populate('evaluator', 'name').lean(),
+        Valuation.countDocuments(f),
+      ]);
+    }));
+    const columns = Object.fromEntries(keys.map((k, i) => [k, { items: results[i][0], total: results[i][1] }]));
+    res.json({ columns, limit: BOARD_LIMIT });
+  })
+);
+
 router.get(
   '/',
   asyncHandler(async (req, res) => {
-    const { status, template, q, evaluator, bank } = req.query;
+    const { status } = req.query;
     // whitelisted sort keys; default is most recently updated first
     const sortSpec = sorting(req.query, { updated: 'updatedAt', applicant: 'summary.applicantName', value: 'summary.fairMarketValue', created: 'createdAt' });
-    const base = scope(req.user);
-    const filter = { ...base, ...createdRange(req.query) };
-    if (evaluator && isReviewer(req.user) && mongoose.isValidObjectId(evaluator)) filter.evaluator = evaluator;
+    const { base, filter } = listFilter(req);
     if (status) filter.status = String(status);
-    if (template) filter['summary.reportTemplate'] = String(template);
-    if (bank) filter['summary.bankName'] = String(bank);
-    const rx = searchRx(q);
-    if (rx) {
-      filter.$or = [
-        { 'summary.applicantName': rx }, { 'summary.phone': rx }, { referenceNo: rx }, { 'summary.bankName': rx }, { 'summary.branch': rx },
-        { 'summary.district': rx }, { 'summary.propertyType': rx }, { 'summary.loanType': rx }, { 'data.property.village': rx }, { 'data.property.street': rx },
-      ];
-      const digits = searchDigits(q, 4);
-      if (digits) filter.$or.push({ 'summary.phone': new RegExp(digits) });
-    }
     const { page, limit, skip } = paging(req.query);
     const [items, total, banks, evaluatorIds] = await Promise.all([
       Valuation.find(filter).sort(sortSpec).skip(skip).limit(limit).select('referenceNo summary status updatedAt createdAt evaluator').populate('evaluator', 'name'),
