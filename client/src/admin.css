@@ -217,3 +217,152 @@ a.act-item:hover { background: var(--surface-2); color: var(--ink); }
 @media (max-width: 900px) {
   .gen-full .gen-report .re-toolbar { top: -10px; }
 }
+/* ---------- phone number + WhatsApp: no overlapping tap areas ---------- */
+@media (max-width: 900px) {
+  /* detail cards: WhatsApp as a round icon on the same line as the number */
+  .kv .phone-actions { flex-wrap: nowrap; gap: 10px; }
+  .kv .phone-actions .wa-chip { padding: 6px; border-radius: 50%; }
+  .kv .phone-actions .wa-chip span { display: none; }
+  /* wherever they still wrap, leave room between the two tap areas */
+  .phone-actions { row-gap: 14px; }
+  .phone-actions .call-link { padding-block: 6px; margin-block: -6px; }
+  /* page header (edit input sheet): smaller tap padding so it doesn't reach the title badge */
+  .customer-inline .call-link { padding-block: 3px; margin-block: -3px; }
+  .customer-inline { row-gap: 8px; }
+}
+/* Reports → Generate, step 3: Back / Next sit below the type cards, not on them */
+.type-actions { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); justify-content: space-between; }
+.type-actions .btn { margin: 0; }
+.type-actions .btn.primary { min-width: 120px; }
+@media (max-width: 900px) {
+  .type-actions .btn { flex: 1 1 0; }
+}
+
+/* ---------- Reports → Generate, step 4 on phones and tablets ---------- */
+.gen-tabs { display: none; }
+@media (max-width: 1100px) {
+  /* one pane at a time, switched by tabs, each using the full screen */
+  .gen-tabs { display: flex; gap: 4px; padding: 6px 12px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .gen-tabs button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; border: 0; border-radius: 9px; background: transparent; font: inherit; font-size: 0.88rem; font-weight: 650; color: var(--muted); cursor: pointer; }
+  .gen-tabs button.on { background: var(--blue-50); color: var(--blue-700); }
+  .gen-tab-dot { width: 7px; height: 7px; border-radius: 50%; background: #d97706; }
+  .gen-tab-badge { font-size: 0.68rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: #fef3c7; color: #92400e; }
+  .gen-full .gen-preview.show-report .gen-sheet, .gen-full .gen-preview.show-sheet .gen-report { display: none; }
+  /* the visible pane scrolls with the page body, no box-in-a-box scrolling */
+  .gen-full .gen-sheet .gen-pane-body { max-height: none; overflow: visible; }
+  .gen-full .gen-sheet { border-radius: 12px; }
+}
+@media (max-width: 900px) {
+  /* header: ‹ · title · Generate on one row, the note underneath */
+  .gen-full-bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; padding: 8px 12px; padding-top: max(8px, var(--sa-top)); }
+  .gen-full-bar .gen-back { min-width: 40px; width: 40px; height: 40px; min-height: 40px; padding: 0; font-size: 1.25rem; justify-content: center; }
+  .gen-back-label { display: none; }
+  .gen-full-title { order: 0; flex-basis: auto; }
+  .gen-full-title strong { font-size: 0.95rem; }
+  .gen-full-title small { font-size: 0.74rem; }
+  .gen-full-bar .btn.primary { margin-left: 0; min-width: 0; padding: 0 16px; height: 40px; min-height: 40px; }
+  .gen-full-bar .gen-note { order: 3; grid-column: 1 / -1; justify-content: flex-start; font-size: 0.76rem; }
+  .gen-full-bar .gen-note:empty { display: none; }
+  .gen-full-body { padding: 10px 10px 12px; }
+  .gen-full .gen-pane-head { padding: 8px 10px; }
+  .gen-report .gen-pane-body { padding: 0 8px 8px; }
+  .gen-full .gen-report .re-toolbar { margin: 0 -8px 10px; padding: 8px 10px; min-height: 0; gap: 8px; }
+}
+@media (max-width: 1100px) {
+  /* the tab already says "Report" */
+  .gen-full .gen-report .re-heading > strong { display: none; }
+}
+@media (max-width: 900px) {
+  /* editing the sheet inside step 4: same two-up short fields as the input sheet form */
+  .sheet-editor .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 10px; }
+  .sheet-editor .fields > .field:not(.short) { grid-column: 1 / -1; }
+  /* Discard / Save on the right of the pane header */
+  .gen-full .gen-pane-head { flex-wrap: nowrap; }
+  .gen-full .gen-pane-title { min-width: 0; overflow: hidden; }
+  .gen-full .gen-pane-title .muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gen-pane-actions { margin-left: auto; flex: none; }
+}
+@media (max-width: 1100px) {
+  /* the tab already says "Input sheet": keep just the reference */
+  .gen-full .gen-sheet .gen-pane-title > strong { display: none; }
+  .gen-full .gen-sheet .gen-pane-title .muted { font-size: 0.84rem; font-weight: 600; color: var(--ink-2); }
+}
+
+/* ---------- report "Edit wording" (Reports → Generate, step 4) ---------- */
+.re-toolbar .re-edit { gap: 6px; }
+.re-toolbar .re-edit.on { background: var(--blue-600); border-color: var(--blue-600); color: #fff; }
+.re-toolbar .re-edit.on:hover { filter: brightness(0.95); }
+.re-toolbar .re-count { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+.re-toolbar .re-save { min-width: 72px; }
+.re-hint-touch { display: none; }
+@media (max-width: 900px) {
+  .re-toolbar { flex-wrap: nowrap; gap: 6px; }
+  .re-toolbar .btn.small { min-height: 36px; height: 36px; padding: 0 12px; font-size: 0.82rem; }
+  .re-toolbar .rt-notice { font-size: 0.76rem; white-space: nowrap; }
+  .re-hint-touch { display: inline; }
+  .re-hint-desk { display: none; }
+  .re-hint { font-size: 0.78rem; padding: 8px 10px; margin-bottom: 10px; }
+}
+
+/* ---------- step 4 report on phones / tablets: fixed toolbar, only the pages scroll ---------- */
+@media (max-width: 1100px) {
+  .gen-full-body:has(.gen-preview.show-report) { overflow: hidden; padding: 0; display: flex; flex-direction: column; }
+  .gen-full .gen-preview.show-report { flex: 1; min-height: 0; height: auto; display: flex; flex-direction: column; margin: 0; }
+  .gen-full .gen-preview.show-report .gen-report { flex: 1; min-height: 0; height: auto; border: 0; border-radius: 0; box-shadow: none; }
+  .gen-full .gen-report .gen-pane-body { flex: 1; min-height: 0; overflow: hidden; padding: 0; display: flex; flex-direction: column; border-radius: 0; }
+  .gen-full .gen-report .report-embedded { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .gen-full .gen-report .re-toolbar { position: static; top: auto; margin: 0; border-radius: 0; box-shadow: 0 1px 0 var(--border); flex: none; min-height: 0; }
+  .gen-full .gen-report .re-hint { flex: none; margin: 8px 10px 0; max-width: none; width: auto; }
+  .gen-full .gen-report > .gen-pane-body .alert { flex: none; margin: 8px 10px 0; }
+  .gen-full .gen-report .re-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 10px 8px 24px; }
+}
+@media (max-width: 1100px) {
+  /* keep the report column at screen width so the pages scale down to fit */
+  .gen-full .gen-preview.show-report,
+  .gen-full .gen-preview.show-report .gen-report,
+  .gen-full .gen-report .gen-pane-body,
+  .gen-full .gen-report .report-embedded,
+  .gen-full .gen-report .re-scroll { width: 100%; min-width: 0; max-width: 100%; }
+  .gen-full .gen-report .re-scroll { overflow-x: hidden; }
+}
+@media (max-width: 1100px) {
+  /* pages are scaled to the full column width: no side padding, or their right edge gets clipped */
+  .gen-full .gen-report .re-scroll { padding: 10px 0 24px; }
+}
+
+/* ---------- step 4 report: floating pencil (phones / tablets) ---------- */
+.re-fab-group { display: none; }
+@media (max-width: 1100px) {
+  /* the toolbar row goes; the pencil floats over the pages instead */
+  .gen-full .gen-report .re-toolbar { display: none; }
+  .gen-full .gen-report .re-fab-group {
+    display: flex; align-items: center; gap: 8px; position: fixed; z-index: 90;
+    right: 16px; bottom: calc(18px + var(--sa-bottom));
+  }
+  .re-fab {
+    position: relative; width: 56px; height: 56px; border-radius: 18px; border: 0; flex: none;
+    display: grid; place-items: center; cursor: pointer;
+    background: var(--surface); color: var(--blue-700);
+    box-shadow: 0 8px 22px -6px rgba(16, 24, 40, 0.35), 0 0 0 1px var(--border);
+  }
+  .re-fab.on { background: var(--blue-600); color: #fff; box-shadow: 0 10px 24px -8px rgba(29, 78, 216, 0.7); }
+  .re-fab:active { transform: scale(0.96); }
+  .re-fab-count {
+    position: absolute; top: -5px; right: -5px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
+    background: #d97706; color: #fff; font-size: 0.7rem; font-weight: 800; display: grid; place-items: center; border: 2px solid #fff;
+  }
+  .re-fab-pill {
+    height: 44px; padding: 0 18px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface);
+    font: inherit; font-size: 0.9rem; font-weight: 700; color: var(--ink-2); cursor: pointer;
+    box-shadow: 0 6px 18px -6px rgba(16, 24, 40, 0.3);
+  }
+  .re-fab-pill.primary { background: var(--blue-600); border-color: var(--blue-600); color: #fff; }
+  .re-fab-pill.ghost { color: var(--red); }
+  .re-fab-pill:disabled { opacity: 0.7; }
+  .re-fab-notice {
+    padding: 6px 12px; border-radius: 999px; background: #ecfdf3; color: #067647; border: 1px solid #abefc6;
+    font-size: 0.78rem; font-weight: 700; box-shadow: 0 4px 12px -6px rgba(16, 24, 40, 0.25); white-space: nowrap;
+  }
+  /* room at the end of the report so the last page isn't hidden under the button */
+  .gen-full .gen-report .re-scroll { padding-bottom: 96px; }
+}

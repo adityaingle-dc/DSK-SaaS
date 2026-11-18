@@ -35,6 +35,8 @@ export default function GenerateReport() {
   const [reportDirty, setReportDirty] = useState(false); // unsaved wording edits in step 4
   // step 4: edit the input sheet in place (the report preview follows the edits live)
   const [editingSheet, setEditingSheet] = useState(false);
+  // phones / tablets: show one pane at a time (report or input sheet)
+  const [pane, setPane] = useState('report');
   const [draft, setDraft] = useState(null);
   const [sheetDirty, setSheetDirty] = useState(false);
   const [sheetErrors, setSheetErrors] = useState([]);
@@ -146,6 +148,7 @@ export default function GenerateReport() {
   }, [editingSheet, draft, showSheetErrors, sheetErrors]);
 
   const startEditSheet = () => {
+    setPane('sheet');
     setDraft(hydrate(full.data));
     setSheetDirty(false);
     setSheetErrors([]);
@@ -284,7 +287,7 @@ export default function GenerateReport() {
               </label>
             ))}
           </div>
-          <div className="actions">
+          <div className="actions type-actions">
             <button type="button" className="btn" onClick={() => setStep(1)}>‹ Back</button>
             <button type="button" className="btn primary" disabled={!type} onClick={() => setStep(3)}>Next ›</button>
           </div>
@@ -294,7 +297,7 @@ export default function GenerateReport() {
       {step === 3 && sheet && (
         <div className="gen-full" role="dialog" aria-modal="true" aria-label="Review and generate the report">
           <header className="gen-full-bar">
-            <button type="button" className="btn" onClick={() => setStep(2)}>‹ Back</button>
+            <button type="button" className="btn gen-back" onClick={() => setStep(2)} aria-label="Back to report type">‹<span className="gen-back-label"> Back</span></button>
             <div className="gen-full-title">
               <strong>Review & generate</strong>
               <small className="muted">{types.find((t) => t.key === type)?.title} · {sheet.referenceNo} · {customer.customer.name}</small>
@@ -307,8 +310,16 @@ export default function GenerateReport() {
             </span>
             <button type="button" className="btn primary" disabled={!type || busy || reportDirty || (editingSheet && sheetDirty) || !full} onClick={generate}>{busy ? 'Generating…' : 'Generate'}</button>
           </header>
+          <div className="gen-tabs" role="tablist" aria-label="Review">
+            <button type="button" role="tab" aria-selected={pane === 'report'} className={pane === 'report' ? 'on' : ''} onClick={() => setPane('report')}>
+              Report{reportDirty && <span className="gen-tab-dot" title="Unsaved wording edits" />}
+            </button>
+            <button type="button" role="tab" aria-selected={pane === 'sheet'} className={pane === 'sheet' ? 'on' : ''} onClick={() => setPane('sheet')}>
+              Input sheet{editingSheet && <span className="gen-tab-badge">{sheetDirty ? 'Unsaved' : 'Editing'}</span>}
+            </button>
+          </div>
           <div className="gen-full-body">
-          <div className="gen-preview">
+          <div className={`gen-preview show-${pane}`}>
             <section className="gen-pane gen-sheet" aria-label="Input sheet">
               <div className="gen-pane-head">
                 <span className="gen-pane-title"><strong>Input sheet</strong><span className="muted small">{sheet.referenceNo}</span></span>

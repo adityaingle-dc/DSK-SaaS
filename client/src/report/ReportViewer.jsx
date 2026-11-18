@@ -5,6 +5,7 @@ import { Sheet, buildContext, sheetsFor } from './sheets.jsx';
 import BackLink from '../components/BackLink.jsx';
 import './report.css';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import { IconPencil, IconTick } from '../components/Icons.jsx';
 
 // Renders a bank report (A4 sheets) with fit-to-screen preview, superadmin wording edits and printing.
 // Used for the live preview of a valuation and for stored reports in the Reports module.
@@ -129,28 +130,68 @@ export default function ReportViewer({ doc, overrides: savedProp, onSave, back, 
           <div className="re-toolbar">
             {heading}
             {isSuperadmin && onSave && (<>
-            <label className={`switch${editing ? ' on' : ''}`}>
-              <input type="checkbox" checked={editing} onChange={(e) => setEditing(e.target.checked)} />
-              <span className="switch-track"><span /></span>
-              Edit wording
-            </label>
-            {editedCount > 0 && <span className="badge">{editedCount} edited</span>}
+            <button
+              type="button"
+              className={`btn small re-edit${editing ? ' on' : ''}`}
+              aria-pressed={editing}
+              onClick={() => setEditing(!editing)}
+            >
+              {editing ? <><IconTick size={15} /> Done</> : <><IconPencil size={15} /> Edit wording</>}
+            </button>
+            {editedCount > 0 && !editing && <span className="badge re-count">{editedCount} edited</span>}
             <span className="spacer" />
             {notice && <span className="rt-notice">{notice}</span>}
-            {editedCount > 0 && <button type="button" className="btn small ghost" onClick={resetAll}>Reset all</button>}
-            {(dirty || editedCount > 0) && <button type="button" className={`btn small${dirty ? ' primary' : ''}`} disabled={!dirty || saving} onClick={save}>{saving ? 'Saving…' : dirty ? 'Save edits' : 'Saved'}</button>}
+            {editing && editedCount > 0 && <button type="button" className="btn small ghost re-reset" onClick={resetAll}>Reset</button>}
+            {(dirty || (editing && editedCount > 0)) && (
+              <button type="button" className={`btn small re-save${dirty ? ' primary' : ''}`} disabled={!dirty || saving} onClick={save}>
+                {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+              </button>
+            )}
             </>)}
           </div>
         )}
-        {editing && <div className="edit-hint re-hint">Click any text on the report to change it. Enter finishes a line, Esc cancels. Saved edits are copied into the stored report.</div>}
-        {error && <div className="alert">{error}</div>}
-        <ReportCtx.Provider value={ctx}>
-          <div className={`sheets${ctx.editing ? ' is-editing' : ''}`} style={{ zoom }}>
-            {sheets.map((s, i) => (
-              <Sheet key={s.id} n={i + 1} total={sheets.length} c={c} letterhead={s.letterhead}>{s.el}</Sheet>
-            ))}
+        {/* phones / tablets: a floating pencil instead of the toolbar */}
+        {isSuperadmin && onSave && (
+          <div className={`re-fab-group${editing ? ' editing' : ''}`}>
+            {notice && <span className="re-fab-notice" role="status">{notice}</span>}
+            {editing && editedCount > 0 && (
+              <button type="button" className="re-fab-pill ghost" onClick={resetAll}>Reset</button>
+            )}
+            {(dirty || (editing && editedCount > 0)) && (
+              <button type="button" className={`re-fab-pill${dirty ? ' primary' : ''}`} disabled={!dirty || saving} onClick={save}>
+                {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+              </button>
+            )}
+            <button
+              type="button"
+              className={`re-fab${editing ? ' on' : ''}`}
+              aria-pressed={editing}
+              aria-label={editing ? 'Done editing the wording' : 'Edit the report wording'}
+              title={editing ? 'Done' : 'Edit wording'}
+              onClick={() => setEditing(!editing)}
+            >
+              {editing ? <IconTick size={24} /> : <IconPencil size={22} />}
+              {!editing && editedCount > 0 && <span className="re-fab-count">{editedCount}</span>}
+            </button>
           </div>
-        </ReportCtx.Provider>
+        )}
+        {editing && (
+          <div className="edit-hint re-hint">
+            <span className="re-hint-touch">Tap any text on the report to change it. Your edits go into the stored report when you save.</span>
+            <span className="re-hint-desk">Click any text on the report to change it. Enter finishes a line, Esc cancels. Saved edits are copied into the stored report.</span>
+          </div>
+        )}
+        {error && <div className="alert">{error}</div>}
+        {/* phones: only this part scrolls; the toolbar above stays put */}
+        <div className="re-scroll">
+          <ReportCtx.Provider value={ctx}>
+            <div className={`sheets${ctx.editing ? ' is-editing' : ''}`} style={{ zoom }}>
+              {sheets.map((s, i) => (
+                <Sheet key={s.id} n={i + 1} total={sheets.length} c={c} letterhead={s.letterhead}>{s.el}</Sheet>
+              ))}
+            </div>
+          </ReportCtx.Provider>
+        </div>
       </div>
     );
   }
