@@ -10,12 +10,13 @@ const BoundaryMap = lazy(() => import('./BoundaryMap.jsx'));
 // Renders one section of the @dsk/shared input-sheet schema.
 // values = data[sectionPath]; onChange(key, value) updates one field.
 export default function SchemaSection({ section, values = {}, onChange, errors = {}, ctx, data, path }) {
+  const visible = section.fields.filter((f) => !f.when || f.when(ctx, data));
+  const paired = pairShortFields(visible);
   return (
     <div className="fields">
-      {section.fields
-        .filter((f) => !f.when || f.when(ctx, data))
+      {visible
         .map((f) => (
-          <FieldRow key={f.key} field={f} error={errors[`${path}.${f.key}`]} errors={errors} name={`${path}.${f.key}`}>
+          <FieldRow key={f.key} field={f} pair={paired.has(f.key)} error={errors[`${path}.${f.key}`]} errors={errors} name={`${path}.${f.key}`}>
             <FieldInput
               field={f}
               value={values[f.key] ?? (values[f.key] === undefined || values[f.key] === '' ? f.defaultFrom?.(ctx, data) : undefined)}
@@ -31,10 +32,27 @@ export default function SchemaSection({ section, values = {}, onChange, errors =
   );
 }
 
-function FieldRow({ field, error, children }) {
-  const wide = field.wide || ['table', 'grid', 'tiers', 'stages', 'textarea', 'multiselect', 'latlon', 'choice'].includes(field.type);
+const isWide = (field) => field.wide || ['table', 'grid', 'tiers', 'stages', 'textarea', 'multiselect', 'latlon', 'choice'].includes(field.type);
+// phones: small inputs (dates, numbers, phones, pincodes, short dropdowns) can sit two to a row
+const isShort = (field) => !isWide(field) && (
+  ['date', 'number', 'tel'].includes(field.type)
+  || field.pattern === '^[1-9][0-9]{5}$'
+  || (field.type === 'select' && (field.options || []).every((o) => String(o).length <= 16))
+);
+// pair neighbouring short fields in form order (a short field with no short neighbour stays full width)
+function pairShortFields(fields) {
+  const out = new Set();
+  for (let i = 0; i < fields.length - 1; i++) {
+    if (isShort(fields[i]) && isShort(fields[i + 1])) { out.add(fields[i].key); out.add(fields[i + 1].key); i++; }
+  }
+  return out;
+}
+
+function FieldRow({ field, error, children, pair = false }) {
+  const wide = isWide(field);
+  const short = pair;
   return (
-    <div className={`field${wide ? ' wide' : ''}${error ? ' has-error' : ''}`} id={`field-${field.key}`}>
+    <div className={`field${wide ? ' wide' : ''}${short ? ' short' : ''}${error ? ' has-error' : ''}`} id={`field-${field.key}`}>
       {field.type !== 'checkbox' && (
         <span className="field-label">
           {field.label}

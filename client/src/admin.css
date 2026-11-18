@@ -114,7 +114,7 @@ a.act-item:hover { background: var(--surface-2); color: var(--ink); }
   .act-amount { display: none; }
   .search.compact { flex: 1 1 100%; }
   .modal-backdrop { place-items: end center; padding: 0; }
-  .modal { max-width: none; border-radius: 16px 16px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+  .modal { max-width: none; border-radius: 16px 16px 0 0; padding-bottom: var(--sa-bottom); }
 }
 @media print {
   .banner, .filters-card { display: none !important; }
@@ -161,25 +161,59 @@ a.act-item:hover { background: var(--surface-2); color: var(--ink); }
 }
 /* bottom tab bar: room between icon and name, and between the tabs */
 @media (max-width: 900px) {
-  .shell .tabbar { height: calc(68px + env(safe-area-inset-bottom)); padding: 0 6px env(safe-area-inset-bottom); column-gap: 4px; }
+  .shell .tabbar { height: calc(68px + var(--sa-bottom)); padding: 0 6px var(--sa-bottom); column-gap: 4px; }
   .shell .tabbar a, .shell .tabbar .tab-more { gap: 5px; padding: 8px 2px 6px; min-width: 0; border-radius: 10px; }
   .shell .tabbar a span:not(.tab-icon):not(.nav-badge),
   .shell .tabbar .tab-more span:not(.tab-icon):not(.nav-badge) { font-size: 11px; line-height: 1.15; letter-spacing: 0.01em; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .shell .tabbar a.active { background: var(--blue-50); }
   .shell .tabbar .tab-more.active { background: var(--blue-50); }
-  .content { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+  .content { padding-bottom: calc(84px + var(--sa-bottom)); }
 }
 @media (max-width: 360px) {
-  .shell .tabbar { padding: 0 2px env(safe-area-inset-bottom); column-gap: 0; }
+  .shell .tabbar { padding: 0 2px var(--sa-bottom); column-gap: 0; }
   .shell .tabbar a span:not(.tab-icon):not(.nav-badge),
   .shell .tabbar .tab-more span:not(.tab-icon):not(.nav-badge) { font-size: 10.5px; letter-spacing: 0; }
 }
 @media (max-width: 900px) {
   /* superadmin's 5 tabs: each as wide as its label, equal space between them */
-  .shell.is-super .tabbar { grid-template-columns: repeat(5, auto); justify-content: space-between; padding: 0 10px env(safe-area-inset-bottom); }
+  .shell.is-super .tabbar { grid-template-columns: repeat(5, auto); justify-content: space-between; padding: 0 10px var(--sa-bottom); }
   .shell.is-super .tabbar a, .shell.is-super .tabbar .tab-more { padding: 8px 8px 6px; }
 }
 @media (max-width: 360px) {
-  .shell.is-super .tabbar { padding: 0 4px env(safe-area-inset-bottom); }
+  .shell.is-super .tabbar { padding: 0 4px var(--sa-bottom); }
   .shell.is-super .tabbar a, .shell.is-super .tabbar .tab-more { padding: 8px 5px 6px; }
+}
+
+/* ---------- inside the Android app ---------- */
+.in-app, .in-app * { -webkit-tap-highlight-color: transparent; }
+.in-app body { overscroll-behavior-y: none; }
+/* no accidental text selection when long-pressing controls (text in inputs stays selectable) */
+.in-app .tabbar, .in-app .side-nav, .in-app .btn, .in-app button, .in-app .segmented, .in-app .stepper,
+.in-app .list-item, .in-app .ctype-opt, .in-app .radio-opt, .in-app .assign-opt, .in-app .more-sheet, .in-app .fab, .in-app .kpi { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+/* pressed feedback instead of the browser's highlight */
+.in-app .btn:active, .in-app .list-item:active, .in-app .tabbar a:active, .in-app .tab-more:active { opacity: 0.75; }
+
+@media (max-width: 900px) {
+  /* input sheet: short fields two to a row, everything else full width */
+  .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 10px; }
+  .fields > .field:not(.short) { grid-column: 1 / -1; }
+  .fields > .field.short .field-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fields > .field.short .hint { font-size: 0.72rem; }
+  /* add customer: title beside the name */
+  .customer-form .salute-row { grid-template-columns: 92px minmax(0, 1fr); }
+}
+@media (max-width: 340px) {
+  .fields { grid-template-columns: 1fr; }
+}
+/* ---------- Reports → Generate on phones ---------- */
+@media (max-width: 900px) {
+  /* step buttons: a plain footer at the end of the card (a sticky bar floated over the content with large text) */
+  .gen-actions, .gen-card .gen-actions { position: static; margin: 16px -12px -12px; }
+}
+@media (max-width: 1100px) {
+  /* step 4: the "Report · Edit wording" bar sticks flush to the top of the scroll area (no strip of report above it) */
+  .gen-full .gen-report .re-toolbar { top: -14px; box-shadow: 0 6px 10px -8px rgba(16, 24, 40, 0.25); }
+}
+@media (max-width: 900px) {
+  .gen-full .gen-report .re-toolbar { top: -10px; }
 }
