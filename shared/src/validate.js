@@ -5,6 +5,7 @@
 import { SECTIONS, sectionPath, visibleSections } from './formSchema.js';
 import { getContext } from './calc.js';
 import { STAGE_STATUS } from './constants.js';
+import { boundaryArea, cleanBoundary, MIN_BOUNDARY_POINTS } from './geo.js';
 
 // Upload rules shared by client (pre-check) and server (enforcement)
 export const MAX_FILES = 10;
@@ -47,6 +48,7 @@ function cleanField(field, v) {
       if (!Array.isArray(v)) return undefined;
       return v
         .filter((f) => f && /^[a-f0-9]{24}$/i.test(String(f.id)))
+        .filter((f) => !field.imagesOnly || !f.type || String(f.type).startsWith('image/'))
         .slice(0, field.maxFiles || MAX_FILES)
         .map((f) => ({ id: String(f.id), name: String(f.name || '').slice(0, 200), type: String(f.type || ''), size: Number(f.size) || 0 }));
     case 'grid': {
@@ -62,7 +64,15 @@ function cleanField(field, v) {
       for (const item of field.items) {
         const sel = v?.[item.key];
         const tier = Math.trunc(Number(sel?.tier));
-        if (tier >= 1 && tier <= 4) out[item.key] = { tier, ...(item.unit && !isBlank(sel.qty) ? { qty: Math.max(0, Number(sel.qty) || 0) } : {}) };
+        if (tier >= 1 && tier <= 4) {
+          // amount: the exact figure typed by the evaluator (overrides grade rate × qty)
+          const amount = isBlank(sel.amount) ? NaN : Number(sel.amount);
+          out[item.key] = {
+            tier,
+            ...(item.unit && !isBlank(sel.qty) ? { qty: Math.max(0, Number(sel.qty) || 0) } : {}),
+            ...(Number.isFinite(amount) && amount >= 0 ? { amount: Math.round(amount) } : {}),
+          };
+        }
       }
       return out;
     }
@@ -77,7 +87,14 @@ function cleanField(field, v) {
       if (!v || typeof v !== 'object') return undefined;
       const lat = Number(v.lat);
       const lon = Number(v.lon);
-      return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : undefined;
+      const hasPoint = !isBlank(v.lat) && !isBlank(v.lon) && Number.isFinite(lat) && Number.isFinite(lon);
+      // pins around the plot; the area is always recomputed here, never trusted from the client
+      const boundary = cleanBoundary(v.boundary);
+      if (!hasPoint && !boundary.length) return undefined;
+      return {
+        ...(hasPoint ? { lat, lon } : {}),
+        ...(boundary.length ? { boundary, areaSqm: +boundaryArea(boundary).toFixed(2) } : {}),
+      };
     }
     default:
       return cleanScalar(field, v);
@@ -133,6 +150,13 @@ export function validate(data = {}, { mode = 'draft' } = {}) {
         checkScalar(f, v, name, errors);
       }
       if (f.type === 'latlon' && v && (Math.abs(v.lat) > 90 || Math.abs(v.lon) > 180)) errors.push({ field: name, message: 'GPS coordinates out of range' });
+      // the 10-pin minimum is a submit rule: a half-marked plot can still be saved as a draft
+      if (f.type === 'latlon' && f.minPoints && mode === 'submit') {
+        const n = Array.isArray(v?.boundary) ? v.boundary.length : 0;
+        const min = f.minPoints || MIN_BOUNDARY_POINTS;
+        if (n && n < min) errors.push({ field: name, message: `Plot boundary: mark at least ${min} points on the map (${n} so far)` });
+        else if (!n) errors.push({ field: name, message: `Plot boundary: mark at least ${min} points around the plot on the map` });
+      }
     }
   }
   return errors;

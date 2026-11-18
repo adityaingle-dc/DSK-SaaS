@@ -1,8 +1,11 @@
-import { useState } from 'react';
-import { parseLatLon } from '@dsk/shared';
+import { lazy, Suspense, useState } from 'react';
+import { boundaryArea, boundaryCentre, boundaryPerimeter, MIN_BOUNDARY_POINTS, parseLatLon, SQFT_PER_SQM, SQYD_PER_SQM } from '@dsk/shared';
 import { inr } from './StatusBadge.jsx';
 import FilesInput from './FilesInput.jsx';
 import { BankInput, IfscInput } from './BankFields.jsx';
+import { confirmDialog } from './ConfirmDialog.jsx';
+
+const BoundaryMap = lazy(() => import('./BoundaryMap.jsx'));
 
 // Renders one section of the @dsk/shared input-sheet schema.
 // values = data[sectionPath]; onChange(key, value) updates one field.
@@ -52,6 +55,7 @@ export function FieldInput({ field, value, onChange, errors = {}, name, setField
   // special inputs for plain-text fields (stored as text, so validation / reports are unchanged)
   if (field.widget === 'bank') return <BankInput value={value} onChange={onChange} />;
   if (field.widget === 'ifsc' && setField) return <IfscInput value={value} onChange={onChange} setField={setField} values={values} />;
+  if (field.widget === 'radio' && field.options) return <RadioChoice field={field} value={value} onChange={onChange} name={name} />;
   switch (field.type) {
     case 'textarea':
       return <textarea rows={3} value={str(value)} onChange={(e) => onChange(e.target.value)} />;
@@ -78,9 +82,9 @@ export function FieldInput({ field, value, onChange, errors = {}, name, setField
     case 'multiselect':
       return <Chips options={field.options} selected={value || []} onChange={onChange} />;
     case 'latlon':
-      return <LatLonInput value={value} onChange={onChange} />;
+      return <LatLonInput field={field} value={value} onChange={onChange} />;
     case 'files':
-      return <FilesInput value={value || []} onChange={onChange} accept={field.accept} />;
+      return <FilesInput value={value || []} onChange={onChange} accept={field.accept} max={field.maxFiles} noun={field.imagesOnly ? 'photos' : undefined} />;
     case 'grid':
       return <GridInput field={field} value={value || {}} onChange={onChange} />;
     case 'table':
@@ -121,42 +125,71 @@ function Chips({ options, selected, onChange }) {
   );
 }
 
-function LatLonInput({ value, onChange }) {
+function LatLonInput({ field, value, onChange }) {
   const [paste, setPaste] = useState('');
   const [msg, setMsg] = useState('');
+  const [focus, setFocus] = useState(null);
+  const min = field?.minPoints || MIN_BOUNDARY_POINTS;
+  const points = Array.isArray(value?.boundary) ? value.boundary : [];
+  const centre = value?.lat !== undefined && value?.lat !== '' && value?.lon !== undefined && value?.lon !== '' ? { lat: Number(value.lat), lon: Number(value.lon) } : null;
+
+  // pins changed: centre of the plot becomes the GPS location
+  const setPoints = (next) => {
+    const c = next.length >= 3 ? boundaryCentre(next) : null;
+    const base = { ...(value || {}), boundary: next, areaSqm: +boundaryArea(next).toFixed(2) };
+    if (!next.length) { delete base.boundary; delete base.areaSqm; }
+    onChange(c ? { ...base, ...c } : base);
+  };
+  const setCentre = (p) => { onChange({ ...(value || {}), ...p }); setFocus(p); };
   const set = (k) => (e) => onChange({ ...(value || {}), [k]: e.target.value });
   const fromPaste = (text) => {
     setPaste(text);
     const p = parseLatLon(text);
-    if (p) {
-      onChange(p);
-      setMsg('');
-    }
+    if (p) { setCentre(p); setMsg(''); }
   };
   const locate = () => {
     if (!navigator.geolocation) return setMsg('Geolocation not supported by this browser');
     setMsg('Locating…');
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        onChange({ lat: +pos.coords.latitude.toFixed(7), lon: +pos.coords.longitude.toFixed(7) });
+        setCentre({ lat: +pos.coords.latitude.toFixed(7), lon: +pos.coords.longitude.toFixed(7) });
         setMsg(`Accuracy ±${Math.round(pos.coords.accuracy)} m`);
       },
       (err) => setMsg(err.message),
       { enableHighAccuracy: true, timeout: 15000 }
     );
   };
-  const hasPoint = value?.lat !== undefined && value?.lat !== '' && value?.lon !== undefined && value?.lon !== '';
+  const area = boundaryArea(points);
+  const done = points.length >= min;
   return (
     <div className="latlon">
-      <input placeholder='Paste from Google Maps, e.g. "18.7944, 78.2984"' value={paste} onChange={(e) => fromPaste(e.target.value)} />
+      <div className="bm-head">
+        <span className={`bm-count${done ? ' ok' : ''}`}>{points.length} / {min} points{done ? ' ✓' : ''}</span>
+        {points.length >= 3 && (
+          <span className="bm-area">≈ {Math.round(area * SQFT_PER_SQM).toLocaleString('en-IN')} sq.ft · {Math.round(area * SQYD_PER_SQM).toLocaleString('en-IN')} sq.yd · perimeter {Math.round(boundaryPerimeter(points))} m</span>
+        )}
+        <span className="bm-actions">
+          <button type="button" className="btn small" disabled={!points.length} onClick={() => setPoints(points.slice(0, -1))}>Undo</button>
+          <button type="button" className="btn small" disabled={!points.length} onClick={async () => (await confirmDialog({ title: 'Remove all map points?', message: `All ${points.length} points marked around the plot will be removed.`, confirmLabel: 'Remove points', tone: 'danger', icon: 'trash' })) && setPoints([])}>Clear</button>
+        </span>
+      </div>
+      <Suspense fallback={<div className="bm-map bm-loading">Loading map…</div>}>
+        <BoundaryMap points={points} centre={centre} focus={focus} onChange={setPoints} />
+      </Suspense>
+      <p className="hint">
+        {done
+          ? 'Boundary marked. Drag a point to adjust it, or tap it to remove it.'
+          : `Zoom in on the plot and tap its corners and edges in order, going round the plot: at least ${min} points. Drag a point to adjust it, tap it to remove it.`}
+      </p>
+      <input placeholder='Find the plot: paste "lat, lon" from Google Maps, e.g. 18.7944, 78.2984' value={paste} onChange={(e) => fromPaste(e.target.value)} />
       <div className="row">
-        <input type="number" step="any" placeholder="Latitude" value={str(value?.lat)} onChange={set('lat')} />
-        <input type="number" step="any" placeholder="Longitude" value={str(value?.lon)} onChange={set('lon')} />
+        <input type="number" step="any" placeholder="Latitude" value={str(value?.lat)} onChange={set('lat')} aria-label="Latitude" />
+        <input type="number" step="any" placeholder="Longitude" value={str(value?.lon)} onChange={set('lon')} aria-label="Longitude" />
       </div>
       <div className="actions left">
         <button type="button" className="btn" onClick={locate}>Use my location</button>
-        {hasPoint && (
-          <a className="btn" target="_blank" rel="noreferrer" href={`https://www.google.com/maps/search/?api=1&query=${value.lat},${value.lon}`}>Open in Maps</a>
+        {centre && (
+          <a className="btn" target="_blank" rel="noreferrer" href={`https://www.google.com/maps/search/?api=1&query=${centre.lat},${centre.lon}`}>Open in Google Maps</a>
         )}
         {msg && <span className="hint">{msg}</span>}
       </div>
@@ -164,28 +197,54 @@ function LatLonInput({ value, onChange }) {
   );
 }
 
+// radio buttons for a choice: short options sit in a row, sentence-length ones stack in two columns
+function RadioChoice({ field, value, onChange, name }) {
+  const group = `rc-${name || field.key}`;
+  const short = field.options.every((o) => o.length <= 28);
+  const current = str(value);
+  return (
+    <div className={`radio-choice${short ? ' short' : ''}`} role="radiogroup" aria-label={field.label}>
+      {field.options.map((o) => (
+        <label key={o} className={`radio-opt${current === o ? ' on' : ''}`}>
+          <input type="radio" name={group} value={o} checked={current === o} onChange={() => onChange(o)} />
+          <span>{o}</span>
+        </label>
+      ))}
+      {current && <button type="button" className="link-btn radio-clear" onClick={() => onChange('')}>Clear</button>}
+    </div>
+  );
+}
+
 function GridInput({ field, value, onChange }) {
   const set = (row, col, v) => onChange({ ...value, [row]: { ...(value[row] || {}), [col]: v } });
+  // splitColumns: n → stacked tables of n columns each (e.g. boundaries above, dimensions below)
+  const n = field.splitColumns || field.columns.length;
+  const groups = [];
+  for (let i = 0; i < field.columns.length; i += n) groups.push(field.columns.slice(i, i + n));
   return (
-    <div className="table-wrap">
-      <table className="table input-table">
-        <thead>
-          <tr><th />{field.columns.map((c) => <th key={c.key}>{c.label}</th>)}</tr>
-        </thead>
-        <tbody>
-          {field.rows.map((r) => {
-            const k = r.toLowerCase();
-            return (
-              <tr key={k}>
-                <th scope="row">{r}</th>
-                {field.columns.map((c) => (
-                  <td key={c.key} data-label={c.label}><input aria-label={`${r} – ${c.label}`} value={str(value[k]?.[c.key])} onChange={(e) => set(k, c.key, e.target.value)} /></td>
-                ))}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="grid-tables">
+      {groups.map((cols) => (
+        <div className="table-wrap" key={cols[0].key}>
+          <table className="table input-table">
+            <thead>
+              <tr><th />{cols.map((c) => <th key={c.key}>{c.label}</th>)}</tr>
+            </thead>
+            <tbody>
+              {field.rows.map((r) => {
+                const k = r.toLowerCase();
+                return (
+                  <tr key={k}>
+                    <th scope="row">{r}</th>
+                    {cols.map((c) => (
+                      <td key={c.key} data-label={c.label}><input aria-label={`${r} – ${c.label}`} value={str(value[k]?.[c.key])} onChange={(e) => set(k, c.key, e.target.value)} /></td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ))}
     </div>
   );
 }
@@ -230,6 +289,8 @@ function TiersInput({ field, value, onChange }) {
     if (!Number(next[key].tier)) delete next[key];
     onChange(next);
   };
+  // a new grade means a new price: drop the exact amount typed for the old one
+  const setTier = (key, tier) => set(key, { tier, amount: undefined });
   return (
     <div className="table-wrap">
       <table className="table input-table">
@@ -241,12 +302,15 @@ function TiersInput({ field, value, onChange }) {
             const sel = value[item.key] || {};
             const tier = Number(sel.tier) || 0;
             const rate = tier ? item.rates[tier - 1] : 0;
-            const amount = rate * (item.unit ? Number(sel.qty) || 0 : 1);
+            const standard = rate * (item.unit ? Number(sel.qty) || 0 : 1);
+            // editing: amount is defined (may be '' while retyping); '' falls back to the standard figure
+            const editing = sel.amount !== undefined && sel.amount !== null;
+            const custom = editing && sel.amount !== '';
             return (
               <tr key={item.key} className={tier ? 'selected' : ''}>
                 <th scope="row" className="cell-title">{item.label}</th>
                 <td data-label="Grade">
-                  <select aria-label={`${item.label} – grade`} value={tier} onChange={(e) => set(item.key, { tier: Number(e.target.value) })}>
+                  <select aria-label={`${item.label} – grade`} value={tier} onChange={(e) => setTier(item.key, Number(e.target.value))}>
                     {field.tiers.map((t, i) => (
                       <option key={t} value={i}>{i ? `${t} – ${item.ranges[i - 1] || inr(item.rates[i - 1])}` : t}</option>
                     ))}
@@ -257,7 +321,22 @@ function TiersInput({ field, value, onChange }) {
                     <input type="number" min="0" step="any" placeholder={item.unit} value={str(sel.qty)} disabled={!tier} onChange={(e) => set(item.key, { qty: e.target.value })} />
                   ) : '—'}
                 </td>
-                <td className="num cell-amount" data-label="Amount">{tier ? inr(amount) : '—'}</td>
+                <td className="num cell-amount" data-label="Amount">
+                  {tier ? (
+                    <div className="tier-amount">
+                      <span className="tier-rs" aria-hidden="true">₹</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        aria-label={`${item.label} – amount`}
+                        placeholder={String(Math.round(standard))}
+                        value={editing ? str(sel.amount) : String(Math.round(standard))}
+                        onChange={(e) => set(item.key, { amount: e.target.value.replace(/\D/g, '') })}
+                        className={custom ? 'is-custom' : ''}
+                      />
+                    </div>
+                  ) : '—'}
+                </td>
               </tr>
             );
           })}

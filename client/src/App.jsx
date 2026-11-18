@@ -57,8 +57,8 @@ export default function App() {
         <Route path="team" element={<SuperadminOnly><Team /></SuperadminOnly>} />
         <Route path="team/:id" element={<SuperadminOnly><TeamMember /></SuperadminOnly>} />
         <Route path="activity" element={<SuperadminOnly><Activity /></SuperadminOnly>} />
-        <Route path="customers" element={<SuperadminOnly><Customers /></SuperadminOnly>} />
-        <Route path="customers/:id" element={<SuperadminOnly><CustomerView /></SuperadminOnly>} />
+        <Route path="customers" element={<Customers />} />
+        <Route path="customers/:id" element={<CustomerView />} />
         <Route path="reports" element={<SuperadminOnly><Reports /></SuperadminOnly>} />
         <Route path="reports/new" element={<SuperadminOnly><GenerateReport /></SuperadminOnly>} />
         <Route path="reports/:id" element={<SuperadminOnly><StoredReport /></SuperadminOnly>} />

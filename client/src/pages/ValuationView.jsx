@@ -9,6 +9,7 @@ import SiteCard from '../components/SiteInfo.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import { DuoBuilding } from '../components/DuoIcons.jsx';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
 
 export default function ValuationView() {
   const { id } = useParams();
@@ -31,7 +32,7 @@ export default function ValuationView() {
   };
 
   const remove = async () => {
-    if (!confirm('Delete this input sheet permanently?')) return;
+    if (!(await confirmDialog({ title: 'Delete this input sheet?', message: 'The sheet and its photos will be removed permanently. This cannot be undone.', confirmLabel: 'Delete input sheet', tone: 'danger', icon: 'trash' }))) return;
     try {
       await api.deleteValuation(id);
       navigate('/valuations', { replace: true });

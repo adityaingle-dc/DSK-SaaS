@@ -12,6 +12,7 @@ import SheetSections from '../components/SheetView.jsx';
 import ReportViewer from '../report/ReportViewer.jsx';
 import SheetEditor, { hydrate } from '../components/SheetEditor.jsx';
 import { propertyLabels, groupByProperty } from '../utils/properties.js';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
 
 // Reports → Generate: ① customer → ② approved input sheet → ③ report type → generate & store
 const STEPS = ['Customer', 'Input sheet', 'Report type', 'Review & generate'];
@@ -157,8 +158,8 @@ export default function GenerateReport() {
     setSheetErrors((errs) => errs.filter((e) => !e.field.startsWith(`${path}.${key}`)));
     setSheetDirty(true);
   };
-  const discardSheet = () => {
-    if (sheetDirty && !confirm('Discard your changes to the input sheet?')) return;
+  const discardSheet = async () => {
+    if (sheetDirty && !(await confirmDialog({ title: 'Discard your changes?', message: 'Your unsaved edits to the input sheet will be lost.', confirmLabel: 'Discard changes', cancelLabel: 'Keep editing', tone: 'danger' }))) return;
     setEditingSheet(false);
     setDraft(null);
     setSheetDirty(false);

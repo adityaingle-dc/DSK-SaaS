@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import ReportViewer from './ReportViewer.jsx';
 import { dateTime } from '../utils/format.js';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
 
 // A stored report from the Reports module: renders the frozen copy taken when it was generated.
 export default function StoredReport() {
@@ -23,7 +24,7 @@ export default function StoredReport() {
   const edited = r.editedAt ? ` · wording edited ${dateTime(r.editedAt)}${r.editedBy?.name ? ` by ${r.editedBy.name}` : ''}` : '';
 
   const remove = async () => {
-    if (!confirm(`Delete ${r.reportNo}? The input sheet is not affected.`)) return;
+    if (!(await confirmDialog({ title: `Delete ${r.reportNo}?`, message: 'The stored report will be removed permanently. The input sheet is not affected.', confirmLabel: 'Delete report', tone: 'danger', icon: 'trash' }))) return;
     try {
       await api.deleteReport(r._id);
       navigate('/reports', { replace: true });

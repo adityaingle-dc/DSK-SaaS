@@ -25,7 +25,7 @@ router.post('/calculate', (req, res) => {
 
 const scope = (user) => (isReviewer(user) ? {} : { evaluator: user._id });
 // customer contact details shared with whoever is working on the valuation (evaluators only ever load their own sheets)
-const CUSTOMER_CONTACT = 'code salutation name phone1 phone2 email houseNo street locality district pincode bankName branch notes';
+const CUSTOMER_CONTACT = 'code contactType pocName pocPhone pocRole serviceRequest salutation name phone1 phone2 email houseNo street locality district pincode bankName branch notes';
 const label = (v) => `${v.referenceNo}${v.summary?.applicantName ? ` (${v.summary.applicantName})` : ''}`;
 
 async function load(req) {

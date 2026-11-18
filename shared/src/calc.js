@@ -114,9 +114,11 @@ function sumTiered(items, selected = {}) {
     const rate = tierRate(item, tier);
     // FIX: per-unit rates (Rs/sq.ft, Rs/rft) are multiplied by quantity instead of being added as lump sums.
     const qty = item.unit ? num(sel.qty) : 1;
-    const amount = rate * qty;
+    // an exact amount entered for the item wins over the grade's standard rate
+    const custom = sel.amount !== undefined && sel.amount !== null && sel.amount !== '' && Number.isFinite(Number(sel.amount));
+    const amount = custom ? Math.max(0, Number(sel.amount)) : rate * qty;
     total += amount;
-    lines.push({ key: item.key, label: item.label, tier, rate, qty: item.unit ? qty : null, unit: item.unit, amount });
+    lines.push({ key: item.key, label: item.label, tier, rate, qty: item.unit ? qty : null, unit: item.unit, amount, custom });
   }
   return { total, lines };
 }

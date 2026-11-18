@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ALLOWED_FILE_TYPES, MAX_FILE_BYTES, MAX_FILES } from '@dsk/shared';
 import { api } from '../api/client.js';
+import { alertDialog, confirmDialog } from './ConfirmDialog.jsx';
 
 const MAX_DIMENSION = 2400; // px – plenty for reading a deed, keeps phone photos ~0.5–1.5 MB
 
@@ -43,7 +44,7 @@ export function FileThumb({ file, onRemove }) {
       w.location.href = await api.fileUrl(file.id);
     } catch (e) {
       w?.close();
-      alert(e.message);
+      alertDialog({ title: "Couldn't open the file", message: e.message });
     }
   };
 
@@ -60,7 +61,7 @@ export function FileThumb({ file, onRemove }) {
   );
 }
 
-export default function FilesInput({ value = [], onChange, accept = 'image/*,application/pdf' }) {
+export default function FilesInput({ value = [], onChange, accept = 'image/*,application/pdf', max = MAX_FILES, noun = 'files per document' }) {
   const pickRef = useRef(null);
   const cameraRef = useRef(null);
   const [uploading, setUploading] = useState(0);
@@ -71,8 +72,8 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
   const addFiles = async (fileList) => {
     setError('');
     const files = [...fileList];
-    const room = MAX_FILES - latest.current.length;
-    if (files.length > room) setError(`Up to ${MAX_FILES} files per document.`);
+    const room = max - latest.current.length;
+    if (files.length > room) setError(`Up to ${max} ${noun}.`);
     for (const original of files.slice(0, Math.max(room, 0))) {
       if (original.type && !ALLOWED_FILE_TYPES.includes(original.type)) {
         setError(`${original.name}: only images (JPG, PNG, WEBP, HEIC) or PDF.`);
@@ -93,8 +94,11 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
     }
   };
 
-  const remove = (id) => {
-    onChange(value.filter((f) => f.id !== id));
+  const remove = async (id) => {
+    const f = value.find((x) => x.id === id);
+    const photo = f?.type?.startsWith('image/');
+    if (!(await confirmDialog({ title: photo ? 'Remove this photo?' : 'Remove this file?', message: `${f?.name || 'It'} will be removed from the input sheet.`, confirmLabel: 'Remove', tone: 'danger', icon: 'trash' }))) return;
+    onChange(latest.current.filter((x) => x.id !== id));
     api.deleteFile(id).catch(() => {}); // succeeds only for files not yet saved on a valuation
   };
 

@@ -119,3 +119,67 @@ a.act-item:hover { background: var(--surface-2); color: var(--ink); }
 @media print {
   .banner, .filters-card { display: none !important; }
 }
+
+/* ---------- phone polish ---------- */
+@media (max-width: 900px) {
+  /* bottom bar: as many equal tabs as there are links (evaluators: Home · Customers · Input Sheets) */
+  .shell:not(.is-super) .tabbar { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; }
+
+  /* customer page: one compact strip instead of five tall cards */
+  .page .kpis.kpis-compact { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .kpis.kpis-compact .kpi { padding: 10px 8px 10px 11px; gap: 2px; min-width: 0; }
+  .kpis.kpis-compact .kpi-value { font-size: 1.15rem; }
+  .kpis.kpis-compact .kpi-label { font-size: 0.62rem; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpis.kpis-compact .kpi:last-child { grid-column: 1 / -1; flex-direction: row; align-items: baseline; justify-content: space-between; }
+  .kpis.kpis-compact .kpi:last-child .kpi-label { order: -1; }
+
+  /* input sheet page: realizable / distress / book value side by side */
+  .hero-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 14px; }
+  .hero-meta span { display: flex; flex-direction: column; gap: 1px; padding: 6px 8px; font-size: 0.7rem; min-width: 0; }
+  .hero-meta strong { margin: 0; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* detail lists: label and value on one line (long values still wrap) */
+  .kv { grid-template-columns: minmax(0, 40%) minmax(0, 1fr); }
+  .kv dt { border-bottom: 1px dashed var(--border); padding: 8px 10px 8px 0; font-size: 0.78rem; }
+  .kv dd { padding: 8px 0; font-size: 0.84rem; overflow-wrap: anywhere; }
+  .kv-row.wide dt { border-bottom: 0; padding-bottom: 2px; }
+}
+@media (max-width: 900px) {
+  /* customer KPI labels: wrap instead of being cut off */
+  .kpis.kpis-compact .kpi-label { white-space: normal; overflow: visible; line-height: 1.2; font-size: 0.6rem; }
+
+  /* input sheet header: shorter customer + site lines */
+  .customer-inline .wa-chip { padding: 4px; }
+  .customer-inline .wa-chip span { display: none; }
+  .customer-inline-note { display: block; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .site-line > span:nth-child(2) { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+}
+@media (max-width: 900px) {
+  .page-header .site-line { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 6px; align-items: start; }
+  .page-header .site-line .site-pin { margin-top: 2px; }
+  .page-header .site-line .site-dir { grid-column: 2; justify-self: start; }
+}
+/* bottom tab bar: room between icon and name, and between the tabs */
+@media (max-width: 900px) {
+  .shell .tabbar { height: calc(68px + env(safe-area-inset-bottom)); padding: 0 6px env(safe-area-inset-bottom); column-gap: 4px; }
+  .shell .tabbar a, .shell .tabbar .tab-more { gap: 5px; padding: 8px 2px 6px; min-width: 0; border-radius: 10px; }
+  .shell .tabbar a span:not(.tab-icon):not(.nav-badge),
+  .shell .tabbar .tab-more span:not(.tab-icon):not(.nav-badge) { font-size: 11px; line-height: 1.15; letter-spacing: 0.01em; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .shell .tabbar a.active { background: var(--blue-50); }
+  .shell .tabbar .tab-more.active { background: var(--blue-50); }
+  .content { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 360px) {
+  .shell .tabbar { padding: 0 2px env(safe-area-inset-bottom); column-gap: 0; }
+  .shell .tabbar a span:not(.tab-icon):not(.nav-badge),
+  .shell .tabbar .tab-more span:not(.tab-icon):not(.nav-badge) { font-size: 10.5px; letter-spacing: 0; }
+}
+@media (max-width: 900px) {
+  /* superadmin's 5 tabs: each as wide as its label, equal space between them */
+  .shell.is-super .tabbar { grid-template-columns: repeat(5, auto); justify-content: space-between; padding: 0 10px env(safe-area-inset-bottom); }
+  .shell.is-super .tabbar a, .shell.is-super .tabbar .tab-more { padding: 8px 8px 6px; }
+}
+@media (max-width: 360px) {
+  .shell.is-super .tabbar { padding: 0 4px env(safe-area-inset-bottom); }
+  .shell.is-super .tabbar a, .shell.is-super .tabbar .tab-more { padding: 8px 5px 6px; }
+}

@@ -489,7 +489,7 @@ function TierTable({ c, title, sub, keys, prefix, startNo = 1 }) {
             return (
               <tr key={x.key}>
                 <td className="c-n">{startNo + i}</td><th>{x.label}</th>
-                <td className="r"><F k={`${prefix}.${x.key}`} v={l ? `${l.qty ? `${num(l.qty)}  Rs.${num(l.rate, 0)} /${l.unit}  ` : ''}${rs(l.amount)}` : ''} /></td>
+                <td className="r"><F k={`${prefix}.${x.key}`} v={l ? `${l.qty && !l.custom ? `${num(l.qty)}  Rs.${num(l.rate, 0)} /${l.unit}  ` : ''}${rs(l.amount)}` : ''} /></td>
               </tr>
             );
           })}
@@ -686,17 +686,23 @@ function KeyPlan({ c }) {
     <>
       <h3 className="ctr">Key Plan Showing the Location of the Property (Google Map Extract)</h3>
       <div className="ref-line"><span>Google Coordinates</span><span>Lat: <F k="kp.lat" v={loc?.lat ?? ''} /></span><span>Lon: <F k="kp.lon" v={loc?.lon ?? ''} /></span></div>
-      {loc ? <KeyPlanMap lat={loc.lat} lon={loc.lon} /> : <div className="placeholder">GPS location not captured in the input sheet.</div>}
+      {loc?.lat !== undefined ? <KeyPlanMap lat={loc.lat} lon={loc.lon} boundary={loc.boundary} /> : <div className="placeholder">GPS location not captured in the input sheet.</div>}
     </>
   );
 }
 
-function Photos({ c }) {
-  const images = c.docs.flatMap((d) => (d.files || []).filter((f) => f.type?.startsWith('image/') && !/hei[cf]/.test(f.type)));
+const PHOTOS_PER_PAGE = 6;
+const printable = (f) => f.type?.startsWith('image/') && !/hei[cf]/.test(f.type);
+export function reportPhotos(c) {
+  return [...(c.p.photos || []), ...c.docs.flatMap((d) => d.files || [])].filter(printable);
+}
+
+function Photos({ c, page = 0, pages = 1 }) {
+  const images = reportPhotos(c).slice(page * PHOTOS_PER_PAGE, (page + 1) * PHOTOS_PER_PAGE);
   return (
     <>
-      <h3 className="ctr">Site Photos (Page 1)</h3>
-      {images.length ? <PhotoGrid files={images} /> : <div className="placeholder">No site photos uploaded.<small>Attach photos in the input sheet (Documents produced → Scans / photos).</small></div>}
+      <h3 className="ctr">Site Photos{pages > 1 ? ` (Page ${page + 1} of ${pages})` : ''}</h3>
+      {images.length ? <PhotoGrid files={images} /> : <div className="placeholder">No site photos uploaded.<small>Add photos in the input sheet (Property location → Site photos).</small></div>}
     </>
   );
 }
@@ -728,8 +734,9 @@ export function sheetsFor(c) {
     { id: 'coc1', el: <CodeOfConduct c={c} part={1} /> },
     { id: 'coc2', el: <CodeOfConduct c={c} part={2} /> },
     { id: 'map', el: <KeyPlan c={c} /> },
-    { id: 'photos', el: <Photos c={c} /> }
   );
+  const pages = Math.max(1, Math.ceil(reportPhotos(c).length / PHOTOS_PER_PAGE));
+  for (let i = 0; i < pages; i++) list.push({ id: i ? `photos${i + 1}` : 'photos', el: <Photos c={c} page={i} pages={pages} /> });
   return list;
 }
 

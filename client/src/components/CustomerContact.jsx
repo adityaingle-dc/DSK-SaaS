@@ -65,6 +65,10 @@ export default function CustomerContactCard({ customer: c, title = 'Customer', b
   const rows = [
     ['Name', [c.salutation, c.name].filter(Boolean).join(' ')],
     ['Phone', c.phone1 && <PhoneActions phone={c.phone1} name={c.name} />],
+    ['Contact person', c.contactType === 'poc' && c.pocName && (
+      <span className="poc-line">{c.pocName}{c.pocRole ? <span className="muted"> · {c.pocRole}</span> : ''}{c.pocPhone && <PhoneActions phone={c.pocPhone} name={c.pocName} />}</span>
+    )],
+    ['Service needed', c.serviceRequest],
     ['Alternate phone', c.phone2 && <PhoneActions phone={c.phone2} name={c.name} />],
     ['Email', c.email && <a href={`mailto:${c.email}`}>{c.email}</a>],
     ['Address', address(c)],
@@ -99,6 +103,7 @@ export function CustomerInline({ customer: c }) {
     <span className="customer-inline">
       For <strong>{c.name}</strong>
       {c.phone1 && <> · <CallLink phone={c.phone1} /> <WhatsAppLink phone={c.phone1} name={c.name} /></>}
+      {!c.phone1 && c.contactType === 'poc' && c.pocPhone && <> · via {c.pocName} <CallLink phone={c.pocPhone} /> <WhatsAppLink phone={c.pocPhone} name={c.pocName} /></>}
       {c.notes && <span className="customer-inline-note"> · {c.notes}</span>}
     </span>
   );

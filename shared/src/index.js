@@ -4,11 +4,14 @@ export * from './calc.js';
 export * from './formSchema.js';
 export * from './validate.js';
 export * from './banks.js';
+export * from './geo.js';
 export { amountInWords } from './words.js';
 
-// All attachment ids referenced anywhere in a sheet (currently: documents produced)
-export const attachmentIds = (data = {}) =>
-  (data.documents?.items || []).flatMap((row) => (row.files || []).map((f) => f.id));
+// All attachment ids referenced anywhere in a sheet: site photos + documents produced
+export const attachmentIds = (data = {}) => [
+  ...(data.property?.photos || []).map((f) => f.id),
+  ...(data.documents?.items || []).flatMap((row) => (row.files || []).map((f) => f.id)),
+];
 
 // Display helpers shared by web + mobile
 export const personName = (p = {}) => [p.salutation, p.name].filter(Boolean).join(' ');

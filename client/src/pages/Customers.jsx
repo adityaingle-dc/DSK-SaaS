@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import { inr } from '../components/StatusBadge.jsx';
 import { initials } from '../components/Layout.jsx';
 import PageHeader from '../components/PageHeader.jsx';
@@ -36,6 +37,7 @@ const address = (c) => [c.locality, c.district].filter(Boolean).join(', ');
 
 export default function Customers() {
   const navigate = useNavigate();
+  const { isSuperadmin } = useAuth();
   const { params, query, update, filtered, clear, apiQuery } = useListParams(DEFAULTS);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -74,7 +76,7 @@ export default function Customers() {
     <div className="page">
       <PageHeader
         icon={DuoContact}
-        title="Customers"
+        title={isSuperadmin ? 'Customers' : 'My customers'}
         actions={(
           <div className="lp-head">
             <SearchBox value={query.q} onSearch={(q) => update({ q }, { replace: true })} label="Search customers" placeholder="Search name, phone, email, locality, district, bank…" />
@@ -170,7 +172,7 @@ export default function Customers() {
                           <span className="avatar soft sm">{initials(c.name)}</span>
                           <span>
                             <span className="name-line"><Link to={`/customers/${c._id}`} onClick={(e) => e.stopPropagation()}><strong>{c.name}</strong></Link>{c.code && <span className="id-code id-inline">{c.code}</span>}</span>
-                            <small className="muted block cell-phone">{c.phone1}{c.phone1 && <WhatsAppLink phone={c.phone1} name={c.name} variant="icon" />}{c.email ? <>&nbsp;· {c.email}</> : ''}</small>
+                            <small className="muted block cell-phone">{c.phone1 || (c.contactType === 'poc' ? <span className="via-poc" title={c.pocRole || 'Contact person'}>via {c.pocName} · {c.pocPhone}</span> : '')}{(c.phone1 || c.pocPhone) && <WhatsAppLink phone={c.phone1 || c.pocPhone} name={c.phone1 ? c.name : c.pocName} variant="icon" />}{c.email ? <>&nbsp;· {c.email}</> : ''}</small>
                           </span>
                         </div>
                       </td>
@@ -194,10 +196,10 @@ export default function Customers() {
                     <span className="avatar soft">{initials(c.name)}</span>
                     <span className="list-main">
                       <strong>{c.name}</strong>
-                      <small>{[c.code, c.phone1, c.district].filter(Boolean).join(' · ')}</small>
+                      <small>{[c.code, c.phone1 || (c.contactType === 'poc' && c.pocName ? `via ${c.pocName}` : ''), c.district].filter(Boolean).join(' · ')}</small>
                     </span>
                     <span className="list-end">
-                      <span className="list-end-row"><WhatsAppLink phone={c.phone1} name={c.name} variant="icon" /><small className="muted">{c.stats.total} input sheet{c.stats.total === 1 ? '' : 's'}</small></span>
+                      <span className="list-end-row"><WhatsAppLink phone={c.phone1 || c.pocPhone} name={c.phone1 ? c.name : c.pocName} variant="icon" /><small className="muted">{c.stats.total} input sheet{c.stats.total === 1 ? '' : 's'}</small></span>
                       <CustomerStage stats={c.stats} />
                     </span>
                   </Link>

@@ -17,10 +17,11 @@ const FLOORS = ['Ground', 'First', 'Second', 'Third', 'Fourth', 'Fifth'];
 const PHONE = { pattern: '^[6-9][0-9]{9}$', patternMessage: 'Enter a 10-digit mobile number' };
 const PIN = { pattern: '^[1-9][0-9]{5}$', patternMessage: 'Enter a 6-digit pincode' };
 
-const choiceFields = (items, { freeTextIfNoOptions = true } = {}) =>
+// radio: show the options as radio buttons instead of a dropdown (same stored value)
+const choiceFields = (items, { freeTextIfNoOptions = true, radio = false } = {}) =>
   items.map((c) =>
     c.options.length || !freeTextIfNoOptions
-      ? { key: c.key, label: c.label, type: 'choice', options: c.options, wide: true }
+      ? { key: c.key, label: c.label, type: 'choice', options: c.options, wide: true, ...(radio ? { widget: 'radio' } : {}) }
       : { key: c.key, label: c.label, type: 'text', wide: true }
   );
 
@@ -92,8 +93,9 @@ export const SECTIONS = [
       { key: 'district', label: 'District', type: 'text' },
       { key: 'pincode', label: 'Pincode', type: 'text', ...PIN },
       { key: 'landmark', label: 'Landmark', type: 'text', wide: true },
-      { key: 'location', label: 'GPS location', type: 'latlon', wide: true, hint: 'Paste "lat, lon" from Google Maps or use device location' },
+      { key: 'location', label: 'GPS location & plot boundary', type: 'latlon', wide: true, minPoints: 10, hint: 'Tap at least 10 points around the plot on the map: the centre becomes the GPS location' },
       { key: 'siteShape', label: 'Site shape', type: 'select', options: L.siteShape },
+      { key: 'photos', label: 'Site photos', type: 'files', accept: 'image/*', imagesOnly: true, maxFiles: 24, wide: true, hint: 'Front view, road, surroundings, boundaries, inside. Take them with the camera or pick from the gallery. They go into the report.' },
     ],
   },
   {
@@ -111,6 +113,8 @@ export const SECTIONS = [
           { key: 'dimDeed', label: 'Dimension (document)' },
           { key: 'dimActual', label: 'Dimension (actual)' },
         ],
+        // shown as two tables: boundary columns on top, dimension columns below
+        splitColumns: 2,
         wide: true,
       },
     ],
@@ -162,7 +166,7 @@ export const SECTIONS = [
     title: 'Site characteristics',
     when: (ctx) => ctx.kind !== 'flat',
     fields: [
-      ...choiceFields(catalog.siteCharacteristics),
+      ...choiceFields(catalog.siteCharacteristics, { radio: true }),
       { key: 'advantages', label: 'Advantages of the site', type: 'multiselect', options: catalog.siteAdvantageOptions.filter((o) => o !== 'Nil'), wide: true },
       { key: 'disadvantages', label: 'Disadvantages of the site', type: 'textarea', wide: true, default: 'Nil' },
       { key: 'specialRemarks', label: 'Special remarks (threat of acquisition, road widening, etc.)', type: 'textarea', wide: true },
@@ -197,7 +201,7 @@ export const SECTIONS = [
     path: 'building',
     title: 'Building characteristics & specifications',
     when: (ctx) => ctx.kind === 'building',
-    fields: [...choiceFields(catalog.buildingCharacteristics), ...choiceFields(catalog.buildingApproval), ...choiceFields(catalog.buildingSpecs)],
+    fields: [...choiceFields(catalog.buildingCharacteristics, { radio: true }), ...choiceFields(catalog.buildingApproval, { radio: true }), ...choiceFields(catalog.buildingSpecs, { radio: true })],
   },
   {
     key: 'amenities',

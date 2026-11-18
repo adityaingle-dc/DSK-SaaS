@@ -143,7 +143,7 @@ export default function Layout() {
         <nav className="side-nav">
           <div className="nav-section">Workspace</div>
           <NavLink to="/" end><DuoHome size={19} /> Dashboard {taskBadge}</NavLink>
-          {isSuperadmin && <NavLink to="/customers"><DuoContact size={19} /> Customers</NavLink>}
+          <NavLink to="/customers"><DuoContact size={19} /> {isSuperadmin ? 'Customers' : 'My customers'}</NavLink>
           <NavLink to="/valuations" end><DuoList size={19} /> Input Sheets</NavLink>
           {isSuperadmin && <NavLink to="/reports"><DuoSheet size={19} /> Reports</NavLink>}
           {isSuperadmin && (
@@ -174,7 +174,10 @@ export default function Layout() {
             </button>
           </>
         ) : (
-          <NavLink to="/valuations" end><DuoList size={22} /><span>Input Sheets</span></NavLink>
+          <>
+            <NavLink to="/customers"><DuoContact size={22} /><span>Customers</span></NavLink>
+            <NavLink to="/valuations" end><DuoList size={22} /><span>Input Sheets</span></NavLink>
+          </>
         )}
       </nav>
       {isSuperadmin && <MoreSheet open={moreOpen} onClose={closeMore} items={moreItems} user={user} logout={logout} />}

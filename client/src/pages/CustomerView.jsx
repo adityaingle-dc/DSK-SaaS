@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { REPORT_TEMPLATES } from '@dsk/shared';
 import { api } from '../api/client.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import StatusBadge, { inr } from '../components/StatusBadge.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import Segmented from '../components/Segmented.jsx';
@@ -14,6 +15,7 @@ import { CustomerStage } from './Customers.jsx';
 import { dateTime, timeAgo } from '../utils/format.js';
 import { PhoneActions, WhatsAppLink } from '../components/CustomerContact.jsx';
 import { groupByProperty, propertyLabels } from '../utils/properties.js';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
 
 const fullAddress = (c) => [c.houseNo, c.street, c.locality, c.district, c.pincode].filter(Boolean).join(', ');
 const fmv = (v) => (v.summary?.fairMarketValue > 0 ? inr(v.summary.fairMarketValue) : '—');
@@ -31,6 +33,7 @@ function Info({ label, children }) {
 export default function CustomerView() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { isSuperadmin } = useAuth();
   const [params, setParams] = useSearchParams();
   const [state, setState] = useState(null);
   const [error, setError] = useState('');
@@ -59,7 +62,7 @@ export default function CustomerView() {
   const setTab = (t) => setParams(t === 'profile' ? {} : { tab: t }, { replace: true });
 
   const remove = async () => {
-    if (!confirm(`Delete ${c.name}? This cannot be undone.`)) return;
+    if (!(await confirmDialog({ title: `Delete ${c.name}?`, message: 'The customer record will be removed permanently. This cannot be undone.', confirmLabel: 'Delete customer', tone: 'danger', icon: 'trash' }))) return;
     try {
       await api.deleteCustomer(c._id);
       navigate('/customers', { replace: true }); // the deleted customer's page must not stay in history
@@ -77,10 +80,10 @@ export default function CustomerView() {
         back={{ to: '/customers', label: 'Customers' }}
         title={c.name}
         meta={<CustomerStage stats={stats} />}
-        subtitle={[c.code, c.phone1, c.district, c.source].filter(Boolean).join(' · ')}
+        subtitle={[c.code, c.phone1 || (c.contactType === 'poc' && c.pocName ? `via ${c.pocName}` : ''), c.district, c.source].filter(Boolean).join(' · ')}
         actions={
           <div className="actions">
-            {valuations.length === 0 && <button className="btn danger" onClick={remove}>Delete</button>}
+            {isSuperadmin && valuations.length === 0 && <button className="btn danger" onClick={remove}>Delete</button>}
             <button className="btn" onClick={() => setModal('edit')}>Edit</button>
             <WhatsAppLink phone={c.phone1} name={c.name} variant="button" />
             {startButton}
@@ -95,7 +98,7 @@ export default function CustomerView() {
       )}
       {error && <div className="alert">{error}</div>}
 
-      <div className="kpis">
+      <div className="kpis kpis-compact">
         <div className="kpi"><div className="kpi-value">{properties.filter((g) => g.identified).length}</div><div className="kpi-label">Properties</div></div>
         <div className="kpi"><div className="kpi-value">{stats.total}</div><div className="kpi-label">Input sheets</div></div>
         <div className="kpi tone-amber"><div className="kpi-value">{stats.open}</div><div className="kpi-label">In progress</div></div>
@@ -110,7 +113,7 @@ export default function CustomerView() {
           { value: 'profile', label: 'Profile' },
           { value: 'properties', label: 'Properties', badge: <span className="tab-num">{properties.filter((g) => g.identified).length}</span> },
           { value: 'sheets', label: 'Input sheets', badge: <span className="tab-num">{valuations.length}</span> },
-          { value: 'reports', label: 'Reports', badge: <span className="tab-num">{reports.length}</span> },
+          ...(isSuperadmin ? [{ value: 'reports', label: 'Reports', badge: <span className="tab-num">{reports.length}</span> }] : []),
         ]}
         value={tab}
         onChange={setTab}
@@ -122,7 +125,12 @@ export default function CustomerView() {
             <h2>Contact details</h2>
             <dl className="kv">
               <Info label="Name">{[c.salutation, c.name].filter(Boolean).join(' ')}</Info>
-              <Info label="Phone"><PhoneActions phone={c.phone1} name={c.name} /></Info>
+              {c.contactType === 'poc' && (
+                <Info label="Contact person">
+                  <span className="poc-line">{c.pocName}{c.pocRole ? <span className="muted"> · {c.pocRole}</span> : ''}{c.pocPhone && <PhoneActions phone={c.pocPhone} name={c.pocName} />}</span>
+                </Info>
+              )}
+              <Info label="Phone">{c.phone1 ? <PhoneActions phone={c.phone1} name={c.name} /> : <span className="muted">Not given</span>}</Info>
               <Info label="Alternate phone">{c.phone2 && <PhoneActions phone={c.phone2} name={c.name} />}</Info>
               <Info label="Email">{c.email && <a href={`mailto:${c.email}`}>{c.email}</a>}</Info>
               <Info label="Address">{fullAddress(c)}</Info>
@@ -133,6 +141,7 @@ export default function CustomerView() {
           <section className="card">
             <h2>Valuation request</h2>
             <dl className="kv">
+              <Info label="Service needed">{c.serviceRequest}</Info>
               <Info label="Bank">{c.bankName}</Info>
               <Info label="Branch">{c.branch}</Info>
               <Info label="Came via">{c.source}</Info>
@@ -213,7 +222,7 @@ export default function CustomerView() {
         </section>
       ))}
 
-      {tab === 'reports' && (
+      {tab === 'reports' && isSuperadmin && (
         <section className="card flush">
           <div className="card-head">
             <h2>Generated reports</h2>
@@ -258,6 +267,8 @@ export default function CustomerView() {
           initialFrom={assignFrom}
           onClose={() => setModal(null)}
           onAssigned={(r) => {
+            // evaluators go straight into their new sheet
+            if (!isSuperadmin) return navigate(`/valuations/${r._id}/edit`);
             setModal(null);
             setNotice({ id: r._id, text: `Input sheet ${r.referenceNo} created and assigned to ${r.evaluator.name}.` });
             setTab('sheets');

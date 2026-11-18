@@ -23,9 +23,19 @@ export function display(field, v) {
       return <div className="thumbs">{v.map((f) => <FileThumb key={f.id} file={f} />)}</div>;
     case 'latlon':
       return (
-        <a target="_blank" rel="noreferrer" href={`https://www.google.com/maps/search/?api=1&query=${v.lat},${v.lon}`}>
-          {v.lat}, {v.lon}
-        </a>
+        <span className="latlon-view">
+          {v.lat !== undefined && (
+            <a target="_blank" rel="noreferrer" href={`https://www.google.com/maps/search/?api=1&query=${v.lat},${v.lon}`}>
+              {v.lat}, {v.lon}
+            </a>
+          )}
+          {v.boundary?.length > 0 && (
+            <small className="muted block">
+              Boundary: {v.boundary.length} points
+              {v.areaSqm ? ` · ≈ ${Math.round(v.areaSqm * 10.7639).toLocaleString('en-IN')} sq.ft (${Math.round(v.areaSqm * 1.19599).toLocaleString('en-IN')} sq.yd)` : ''}
+            </small>
+          )}
+        </span>
       );
     case 'table':
       return (
@@ -45,7 +55,7 @@ export function display(field, v) {
       return (
         <ul className="plain">
           {field.items.filter((i) => v[i.key]).map((i) => (
-            <li key={i.key}>{i.label}: {field.tiers[v[i.key].tier]}{i.unit && v[i.key].qty ? ` × ${v[i.key].qty} ${i.unit}` : ''}</li>
+            <li key={i.key}>{i.label}: {field.tiers[v[i.key].tier]}{i.unit && v[i.key].qty ? ` × ${v[i.key].qty} ${i.unit}` : ''}{v[i.key].amount !== undefined ? ` · ${inr(v[i.key].amount)}` : ''}</li>
           ))}
         </ul>
       );

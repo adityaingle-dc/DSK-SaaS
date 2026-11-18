@@ -8,31 +8,125 @@ import { parseLatLon } from './SiteInfo.jsx';
 import SearchBox from './SearchBox.jsx';
 import { groupByProperty } from '../utils/properties.js';
 import { IconChevron, IconPlus } from './Icons.jsx';
-import { ROLE_LABELS } from '../context/AuthContext.jsx';
+import { ROLE_LABELS, useAuth } from '../context/AuthContext.jsx';
 
 const applicantOptions = (key) => SECTIONS.find((s) => s.key === 'applicant')?.fields.find((f) => f.key === key)?.options || [];
-export const CUSTOMER_SOURCES = ['Walk-in', 'Phone call', 'Bank referral', 'Existing customer', 'Website', 'Other'];
+export const CUSTOMER_SOURCES = ['Walk-in', 'Phone call', 'Bank referral', 'Existing customer', 'Website', 'Contact person', 'Other'];
+export const SERVICE_REQUESTS = ['Home loan valuation', 'Loan against property', 'Plot / land valuation', 'Construction stage valuation', 'Purchase / resale valuation', 'Other'];
 
+const POC_ROLES = ['Agent / broker', 'Bank officer', 'Builder', 'Relative', 'Other'];
 const EMPTY = {
+  contactType: 'individual', pocName: '', pocPhone: '', pocRole: '',
   salutation: 'Sri.', name: '', relation: '', relativeName: '', occupation: '', phone1: '', phone2: '', email: '',
-  houseNo: '', street: '', locality: '', district: '', pincode: '', bankName: '', branch: '', source: 'Phone call', notes: '',
+  houseNo: '', street: '', locality: '', district: '', pincode: '', bankName: '', branch: '', source: 'Phone call', serviceRequest: '', notes: '',
+};
+// fields kept under "More details" (open automatically when editing a customer who has any of them)
+const MORE = ['phone2', 'email', 'bankName', 'branch', 'houseNo', 'street', 'locality', 'district', 'pincode', 'occupation', 'relation', 'relativeName'];
+const mobileOk = (v) => /^[6-9][0-9]{9}$/.test(String(v || '').replace(/\D/g, '').slice(-10));
+
+// what the user typed in the search becomes the new person's name or phone
+const newPocFrom = (typed) => {
+  const t = String(typed || '').trim();
+  const digits = t.replace(/\D/g, '');
+  return digits.length >= 6 && digits.length === t.replace(/[\s+\-()]/g, '').length ? { pocName: '', pocPhone: t, pocRole: '' } : { pocName: t, pocPhone: '', pocRole: '' };
 };
 
-// Add / edit a customer. On a duplicate phone the server answers 409 with the existing customer's id.
+// search the contact persons used before; pick one, or add a new one
+function PocPicker({ selected, tried, onPick, onClear, onNew }) {
+  const [q, setQ] = useState('');
+  const [items, setItems] = useState(null);
+  const [active, setActive] = useState(0);
+  useEffect(() => {
+    if (selected) return undefined;
+    let live = true;
+    const t = setTimeout(() => api.listPocs(q.trim()).then((r) => live && (setItems(r.items), setActive(0))).catch(() => live && setItems([])), q ? 200 : 0);
+    return () => { live = false; clearTimeout(t); };
+  }, [q, selected]);
+
+  if (selected) {
+    return (
+      <div className="poc-chosen">
+        <span className="poc-avatar" aria-hidden="true">{(selected.pocName || '?').trim()[0]?.toUpperCase()}</span>
+        <div className="poc-chosen-text">
+          <strong>{selected.pocName}</strong>
+          <small className="muted">{[selected.pocPhone, selected.pocRole].filter(Boolean).join(' · ')}</small>
+        </div>
+        <button type="button" className="btn small" onClick={onClear}>Change</button>
+      </div>
+    );
+  }
+
+  const list = items || [];
+  const total = list.length + 1; // + "add new" row
+  const choose = (i) => (i < list.length ? onPick(list[i]) : onNew(q));
+  const onKey = (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => (a + 1) % total); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => (a - 1 + total) % total); }
+    else if (e.key === 'Enter') { e.preventDefault(); choose(active); }
+  };
+  return (
+    <div className={`poc-picker${tried ? ' has-error' : ''}`}>
+      <input
+        autoFocus
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onKeyDown={onKey}
+        placeholder="Search by name or phone"
+        aria-label="Search contact persons"
+      />
+      <ul className="poc-list" role="listbox">
+        {items === null && <li className="poc-empty muted">Loading…</li>}
+        {list.map((x, i) => (
+          <li key={x.pocPhone} role="option" aria-selected={i === active} className={i === active ? 'on' : ''} onMouseEnter={() => setActive(i)} onMouseDown={(e) => { e.preventDefault(); choose(i); }}>
+            <span className="poc-avatar" aria-hidden="true">{(x.pocName || '?').trim()[0]?.toUpperCase()}</span>
+            <span className="poc-main"><strong>{x.pocName}</strong><small className="muted">{[x.pocPhone, x.pocRole].filter(Boolean).join(' · ')}</small></span>
+            <small className="poc-count muted">{x.customers} customer{x.customers === 1 ? '' : 's'}</small>
+          </li>
+        ))}
+        {items && !list.length && <li className="poc-empty muted">{q ? 'No contact person matches.' : 'No contact persons yet.'}</li>}
+        <li role="option" aria-selected={active === list.length} className={`poc-new${active === list.length ? ' on' : ''}`} onMouseEnter={() => setActive(list.length)} onMouseDown={(e) => { e.preventDefault(); choose(list.length); }}>
+          <span className="poc-avatar plus" aria-hidden="true">+</span>
+          <span className="poc-main"><strong>Add new contact person{q.trim() ? `: ${q.trim()}` : ''}</strong></span>
+        </li>
+      </ul>
+      {tried && <small className="field-error">Choose a contact person or add a new one</small>}
+    </div>
+  );
+}
+
+// Add / edit a customer: an individual, or a customer brought by a contact person (POC).
+// Only the essentials are shown; everything else sits under "More details".
 export function CustomerFormModal({ customer, onClose, onSaved }) {
-  const [form, setForm] = useState(() => ({ ...EMPTY, ...(customer || {}) }));
+  const [form, setForm] = useState(() => ({ ...EMPTY, ...(customer || {}), contactType: customer?.contactType || 'individual' }));
+  const [more, setMore] = useState(() => MORE.some((k) => customer?.[k]));
+  const [tried, setTried] = useState(false);
   const [error, setError] = useState('');
   const [dupeId, setDupeId] = useState(null);
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const poc = form.contactType === 'poc';
+  // pick from previous contact persons, or type a new one (editing a saved POC customer starts on its saved person)
+  const [pocMode, setPocMode] = useState('pick');
+
+  const errors = {
+    name: !form.name.trim() ? (poc ? "Customer's name is required" : 'Full name is required') : null,
+    phone1: poc ? (form.phone1 && !mobileOk(form.phone1) ? 'Enter a 10-digit mobile number' : null) : !mobileOk(form.phone1) ? 'Enter a 10-digit mobile number' : null,
+    pocName: poc && !form.pocName.trim() ? "Contact person's name is required" : null,
+    pocPhone: poc && !mobileOk(form.pocPhone) ? 'Enter a 10-digit mobile number' : null,
+    serviceRequest: !poc && !form.serviceRequest ? 'Choose the service needed' : null,
+  };
+  const show = (k) => tried && errors[k];
 
   const submit = async (e) => {
     e.preventDefault();
+    setTried(true);
+    if (Object.values(errors).some(Boolean)) return;
     setError('');
     setDupeId(null);
     setBusy(true);
     try {
       const payload = Object.fromEntries(Object.keys(EMPTY).map((k) => [k, form[k] ?? '']));
+      if (!poc) Object.assign(payload, { pocName: '', pocPhone: '', pocRole: '' });
       const saved = customer ? await api.updateCustomer(customer._id, payload) : await api.createCustomer(payload);
       onSaved(saved);
     } catch (err) {
@@ -43,9 +137,17 @@ export function CustomerFormModal({ customer, onClose, onSaved }) {
     }
   };
 
+  const field = (k, label, input, { required } = {}) => (
+    <label className={show(k) ? 'has-error' : ''}>
+      <span>{label}{required && <span className="req"> *</span>}</span>
+      {input}
+      {show(k) && <small className="field-error">{errors[k]}</small>}
+    </label>
+  );
+
   return (
     <Modal title={customer ? 'Edit customer' : 'Add customer'} onClose={onClose}>
-      <form className="stack customer-form" onSubmit={submit}>
+      <form className="stack customer-form" onSubmit={submit} noValidate>
         {error && (
           <div className="alert">
             {error}
@@ -53,80 +155,115 @@ export function CustomerFormModal({ customer, onClose, onSaved }) {
           </div>
         )}
 
+        <div className="ctype" role="radiogroup" aria-label="Customer type">
+          {[['individual', 'Individual', 'The customer contacts us directly'], ['poc', 'Through a contact person', 'An agent, bank officer, builder or relative brings them']].map(([v, t, d]) => (
+            <label key={v} className={`ctype-opt${form.contactType === v ? ' on' : ''}`}>
+              <input type="radio" name="contactType" checked={form.contactType === v} onChange={() => setForm((f) => ({ ...f, contactType: v, source: v === 'individual' && f.source === 'Contact person' ? 'Phone call' : f.source }))} />
+              <strong>{t}</strong>
+              <small>{d}</small>
+            </label>
+          ))}
+        </div>
+
+        {poc && (
+          <fieldset>
+            <legend>Contact person</legend>
+            {pocMode === 'pick' ? (
+              <PocPicker
+                selected={form.pocPhone ? form : null}
+                tried={tried}
+                onPick={(x) => setForm((f) => ({ ...f, pocName: x.pocName, pocPhone: x.pocPhone, pocRole: x.pocRole || '' }))}
+                onClear={() => setForm((f) => ({ ...f, pocName: '', pocPhone: '', pocRole: '' }))}
+                onNew={(typed) => { setPocMode('new'); setForm((f) => ({ ...f, ...newPocFrom(typed) })); }}
+              />
+            ) : (
+              <>
+                <div className="row">
+                  {field('pocName', 'Name', <input autoFocus value={form.pocName} onChange={set('pocName')} placeholder="Who brought the customer" />, { required: true })}
+                  {field('pocPhone', 'Phone', <input type="tel" inputMode="tel" value={form.pocPhone} onChange={set('pocPhone')} placeholder="10-digit mobile" />, { required: true })}
+                </div>
+                <label>Role
+                  <select value={form.pocRole} onChange={set('pocRole')}>
+                    <option value="">—</option>
+                    {POC_ROLES.map((o) => <option key={o}>{o}</option>)}
+                  </select>
+                </label>
+                <button type="button" className="link-btn" onClick={() => { setPocMode('pick'); setForm((f) => ({ ...f, pocName: '', pocPhone: '', pocRole: '' })); }}>← Choose a previous contact person</button>
+              </>
+            )}
+          </fieldset>
+        )}
+
         <fieldset>
-          <legend>Contact</legend>
+          <legend>{poc ? 'Customer' : 'Contact'}</legend>
           <div className="row salute-row">
             <label>Title
               <select value={form.salutation} onChange={set('salutation')}>
                 {applicantOptions('salutation').map((o) => <option key={o}>{o}</option>)}
               </select>
             </label>
-            <label><span>Full name <span className="req">*</span></span>
-              <input required autoFocus value={form.name} onChange={set('name')} placeholder="e.g. Ramesh Kulkarni" />
-            </label>
+            {field('name', 'Full name', <input autoFocus={!poc} value={form.name} onChange={set('name')} placeholder="e.g. Ramesh Kulkarni" />, { required: true })}
           </div>
-          <div className="row">
-            <label><span>Phone <span className="req">*</span></span>
-              <input required type="tel" inputMode="tel" value={form.phone1} onChange={set('phone1')} placeholder="10-digit mobile" />
-            </label>
-            <label>Alternate phone
-              <input type="tel" inputMode="tel" value={form.phone2} onChange={set('phone2')} />
-            </label>
-          </div>
-          <label>Email
-            <input type="email" value={form.email} onChange={set('email')} placeholder="name@example.com" />
-          </label>
-        </fieldset>
-
-        <fieldset>
-          <legend>Valuation request</legend>
-          <div className="row">
-            <label>Bank
-              <input value={form.bankName} onChange={set('bankName')} placeholder="Bank receiving the report" list="bank-suggestions" />
-            </label>
-            <label>Branch
-              <input value={form.branch} onChange={set('branch')} />
-            </label>
-          </div>
-          <datalist id="bank-suggestions">
-            {['Canara Bank', 'State Bank of India', 'Union Bank of India', 'Bank of Baroda', 'Indian Bank', 'Bank of Maharashtra'].map((b) => <option key={b} value={b} />)}
-          </datalist>
-          <label>How did they reach us?
-            <select value={form.source} onChange={set('source')}>
-              {CUSTOMER_SOURCES.map((o) => <option key={o}>{o}</option>)}
-            </select>
-          </label>
+          {field('phone1', poc ? 'Customer phone (optional)' : 'Phone', <input type="tel" inputMode="tel" value={form.phone1} onChange={set('phone1')} placeholder="10-digit mobile" />, { required: !poc })}
+          {!poc && (
+            <div className="row">
+              {field('serviceRequest', 'Service needed', (
+                <select value={form.serviceRequest} onChange={set('serviceRequest')}>
+                  <option value="">Choose…</option>
+                  {SERVICE_REQUESTS.map((o) => <option key={o}>{o}</option>)}
+                </select>
+              ), { required: true })}
+              <label>How did they reach us?
+                <select value={form.source} onChange={set('source')}>
+                  {CUSTOMER_SOURCES.filter((o) => o !== 'Contact person').map((o) => <option key={o}>{o}</option>)}
+                </select>
+              </label>
+            </div>
+          )}
           <label>Notes
-            <textarea rows={3} value={form.notes} onChange={set('notes')} placeholder="What they asked for, property details, preferred visit time…" />
+            <textarea rows={2} value={form.notes} onChange={set('notes')} placeholder="What they asked for, property, preferred visit time…" />
           </label>
         </fieldset>
 
-        <fieldset>
-          <legend>Address</legend>
-          <div className="row">
-            <label>Plot / H.No.<input value={form.houseNo} onChange={set('houseNo')} /></label>
-            <label>Road / street / colony<input value={form.street} onChange={set('street')} /></label>
+        <details className="more-details" open={more} onToggle={(e) => setMore(e.currentTarget.open)}>
+          <summary>More details <span className="muted small">(optional: email, bank, address…)</span></summary>
+          <div className="stack">
+            <div className="row">
+              <label>Alternate phone<input type="tel" inputMode="tel" value={form.phone2} onChange={set('phone2')} /></label>
+              <label>Email<input type="email" value={form.email} onChange={set('email')} placeholder="name@example.com" /></label>
+            </div>
+            <div className="row">
+              <label>Bank<input value={form.bankName} onChange={set('bankName')} placeholder="Bank receiving the report" list="bank-suggestions" /></label>
+              <label>Branch<input value={form.branch} onChange={set('branch')} /></label>
+            </div>
+            <datalist id="bank-suggestions">
+              {['Canara Bank', 'State Bank of India', 'Union Bank of India', 'Bank of Baroda', 'Indian Bank', 'Bank of Maharashtra'].map((x) => <option key={x} value={x} />)}
+            </datalist>
+            <div className="row">
+              <label>Plot / H.No.<input value={form.houseNo} onChange={set('houseNo')} /></label>
+              <label>Road / street / colony<input value={form.street} onChange={set('street')} /></label>
+            </div>
+            <div className="row">
+              <label>Village / mandal / municipality<input value={form.locality} onChange={set('locality')} /></label>
+              <label>District<input value={form.district} onChange={set('district')} /></label>
+            </div>
+            <div className="row">
+              <label>Pincode<input inputMode="numeric" maxLength={6} value={form.pincode} onChange={set('pincode')} /></label>
+              <label>Occupation<input value={form.occupation} onChange={set('occupation')} /></label>
+            </div>
+            <div className="row">
+              <label>Relation
+                <select value={form.relation} onChange={set('relation')}>
+                  <option value="">—</option>
+                  {applicantOptions('relation').map((o) => <option key={o}>{o}</option>)}
+                </select>
+              </label>
+              <label>Father / husband name<input value={form.relativeName} onChange={set('relativeName')} /></label>
+            </div>
           </div>
-          <div className="row">
-            <label>Village / mandal / municipality<input value={form.locality} onChange={set('locality')} /></label>
-            <label>District<input value={form.district} onChange={set('district')} /></label>
-          </div>
-          <div className="row">
-            <label>Pincode<input inputMode="numeric" value={form.pincode} onChange={set('pincode')} /></label>
-            <label>Occupation<input value={form.occupation} onChange={set('occupation')} /></label>
-          </div>
-          <div className="row">
-            <label>Relation
-              <select value={form.relation} onChange={set('relation')}>
-                <option value="">—</option>
-                {applicantOptions('relation').map((o) => <option key={o}>{o}</option>)}
-              </select>
-            </label>
-            <label>Father / husband name<input value={form.relativeName} onChange={set('relativeName')} /></label>
-          </div>
-        </fieldset>
+        </details>
 
-        <p className="muted small">These details are copied into the input sheet when you start an input sheet for this customer.</p>
+        <p className="muted small">These details are copied into the input sheet when you start one for this customer.</p>
         <div className="actions">
           <button type="button" className="btn" onClick={onClose} disabled={busy}>Cancel</button>
           <button className="btn primary" disabled={busy}>{busy ? 'Saving…' : customer ? 'Save changes' : 'Add customer'}</button>
@@ -139,8 +276,11 @@ export function CustomerFormModal({ customer, onClose, onSaved }) {
 // The "new input sheet" form: which property, its site address, and who fills it in.
 // Renders its own sticky footer (Back / Cancel · Create & assign).
 function AssignForm({ customer, properties = [], initialFrom = '', onAssigned, onBack, onCancel }) {
-  const [people, setPeople] = useState(null);
-  const [pick, setPick] = useState('');
+  const { user, isSuperadmin } = useAuth();
+  // evaluators start the sheet for themselves: no "assign to" choice
+  const self = !isSuperadmin;
+  const [people, setPeople] = useState(self ? [user] : null);
+  const [pick, setPick] = useState(self ? user?._id || user?.id || 'me' : '');
   const [from, setFrom] = useState(initialFrom);
   const known = properties.filter((g) => g.identified);
   // site address for a new property (what the evaluator will visit)
@@ -155,6 +295,7 @@ function AssignForm({ customer, properties = [], initialFrom = '', onAssigned, o
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    if (self) return;
     api.listUsers({ status: 'active' })
       .then((r) => {
         const order = { evaluator: 0, admin: 1, superadmin: 2 };
@@ -228,7 +369,7 @@ function AssignForm({ customer, properties = [], initialFrom = '', onAssigned, o
         </section>
       )}
 
-      <section className="nv-section">
+      {!self && <section className="nv-section">
         <h3 className="nv-section-title"><span>{++n}</span> Assign to</h3>
         {!people ? (
           <div className="skeleton" style={{ height: 120 }} />
@@ -250,13 +391,13 @@ function AssignForm({ customer, properties = [], initialFrom = '', onAssigned, o
           </div>
         )}
         {tried && !pick && people?.length > 0 && <span className="error-text">Choose who will fill in the input sheet.</span>}
-      </section>
+      </section>}
 
       <div className="nv-foot">
         {onBack
           ? <button type="button" className="btn" onClick={onBack} disabled={busy}>‹ Back</button>
           : <button type="button" className="btn" onClick={onCancel} disabled={busy}>Cancel</button>}
-        <button type="button" className="btn primary" onClick={assign} disabled={busy || !people?.length}>{busy ? 'Creating…' : 'Create & assign'}</button>
+        <button type="button" className="btn primary" onClick={assign} disabled={busy || !people?.length}>{busy ? 'Creating…' : self ? 'Create input sheet' : 'Create & assign'}</button>
       </div>
     </div>
   );

@@ -111,6 +111,7 @@ export const api = {
   deleteCustomer: (id) => request(`/customers/${id}`, { method: 'DELETE' }),
   startCustomerValuation: (id, evaluator, fromValuation, site) => request(`/customers/${id}/valuations`, { method: 'POST', body: { evaluator, fromValuation, site } }),
   importCustomers: () => request('/customers/import', { method: 'POST' }),
+  listPocs: (q) => request('/customers/pocs', { query: q ? { q } : {} }),
 
   myTasks: () => request('/valuations/tasks'),
   stats: (query) => request('/valuations/stats', { query }),

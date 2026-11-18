@@ -49,6 +49,11 @@ export async function syncAttachments(valuation, user) {
     if (linkedHere || free) allowed.set(String(a._id), a);
   }
 
+  const prop = valuation.data.property;
+  if (prop?.photos) {
+    prop.photos = prop.photos.filter((f) => allowed.has(f.id)).map((f) => allowed.get(f.id).toRef());
+    if (!prop.photos.length) delete prop.photos;
+  }
   for (const row of valuation.data.documents?.items || []) {
     if (!row.files) continue;
     row.files = row.files.filter((f) => allowed.has(f.id)).map((f) => allowed.get(f.id).toRef());

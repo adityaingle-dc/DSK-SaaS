@@ -4,6 +4,7 @@ import { ReportCtx } from './Field.jsx';
 import { Sheet, buildContext, sheetsFor } from './sheets.jsx';
 import BackLink from '../components/BackLink.jsx';
 import './report.css';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
 
 // Renders a bank report (A4 sheets) with fit-to-screen preview, superadmin wording edits and printing.
 // Used for the live preview of a valuation and for stored reports in the Reports module.
@@ -100,7 +101,9 @@ export default function ReportViewer({ doc, overrides: savedProp, onSave, back, 
       setSaving(false);
     }
   };
-  const resetAll = () => { if (confirm('Discard all edits on this report and go back to the calculated values?')) setDraft({}); };
+  const resetAll = async () => {
+    if (await confirmDialog({ title: 'Reset all report edits?', message: 'All wording and figure edits on this report will be discarded and the calculated values used again.', confirmLabel: 'Reset edits', cancelLabel: 'Keep edits', tone: 'danger' })) setDraft({});
+  };
   const print = () => { setEditing(false); setTimeout(() => window.print(), 50); };
 
   // read-only preview (e.g. Reports → Generate, step 3): just the sheets, scaled to the container

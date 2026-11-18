@@ -10,7 +10,20 @@ function tileXY(lat, lon, z) {
   return { x, y };
 }
 
-export default function KeyPlanMap({ lat, lon, zoom = 17, width = 680, height = 380 }) {
+// zoom so the whole plot fits the frame (plots are small: usually 18–19)
+function fitZoom(boundary, width, height, fallback) {
+  if (!boundary?.length) return fallback;
+  for (let z = 19; z >= 14; z--) {
+    const pts = boundary.map((p) => tileXY(p.lat, p.lon, z));
+    const w = (Math.max(...pts.map((p) => p.x)) - Math.min(...pts.map((p) => p.x))) * TILE;
+    const h = (Math.max(...pts.map((p) => p.y)) - Math.min(...pts.map((p) => p.y))) * TILE;
+    if (w < width * 0.6 && h < height * 0.6) return z;
+  }
+  return 14;
+}
+
+export default function KeyPlanMap({ lat, lon, boundary, zoom: zoomIn = 17, width = 680, height = 380 }) {
+  const zoom = fitZoom(boundary, width, height, zoomIn);
   const { x, y } = tileXY(Number(lat), Number(lon), zoom);
   const cols = Math.ceil(width / TILE) + 1;
   const rows = Math.ceil(height / TILE) + 1;
@@ -36,6 +49,14 @@ export default function KeyPlanMap({ lat, lon, zoom = 17, width = 680, height = 
             referrerPolicy="no-referrer"
           />
         ))}
+        {boundary?.length >= 3 && (
+          <svg className="keyplan-outline" width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+            <polygon
+              points={boundary.map((p) => { const t = tileXY(p.lat, p.lon, zoom); return `${(width / 2 + (t.x - x) * TILE).toFixed(1)},${(height / 2 + (t.y - y) * TILE).toFixed(1)}`; }).join(' ')}
+              fill="rgba(220,38,38,0.15)" stroke="#dc2626" strokeWidth="2.5" strokeLinejoin="round"
+            />
+          </svg>
+        )}
         <svg className="keyplan-pin" width="34" height="46" viewBox="0 0 34 46" aria-hidden="true">
           <path d="M17 1C8.2 1 1 8 1 16.8 1 28.5 17 45 17 45s16-16.5 16-28.2C33 8 25.8 1 17 1z" fill="#dc2626" stroke="#fff" strokeWidth="2" />
           <circle cx="17" cy="17" r="6" fill="#fff" />
