@@ -5,7 +5,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import mongoose from 'mongoose';
 import multer from 'multer';
-import { ALLOWED_FILE_TYPES, MAX_FILE_BYTES } from '@dsk/shared';
+import { ALLOWED_FILE_TYPES, MAX_FILE_BYTES, cleanGps } from '@dsk/shared';
 import Attachment from '../models/Attachment.js';
 import { protect } from '../middleware/auth.js';
 import { asyncHandler, HttpError } from '../utils/asyncHandler.js';
@@ -32,6 +32,9 @@ async function load(req) {
   return a;
 }
 
+// GPS of a camera photo, sent with the upload as JSON ({ lat, lon, accuracy, takenAt })
+const gpsFrom = (raw) => { try { return cleanGps(JSON.parse(raw || 'null')); } catch { return null; } };
+
 router.post(
   '/',
   (req, res, next) =>
@@ -52,6 +55,7 @@ router.post(
       mimeType: realType,
       size: req.file.size,
       storageKey: req.file.filename,
+      ...(gpsFrom(req.body?.gps) ? { gps: gpsFrom(req.body.gps) } : {}),
     });
     await logActivity(req, 'file.uploaded', { entityType: 'file', entityId: a._id, summary: `Uploaded ${a.originalName}`, meta: { name: a.originalName, type: a.mimeType, size: a.size } });
     res.status(201).json(a.toRef());

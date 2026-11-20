@@ -90,12 +90,12 @@ export default function TeamMember() {
 
       <div className="kpis">
         <Kpi label="Input sheets" value={stats.total} />
-        <Kpi label="Approved" value={stats.approved} tone="green" />
-        <Kpi label="Rejected" value={stats.rejected} tone={stats.rejected ? 'red' : ''} />
-        <Kpi label="In review / drafts" value={`${stats.submitted} / ${stats.draft}`} />
-        <Kpi label="Approval rate" value={stats.approvalRate == null ? '—' : `${stats.approvalRate}%`} />
+        <Kpi label="Completed" value={stats.approved} tone="green" />
+        <Kpi label="Sent back" value={stats.rejected} tone={stats.rejected ? 'red' : ''} />
+        <Kpi label="With superadmin / drafts" value={`${stats.submitted} / ${stats.draft}`} />
+        <Kpi label="Completed vs sent back" value={stats.approvalRate == null ? '—' : `${stats.approvalRate}%`} />
         <Kpi label="Avg. time to submit" value={duration(stats.avgSubmitHours)} />
-        <Kpi label="Avg. review wait" value={duration(stats.avgReviewHours)} />
+        <Kpi label="Avg. wait for report" value={duration(stats.avgReviewHours)} />
         <Kpi label="Value handled" value={inr(stats.totalValue)} />
       </div>
 

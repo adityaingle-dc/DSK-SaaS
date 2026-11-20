@@ -17,6 +17,9 @@ import { confirmDialog } from '../components/ConfirmDialog.jsx';
 // Reports → Generate: ① customer → ② approved input sheet → ③ report type → generate & store
 const STEPS = ['Customer', 'Input sheet', 'Report type', 'Review & generate'];
 
+// a report can be generated from a sheet the evaluator has handed in (generating it completes the sheet)
+const READY = ['submitted', 'received', 'approved'];
+
 export default function GenerateReport() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -68,7 +71,7 @@ export default function GenerateReport() {
           if (v.customer?._id) {
             const c = await api.getCustomer(v.customer._id);
             setCustomer(c);
-            if (v.status === 'approved') {
+            if (READY.includes(v.status)) {
               setSheetId(vid);
               if (params.get('type')) setType(params.get('type'));
               setStep(params.get('step') === '4' ? 3 : 2);
@@ -131,7 +134,7 @@ export default function GenerateReport() {
   const labels = propertyLabels(groupByProperty(sheets));
   const reportsPerSheet = (customer?.reports || []).reduce((m, r) => ({ ...m, [r.valuation]: (m[r.valuation] || 0) + 1 }), {});
   const sheet = sheets.find((v) => v._id === sheetId);
-  const approvedCount = sheets.filter((v) => v.status === 'approved').length;
+  const approvedCount = sheets.filter((v) => READY.includes(v.status)).length;
 
   // report preview: the saved sheet, or the sheet being edited (recalculated as you type)
   const previewDoc = useMemo(() => {
@@ -246,10 +249,10 @@ export default function GenerateReport() {
             <p className="muted">This customer has no input sheets yet. Start one from their customer page.</p>
           ) : (
             <>
-              {approvedCount === 0 && <p className="hint wizard-hint">None of their sheets are approved yet. A report can be generated once the superadmin approves a sheet.</p>}
+              {approvedCount === 0 && <p className="hint wizard-hint">None of their sheets has been submitted yet. A report can be generated once the evaluator submits the sheet.</p>}
               <ul className="pick-list">
                 {sheets.map((v) => {
-                  const ok = v.status === 'approved';
+                  const ok = READY.includes(v.status);
                   return (
                     <li key={v._id}>
                       <button type="button" className={`pick${sheetId === v._id ? ' on' : ''}`} disabled={!ok} onClick={() => { setSheetId(v._id); setStep(2); }}>
@@ -257,7 +260,7 @@ export default function GenerateReport() {
                         <span className="pick-main">
                           <strong>{v.referenceNo} · {REPORT_TEMPLATES[v.summary?.reportTemplate]?.title || 'Input sheet'}</strong>
                           <small>{labels[v._id]} · {new Date(v.summary?.valuationDate || v.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}{reportsPerSheet[v._id] ? ` · ${reportsPerSheet[v._id]} report${reportsPerSheet[v._id] === 1 ? '' : 's'} generated` : ''}</small>
-                          {!ok && <small className="pick-why">Not approved yet, so a report can't be generated</small>}
+                          {!ok && <small className="pick-why">{v.status === 'rejected' ? 'Sent back to the evaluator: wait for them to resubmit' : 'Not submitted by the evaluator yet'}</small>}
                         </span>
                         <span className="pick-side">
                           <strong className="amount">{v.summary?.fairMarketValue > 0 ? inr(v.summary.fairMarketValue) : '—'}</strong>

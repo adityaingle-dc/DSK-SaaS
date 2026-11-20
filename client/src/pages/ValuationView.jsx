@@ -44,7 +44,8 @@ export default function ValuationView() {
   if (error && !v) return <div className="alert">{error}</div>;
   if (!v) return <div className="center">Loading…</div>;
 
-  const canEdit = isReviewer || ['draft', 'rejected'].includes(v.status);
+  // the evaluator can edit until a report has been generated from the sheet (completed)
+  const canEdit = isReviewer || v.status !== 'approved';
   const canDelete = isSuperadmin;
 
   const s = v.results?.summary || {};
@@ -65,7 +66,6 @@ export default function ValuationView() {
           <div className="actions no-print">
             {canDelete && <button className="btn danger" onClick={remove}>Delete</button>}
             {isSuperadmin && <Link className="btn" to={`/valuations/${id}/report`}>Preview report</Link>}
-            {isSuperadmin && v.status === 'approved' && <Link className="btn primary" to={`/reports/new?valuation=${id}`}>Generate report</Link>}
             {canEdit && <Link className="btn primary" to={`/valuations/${id}/edit`}>Edit</Link>}
           </div>
         }
@@ -86,15 +86,29 @@ export default function ValuationView() {
       </section>
 
       {error && <div className="alert">{error}</div>}
-      {!isSuperadmin && v.status === 'submitted' && (
+      {v.status === 'submitted' && (
         <div className="card review-note status-submitted">
-          <strong>Submitted to the superadmin</strong>
-          <p>The superadmin reviews this sheet and prepares the bank report. You'll see it here if it's returned for changes.</p>
+          <strong>{isSuperadmin ? 'Submitted by the evaluator' : 'Submitted to the superadmin'}{v.updatedAfterReceived ? ' · updated' : ''}</strong>
+          <p>{isSuperadmin
+            ? 'Opening it marks it as received for the evaluator.'
+            : `Not opened by the superadmin yet. You can still make changes until the report is generated.${v.updatedAfterReceived ? ' Your latest changes are waiting to be seen.' : ''}`}</p>
         </div>
       )}
-      {v.reviewedBy && (
-        <div className={`card review-note status-${v.status}`}>
-          <strong>{v.status === 'approved' ? 'Approved' : 'Rejected'}</strong> by {v.reviewedBy.name} on {new Date(v.reviewedAt).toLocaleDateString('en-IN')}
+      {v.status === 'received' && (
+        <div className="card review-note status-received">
+          <strong>Received by {v.receivedBy?.name || 'the superadmin'}</strong>{v.receivedAt && <> on {new Date(v.receivedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</>}
+          <p>{isSuperadmin ? 'Open Preview report and generate the report when ready: that completes the sheet.' : 'You can still make changes until the report is generated.'}</p>
+        </div>
+      )}
+      {v.status === 'approved' && (
+        <div className="card review-note status-approved">
+          <strong>Completed</strong>{v.reportedAt && <> · report generated on {new Date(v.reportedAt).toLocaleDateString('en-IN')}</>}
+          <p>{isSuperadmin ? 'The evaluator can no longer change this sheet.' : 'A report has been generated, so the sheet is locked. Ask the superadmin if something needs correcting.'}</p>
+        </div>
+      )}
+      {v.status === 'rejected' && (
+        <div className="card review-note status-rejected">
+          <strong>Sent back</strong>{v.reviewedBy && <> by {v.reviewedBy.name} on {new Date(v.reviewedAt).toLocaleDateString('en-IN')}</>}
           {v.reviewNote && <p>{v.reviewNote}</p>}
         </div>
       )}
@@ -104,14 +118,14 @@ export default function ValuationView() {
           <SheetSections data={v.data || {}} />
         </div>
         <aside className="side-stack">
-          {isSuperadmin && v.status === 'submitted' && (
+          {isSuperadmin && ['submitted', 'received'].includes(v.status) && (
             <section className="card review-card no-print">
-              <h2>Review decision</h2>
-              <textarea rows={2} placeholder="Note to evaluator (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
-              <div className="actions split">
-                <button className="btn danger" onClick={() => review('rejected')}>Reject</button>
-                <button className="btn primary" onClick={() => review('approved')}>Approve</button>
+              <h2>Ask for changes</h2>
+              <textarea rows={2} aria-label="What should the evaluator change?" value={note} onChange={(e) => setNote(e.target.value)} />
+              <div className="actions">
+                <button className="btn danger" disabled={!note.trim()} onClick={() => review('rejected')}>Send back with note</button>
               </div>
+              <p className="hint">Write what to fix, then send it back. To generate the report, open Preview report.</p>
             </section>
           )}
           <SiteCard property={v.data?.property} />

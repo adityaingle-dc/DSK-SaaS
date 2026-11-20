@@ -36,6 +36,7 @@ export const IconChevronDown = (p) => <Svg {...p}><path d="m6 9 6 6 6-6" /></Svg
 export const IconRupee = (p) => <Svg {...p}><path d="M7 4h11M7 9h11M7 4c6 0 7 2.5 7 5s-2 5-7 5h-.5L14 21" /></Svg>;
 export const IconTick = (p) => <Svg {...p}><path d="m5 12.5 4.5 4.5L19 7.5" /></Svg>;
 
+export const IconEye = (p) => <Svg {...p}><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /></Svg>;
 export const IconChevronLeft = (p) => <Svg {...p}><path d="m15 6-6 6 6 6" /></Svg>;
 export const IconCalendar = (p) => <Svg {...p}><rect x="3.5" y="5" width="17" height="15.5" rx="2.5" /><path d="M3.5 10h17M8 3v4M16 3v4" /></Svg>;
 export const IconPhone = (p) => <Svg {...p}><path d="M5 4h3l1.5 4-2 1.3a11 11 0 0 0 5.2 5.2L14 12.5l4 1.5v3a2 2 0 0 1-2 2A13 13 0 0 1 3 6a2 2 0 0 1 2-2z" /></Svg>;

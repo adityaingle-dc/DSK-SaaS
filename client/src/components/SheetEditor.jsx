@@ -37,7 +37,7 @@ export default function SheetEditor({ data, onChange, errors = {} }) {
               <IconChevronDown size={16} className="sa-caret" />
             </summary>
             <div className="sa-body">
-              <SchemaSection section={s} path={path} values={data[path]} onChange={(k, v) => onChange(path, k, v)} errors={errors} ctx={ctx} data={data} />
+              <SchemaSection section={s} path={path} values={data[path]} onChange={(k, v) => onChange(path, k, v)} onChangeAt={onChange} errors={errors} ctx={ctx} data={data} />
             </div>
           </details>
         );

@@ -12,3 +12,6 @@ uploads/
 
 # Sample bank reports contain customer PII
 /valuation-print.pdf
+
+# downloaded IFSC branch directory (rebuilt automatically)
+server/data/

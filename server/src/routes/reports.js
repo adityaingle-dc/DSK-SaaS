@@ -24,11 +24,12 @@ const STATUS_FILTER = { review: { status: { $ne: 'approved' } }, approved: { sta
 // been generated since that save. They are not stored reports yet; opening one continues in the Generate flow.
 const DRAFT_LIMIT = 100;
 async function listDrafts(req) {
-  const { q, customer, template, generatedBy, type } = req.query;
+  const { q, customer, template, generatedBy, type, bank } = req.query;
   if (generatedBy || (type && type !== 'bank')) return []; // drafts have no author / are bank reports
-  const filter = { status: 'approved', reportEditedAt: { $ne: null } };
+  const filter = { status: { $in: ['submitted', 'received', 'approved'] }, reportEditedAt: { $ne: null } };
   if (customer && mongoose.isValidObjectId(customer)) filter.customer = customer;
   if (template) filter['summary.reportTemplate'] = String(template);
+  if (bank) filter['summary.bankName'] = String(bank);
   const rx = searchRx(q);
   if (rx) {
     const digits = searchDigits(q);
@@ -78,13 +79,14 @@ router.get('/types', (_req, res) => res.json({ types: REPORT_TYPES }));
 
 // search + filters shared by the list and the board
 async function listFilter(req) {
-    const { q, customer, valuation, type, template, generatedBy } = req.query;
+    const { q, customer, valuation, type, template, generatedBy, bank } = req.query;
     const filter = { ...dateRange(req.query) };
     if (customer && mongoose.isValidObjectId(customer)) filter.customer = customer;
     if (valuation && mongoose.isValidObjectId(valuation)) filter.valuation = valuation;
     if (type && REPORT_TYPE_KEYS.includes(type)) filter.type = type;
     if (template) filter.reportTemplate = String(template);
     if (generatedBy && mongoose.isValidObjectId(generatedBy)) filter.generatedBy = generatedBy;
+    if (bank) filter['snapshot.data.general.bankName'] = String(bank);
     const rx = searchRx(q);
     if (rx) {
       // also find reports through the customer's current name / phone
@@ -96,9 +98,9 @@ async function listFilter(req) {
 }
 
 async function reportFacets() {
-  const [templates, authorIds] = await Promise.all([Report.distinct('reportTemplate'), Report.distinct('generatedBy')]);
+  const [templates, authorIds, banks] = await Promise.all([Report.distinct('reportTemplate'), Report.distinct('generatedBy'), Report.distinct('snapshot.data.general.bankName')]);
   const authors = authorIds.length ? await User.find({ _id: { $in: authorIds } }).select('name').sort({ name: 1 }).lean() : [];
-  return { templates: options(templates), generatedBy: authors };
+  return { templates: options(templates), generatedBy: authors, banks: options(banks) };
 }
 
 // Kanban board: Draft · In review · Approved (latest first, up to 60 cards a column)
@@ -155,7 +157,7 @@ router.get(
   })
 );
 
-// generate a report from an approved input sheet and store a frozen copy
+// generate a report from a submitted input sheet and store a frozen copy; this completes (locks) the sheet
 router.post(
   '/',
   asyncHandler(async (req, res) => {
@@ -164,7 +166,9 @@ router.post(
     if (!mongoose.isValidObjectId(valuationId)) throw new HttpError(422, 'Choose an input sheet');
     const v = await Valuation.findById(valuationId).populate('evaluator', 'name').populate('reviewedBy', 'name');
     if (!v) throw new HttpError(404, 'Input sheet not found');
-    if (v.status !== 'approved') throw new HttpError(409, 'Only approved input sheets can be turned into a report');
+    if (!['submitted', 'received', 'approved'].includes(v.status)) {
+      throw new HttpError(409, v.status === 'rejected' ? 'This input sheet was sent back to the evaluator. Wait until they resubmit it.' : 'The evaluator has not submitted this input sheet yet.');
+    }
     if (!v.results?.summary) throw new HttpError(409, 'This input sheet has no calculated results');
 
     const previous = await Report.countDocuments({ valuation: v._id, type });
@@ -176,7 +180,7 @@ router.post(
       valuation: v._id,
       snapshot: {
         referenceNo: v.referenceNo,
-        status: v.status,
+        status: 'approved', // completed: the stored report is final (no draft watermark)
         data: v.data,
         results: v.results,
         evaluatorName: v.evaluator?.name,
@@ -202,6 +206,15 @@ router.post(
       }
     }
     if (!report) throw new HttpError(409, 'Could not number the report, please try again');
+    // the sheet is complete now: the evaluator can no longer change it
+    if (v.status !== 'approved') {
+      await Valuation.updateOne({ _id: v._id }, { $set: { status: 'approved', reportedAt: new Date(), ...(v.receivedAt ? {} : { receivedAt: new Date(), receivedBy: req.user._id }) } }, { timestamps: false });
+      await logActivity(req, 'valuation.completed', {
+        entityType: 'valuation', entityId: v._id,
+        summary: `${v.referenceNo} completed: report ${report.reportNo} generated`,
+        meta: { referenceNo: v.referenceNo, reportNo: report.reportNo, evaluatorName: v.evaluator?.name },
+      });
+    }
     await logActivity(req, 'report.generated', {
       entityType: 'report', entityId: report._id,
       summary: `Generated ${report.reportNo} (v${report.version}) from ${v.referenceNo}${report.applicantName ? ` for ${report.applicantName}` : ''}`,
@@ -264,6 +277,10 @@ router.delete(
   asyncHandler(async (req, res) => {
     const r = await load(req.params.id);
     await r.deleteOne();
+    // the only report of a sheet deleted: the sheet opens again for the evaluator
+    if (r.valuation && !(await Report.exists({ valuation: r.valuation }))) {
+      await Valuation.updateOne({ _id: r.valuation, status: 'approved', reportedAt: { $ne: null } }, { $set: { status: 'received' }, $unset: { reportedAt: 1 } }, { timestamps: false });
+    }
     await logActivity(req, 'report.deleted', { entityType: 'report', entityId: r._id, summary: `Deleted ${r.reportNo}` });
     res.status(204).end();
   })

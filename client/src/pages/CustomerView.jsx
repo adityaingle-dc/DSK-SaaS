@@ -51,7 +51,7 @@ export default function CustomerView() {
   const { customer: c, valuations, reports = [] } = state;
   const stats = {
     total: valuations.length,
-    open: valuations.filter((v) => ['draft', 'submitted', 'rejected'].includes(v.status)).length,
+    open: valuations.filter((v) => ['draft', 'submitted', 'received', 'rejected'].includes(v.status)).length,
     approved: valuations.filter((v) => v.status === 'approved').length,
     totalValue: valuations.reduce((s, v) => s + (v.summary?.fairMarketValue || 0), 0),
   };
@@ -102,7 +102,7 @@ export default function CustomerView() {
         <div className="kpi"><div className="kpi-value">{properties.filter((g) => g.identified).length}</div><div className="kpi-label">Properties</div></div>
         <div className="kpi"><div className="kpi-value">{stats.total}</div><div className="kpi-label">Input sheets</div></div>
         <div className="kpi tone-amber"><div className="kpi-value">{stats.open}</div><div className="kpi-label">In progress</div></div>
-        <div className="kpi tone-green"><div className="kpi-value">{stats.approved}</div><div className="kpi-label">Approved</div></div>
+        <div className="kpi tone-green"><div className="kpi-value">{stats.approved}</div><div className="kpi-label">Completed</div></div>
         <div className="kpi"><div className="kpi-value">{stats.totalValue ? inr(stats.totalValue) : '—'}</div><div className="kpi-label">Total value</div></div>
       </div>
 
@@ -194,7 +194,7 @@ export default function CustomerView() {
                   </div>
                   <StatusBadge status={v.status} />
                   <div className="ph-actions">
-                    <Link className="btn small" to={`/valuations/${v._id}`}>Sheet</Link>
+                    <Link className="btn small" to={isSuperadmin ? `/valuations/${v._id}/edit` : `/valuations/${v._id}`}>Sheet</Link>
                     <Link className="btn small" to={`/valuations/${v._id}/report`}>Report</Link>
                   </div>
                 </li>
@@ -215,7 +215,7 @@ export default function CustomerView() {
             </div>
             <div className="actions">
               <Link className="btn small" to={`/valuations/${v._id}/edit`}>Edit sheet</Link>
-              <Link className="btn small" to={`/valuations/${v._id}`}>Open <IconChevron size={14} /></Link>
+              <Link className="btn small" to={isSuperadmin ? `/valuations/${v._id}/edit` : `/valuations/${v._id}`}>Open <IconChevron size={14} /></Link>
             </div>
           </div>
           <SheetSections data={v.data || {}} variant="accordion" openFirst={i === 0} />
@@ -230,7 +230,7 @@ export default function CustomerView() {
           </div>
           {reports.length === 0 ? (
             <p className="muted card-empty">
-              {stats.approved ? 'No reports generated yet. Use Generate report to create one from an approved input sheet.' : 'Reports can be generated once one of this customer\'s input sheets is approved.'}
+              {stats.approved || stats.open ? 'No reports generated yet. Use Generate report once the evaluator has submitted the input sheet.' : 'Reports can be generated once one of this customer\'s input sheets is submitted by the evaluator.'}
             </p>
           ) : (
             <ul className="list">
@@ -267,8 +267,7 @@ export default function CustomerView() {
           initialFrom={assignFrom}
           onClose={() => setModal(null)}
           onAssigned={(r) => {
-            // evaluators go straight into their new sheet
-            if (!isSuperadmin) return navigate(`/valuations/${r._id}/edit`);
+            // (your own new sheet opens straight away from the form itself)
             setModal(null);
             setNotice({ id: r._id, text: `Input sheet ${r.referenceNo} created and assigned to ${r.evaluator.name}.` });
             setTab('sheets');

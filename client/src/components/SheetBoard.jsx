@@ -1,6 +1,7 @@
-// Kanban board for Input Sheets: New · In progress · In review · Returned · Approved.
-// Moving a card runs the same action as the buttons on the sheet (approve, return with a note, save & approve,
-// submit for review), so the server's rules and the completeness check still apply.
+// Kanban board for Input Sheets: Drafts · In review · Received · Sent back · Completed.
+// Received = the superadmin opened it; Completed = a report was generated from it (that locks it for the evaluator).
+// Moving a card runs the same action as the buttons on the sheet (send back with a note, finish, submit), so the
+// server's rules and the completeness check still apply. There is no approval step.
 // Desktop: drag and drop. Phones: one column at a time (tabs) and a "Move" button on each card.
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -15,9 +16,10 @@ import { timeAgo } from '../utils/format.js';
 // same names and order as the status tabs on the list view
 export const BOARD_COLUMNS = [
   { key: 'draft', title: 'Drafts', hint: 'Being filled in by the evaluator', tone: 'blue' },
-  { key: 'submitted', title: 'In review', hint: 'Waiting for approval', tone: 'amber' },
-  { key: 'rejected', title: 'Rejected', hint: 'Sent back with a note', tone: 'red' },
-  { key: 'approved', title: 'Approved', hint: 'Ready for a report', tone: 'green' },
+  { key: 'submitted', title: 'In review', hint: 'Submitted, not opened by the superadmin yet', tone: 'amber' },
+  { key: 'received', title: 'Received', hint: 'Opened; generate the report', tone: 'blue' },
+  { key: 'rejected', title: 'Sent back', hint: 'Returned with a note', tone: 'red' },
+  { key: 'approved', title: 'Completed', hint: 'Report generated', tone: 'green' },
 ];
 const TITLE = Object.fromEntries(BOARD_COLUMNS.map((c) => [c.key, c.title]));
 const DAY = 24 * 3600 * 1000;
@@ -26,9 +28,10 @@ const DAY = 24 * 3600 * 1000;
 function movesFor(role) {
   if (role === 'superadmin') {
     return {
-      draft: { approved: 'saveApprove' },
-      submitted: { approved: 'approve', rejected: 'return' },
-      rejected: { approved: 'saveApprove' },
+      draft: { received: 'finish' },
+      submitted: { rejected: 'return' },
+      received: { rejected: 'return' },
+      rejected: { received: 'finish' },
       approved: {},
     };
   }
@@ -37,18 +40,20 @@ function movesFor(role) {
       draft: { submitted: 'submit' },
       rejected: { submitted: 'submit' },
       submitted: {},
+      received: {},
       approved: {},
     };
   }
   return {}; // legacy reviewers: view only
 }
-const ACTION_LABEL = { approve: 'Approve', return: 'Reject (return to the evaluator)', saveApprove: 'Approve (complete sheet)', submit: 'Submit for review' };
+const ACTION_LABEL = { return: 'Send back with a note', finish: 'Finish (ready for a report)', submit: 'Submit to the superadmin' };
 
 // when the card entered its column, for "waiting 3 days"
 const enteredAt = (v, col) => new Date(
   col === 'draft' ? (v.startedAt ? v.updatedAt : v.assignedAt || v.createdAt)
     : col === 'submitted' ? v.submittedAt || v.updatedAt
-      : col === 'rejected' || col === 'approved' ? v.reviewedAt || v.updatedAt
+      : col === 'received' ? v.receivedAt || v.updatedAt
+        : col === 'rejected' ? v.reviewedAt || v.updatedAt
         : v.updatedAt,
 );
 
@@ -87,7 +92,7 @@ export default function SheetBoard({ query, reloadKey = 0 }) {
     if (!data) return;
     const cols = data.columns;
     if (cols[tab]?.total) return;
-    const pref = isReviewer ? ['submitted', 'draft', 'rejected', 'approved'] : ['rejected', 'draft', 'submitted', 'approved'];
+    const pref = isReviewer ? ['submitted', 'received', 'draft', 'rejected', 'approved'] : ['rejected', 'draft', 'submitted', 'received', 'approved'];
     const first = pref.find((k) => cols[k]?.total);
     if (first) setTab(first);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -98,26 +103,22 @@ export default function SheetBoard({ query, reloadKey = 0 }) {
     if (!action) return;
     const name = v.summary?.applicantName || v.referenceNo;
     try {
-      if (action === 'approve') {
-        if (!(await confirmDialog({ title: `Approve ${v.referenceNo}?`, message: `${name}'s input sheet will be approved and a report can be generated from it.`, confirmLabel: 'Approve' }))) return;
-        setBusy(v._id);
-        await api.reviewValuation(v._id, 'approved');
-      } else if (action === 'return') {
-        const note = await promptDialog({ title: `Return ${v.referenceNo}?`, message: `Tell ${v.evaluator?.name || 'the evaluator'} what to fix. They will see this note on the sheet.`, placeholder: 'e.g. Guideline rate missing for the land section', confirmLabel: 'Return sheet', required: true });
+      if (action === 'return') {
+        const note = await promptDialog({ title: `Send ${v.referenceNo} back?`, message: `Tell ${v.evaluator?.name || 'the evaluator'} what to fix. They will see this note on the sheet.`, placeholder: 'e.g. Guideline rate missing for the land section', confirmLabel: 'Send back', required: true });
         if (note == null) return;
         setBusy(v._id);
         await api.reviewValuation(v._id, 'rejected', note);
       } else {
-        const approving = action === 'saveApprove';
+        const finishing = action === 'finish';
         const ok = await confirmDialog({
-          title: approving ? `Approve ${v.referenceNo}?` : `Submit ${v.referenceNo} for review?`,
-          message: approving ? `${name}'s sheet will be approved directly, without a review step. It must be complete.` : 'The superadmin will review it. You can\'t edit it while it is in review.',
-          confirmLabel: approving ? 'Approve' : 'Submit',
+          title: finishing ? `Finish ${v.referenceNo}?` : `Submit ${v.referenceNo}?`,
+          message: finishing ? `${name}'s sheet will be marked ready for a report. It must be complete.` : 'The superadmin will see it. You can still make changes until the report is generated.',
+          confirmLabel: finishing ? 'Finish' : 'Submit',
         });
         if (!ok) return;
         setBusy(v._id);
         const full = await api.getValuation(v._id);
-        await api.updateValuation(v._id, { data: full.data, status: approving ? 'approved' : 'submitted' });
+        await api.updateValuation(v._id, { data: full.data, status: finishing ? 'received' : 'submitted' });
       }
       setReload((n) => n + 1);
     } catch (e) {
@@ -187,7 +188,7 @@ export default function SheetBoard({ query, reloadKey = 0 }) {
                 {col.items.map((v) => {
                   const since = enteredAt(v, c.key);
                   const notOpened = c.key === 'draft' && !v.startedAt;
-                  const waiting = (notOpened || ['submitted', 'rejected'].includes(c.key)) && Date.now() - since > 2 * DAY;
+                  const waiting = (notOpened || ['submitted', 'received', 'rejected'].includes(c.key)) && Date.now() - since > 2 * DAY;
                   const canMove = Object.keys(moves[c.key] || {}).length > 0;
                   return (
                     <article
@@ -197,7 +198,7 @@ export default function SheetBoard({ query, reloadKey = 0 }) {
                       onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', v._id); setDrag({ id: v._id, col: c.key, v }); }}
                       onDragEnd={() => { setDrag(null); setOver(''); }}
                     >
-                      <Link to={`/valuations/${v._id}`} className="kb-card-link" draggable={false}>
+                      <Link to={user?.role === 'superadmin' ? `/valuations/${v._id}/edit` : `/valuations/${v._id}`} className="kb-card-link" draggable={false}>
                         <span className="kb-card-top">
                           <span className="avatar soft sm">{initials(v.summary?.applicantName)}</span>
                           <span className="kb-card-name">

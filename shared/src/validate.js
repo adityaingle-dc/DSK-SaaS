@@ -50,7 +50,7 @@ function cleanField(field, v) {
         .filter((f) => f && /^[a-f0-9]{24}$/i.test(String(f.id)))
         .filter((f) => !field.imagesOnly || !f.type || String(f.type).startsWith('image/'))
         .slice(0, field.maxFiles || MAX_FILES)
-        .map((f) => ({ id: String(f.id), name: String(f.name || '').slice(0, 200), type: String(f.type || ''), size: Number(f.size) || 0 }));
+        .map((f) => ({ id: String(f.id), name: String(f.name || '').slice(0, 200), type: String(f.type || ''), size: Number(f.size) || 0, ...(cleanGps(f.gps) ? { gps: cleanGps(f.gps) } : {}), ...(/^(north|south|east|west)$/.test(f.side) ? { side: f.side } : {}) }));
     case 'grid': {
       const out = {};
       for (const r of field.rows) {
@@ -101,6 +101,17 @@ function cleanField(field, v) {
   }
 }
 
+// where / when a camera photo was taken (GPS photos): { lat, lon, accuracy, takenAt }
+export function cleanGps(g) {
+  if (!g || typeof g !== 'object') return null;
+  const lat = Number(g.lat); const lon = Number(g.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  const out = { lat: +lat.toFixed(7), lon: +lon.toFixed(7) };
+  if (Number.isFinite(Number(g.accuracy))) out.accuracy = Math.round(Number(g.accuracy));
+  if (g.takenAt && !Number.isNaN(new Date(g.takenAt).getTime())) out.takenAt = new Date(g.takenAt).toISOString();
+  return out;
+}
+
 export function sanitize(data = {}) {
   const out = {};
   for (const s of SECTIONS) {
@@ -124,7 +135,8 @@ function checkScalar(field, v, name, errors) {
   }
   if (field.type === 'date' && Number.isNaN(new Date(v).getTime())) errors.push({ field: name, message: `${field.label}: invalid date` });
   if (field.type === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) errors.push({ field: name, message: `${field.label}: invalid email` });
-  if ((field.type === 'select' || field.type === 'choice') && field.options && !field.options.includes(String(v))) {
+  // allowOther: a typed value (e.g. "Penthouse") is accepted besides the listed ones
+  if ((field.type === 'select' || field.type === 'choice') && field.options && !field.allowOther && !field.options.includes(String(v))) {
     errors.push({ field: name, message: `${field.label}: "${v}" is not an allowed option` });
   }
   if (field.pattern && !new RegExp(field.pattern).test(String(v))) errors.push({ field: name, message: field.patternMessage || `${field.label}: invalid format` });

@@ -157,3 +157,101 @@ export function IfscInput({ value, onChange, setField, values = {} }) {
     </div>
   );
 }
+
+// Branch: once the bank is chosen, typing a branch or area (e.g. "thane") lists that bank's matching branches
+// with their IFSC; picking one fills the branch and the IFSC. Any branch name can still be typed by hand.
+export function BranchInput({ value, onChange, setField, values = {} }) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const [res, setRes] = useState({ status: 'idle', items: [] }); // idle | loading | ok | error
+  const wrap = useRef(null);
+  const text = value == null ? '' : String(value);
+  const bank = String(values.bankName || '').trim();
+  const q = text.trim();
+
+  useEffect(() => {
+    if (!open || !bank || q.length < 2) { setRes({ status: 'idle', items: [] }); return undefined; }
+    let cancelled = false;
+    setRes((r) => ({ ...r, status: 'loading' }));
+    const t = setTimeout(async () => {
+      try {
+        const r = await api.searchIfsc(bank, q);
+        if (!cancelled) { setRes({ status: 'ok', ...r }); setActive(0); }
+      } catch (err) {
+        if (!cancelled) setRes({ status: 'error', items: [], message: err.message });
+      }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [open, bank, q]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (e) => wrap.current && !wrap.current.contains(e.target) && setOpen(false);
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const items = res.items || [];
+  const pick = (b) => {
+    onChange(b.branch);
+    setField?.('ifsc', b.ifsc);
+    setOpen(false);
+  };
+  const onKey = (e) => {
+    if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { setOpen(true); return; }
+    if (!open) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => Math.min(items.length - 1, i + 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(0, i - 1)); }
+    else if (e.key === 'Enter' && items[active]) { e.preventDefault(); pick(items[active]); }
+    else if (e.key === 'Escape') setOpen(false);
+  };
+
+  // what the dropdown says when there is no list to show
+  let note = null;
+  if (!bank) note = 'Choose the bank first to see its branches and IFSC codes.';
+  else if (q.length < 2) note = `Type the branch or area to find ${bank} branches, e.g. Thane.`;
+  else if (res.status === 'loading' && !items.length) note = 'Searching branches…';
+  else if (res.status === 'error') note = res.message;
+  else if (res.status === 'ok' && !res.bankCode) note = `"${bank}" isn't in the IFSC directory. Type the branch and IFSC by hand.`;
+  else if (res.status === 'ok' && !items.length) note = `No ${res.bank} branch matches "${q}". Try the area or city name.`;
+
+  return (
+    <div className="bank-input branch-input" ref={wrap}>
+      <input
+        type="text"
+        role="combobox"
+        aria-expanded={open}
+        aria-autocomplete="list"
+        aria-controls="branch-options"
+        placeholder={bank ? 'Type branch or area, e.g. Thane' : 'Branch name'}
+        value={text}
+        onFocus={() => setOpen(true)}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onKeyDown={onKey}
+      />
+      {res.status === 'loading' && open && <span className="ifsc-spin" aria-label="Searching branches" />}
+      {open && (items.length > 0 || note) && (
+        <ul className="bank-options branch-options" id="branch-options" role="listbox">
+          {items.map((b, i) => (
+            <li key={b.ifsc} role="option" aria-selected={i === active}>
+              <button type="button" className={i === active ? 'on' : ''} onMouseEnter={() => setActive(i)} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(b)}>
+                <span className="branch-opt">
+                  <span className="branch-opt-top">
+                    <strong>{b.branch}</strong>
+                    <span className="bank-opt-code">{b.ifsc}</span>
+                  </span>
+                  <small>{[b.city, b.district !== b.city && b.district, b.state].filter(Boolean).join(', ')}</small>
+                  {b.address && <small className="branch-opt-addr">{b.address}</small>}
+                </span>
+              </button>
+            </li>
+          ))}
+          {items.length > 0 && res.total > items.length && (
+            <li className="branch-more" role="presentation">Showing {items.length} of {res.total} branches. Type more to narrow it down.</li>
+          )}
+          {note && <li className="branch-note" role="presentation">{note}</li>}
+        </ul>
+      )}
+    </div>
+  );
+}

@@ -113,9 +113,9 @@ function SearchDialog({ onClose }) {
       { label: 'Dashboard', to: '/', icon: <DuoHome size={18} />, keywords: 'home overview' },
       { label: 'Input Sheets', to: '/valuations', icon: <DuoList size={18} />, keywords: 'valuations list sheets input' },
       { label: 'Drafts', to: '/valuations?status=draft', icon: <DuoList size={18} />, keywords: 'draft unfinished' },
-      { label: 'In review', to: '/valuations?status=submitted', icon: <DuoList size={18} />, keywords: 'submitted pending review' },
-      { label: 'Approved', to: '/valuations?status=approved', icon: <DuoList size={18} />, keywords: 'approved signed' },
-      { label: 'Rejected', to: '/valuations?status=rejected', icon: <DuoList size={18} />, keywords: 'rejected returned' },
+      { label: 'Received', to: '/valuations?status=submitted,received', icon: <DuoList size={18} />, keywords: 'received submitted new pending in review opened' },
+      { label: 'Completed', to: '/valuations?status=approved', icon: <DuoList size={18} />, keywords: 'completed approved report generated done' },
+      { label: 'Sent back', to: '/valuations?status=rejected', icon: <DuoList size={18} />, keywords: 'sent back rejected returned' },
       ...(isSuperadmin ? [
         { label: 'Customers', to: '/customers', icon: <DuoContact size={18} />, keywords: 'clients enquiry customer contacts' },
         { label: 'Reports', to: '/reports', icon: <DuoSheet size={18} />, keywords: 'reports generated stored pdf print' },

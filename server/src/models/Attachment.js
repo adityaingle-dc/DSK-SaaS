@@ -10,12 +10,18 @@ const attachmentSchema = new mongoose.Schema(
     mimeType: { type: String, required: true },
     size: { type: Number, required: true },
     storageKey: { type: String, required: true, unique: true },
+    // camera photo taken in the app: where and when (also stamped on the image itself)
+    gps: { lat: Number, lon: Number, accuracy: Number, takenAt: Date },
   },
   { timestamps: true }
 );
 
 attachmentSchema.methods.toRef = function toRef() {
-  return { id: String(this._id), name: this.originalName, type: this.mimeType, size: this.size };
+  const ref = { id: String(this._id), name: this.originalName, type: this.mimeType, size: this.size };
+  if (this.gps?.lat != null && this.gps?.lon != null) {
+    ref.gps = { lat: this.gps.lat, lon: this.gps.lon, ...(this.gps.accuracy != null ? { accuracy: this.gps.accuracy } : {}), ...(this.gps.takenAt ? { takenAt: this.gps.takenAt.toISOString() } : {}) };
+  }
+  return ref;
 };
 
 export default mongoose.model('Attachment', attachmentSchema);

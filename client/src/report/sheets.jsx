@@ -1,7 +1,9 @@
-import { catalog, REPORT_TEMPLATES, personName, personRelation, phones } from '@dsk/shared';
+import { catalog, documentDescription, FLOORS, sideRoles, REPORT_TEMPLATES, personName, personRelation, phones, SQFT_PER_SQM, SQYD_PER_SQM } from '@dsk/shared';
+
+const floorName = (f) => (FLOORS.includes(f) ? `${f} Floor` : f || '');
 import { F, Words, rs } from './Field.jsx';
-import KeyPlanMap from './KeyPlanMap.jsx';
-import PhotoGrid from './PhotoGrid.jsx';
+import KeyPlanMap, { SitePlanMap } from './KeyPlanMap.jsx';
+import PhotoGrid, { FullPagePhoto } from './PhotoGrid.jsx';
 import {
   FIRM, FOOTER_NOTE, OPINION_INTRO, CERTIFICATE_POINTS, ENCLOSURES, SRO_REMARKS, COURT_JUDGEMENTS, APPROACH_NOTE,
   DECLARATION_POINTS, DECLARATION_TABLE, CODE_OF_CONDUCT, RELATIVE_NOTE,
@@ -69,10 +71,10 @@ export function buildContext(v) {
 }
 
 // ---------- layout primitives ----------
-export function Sheet({ n, total, c, children, letterhead = false }) {
+export function Sheet({ n, total, c, children, letterhead = false, continued = false }) {
   return (
-    <section className="sheet">
-      {c.v.status !== 'approved' && <div className="watermark">{c.v.status === 'rejected' ? 'REJECTED' : 'DRAFT'}</div>}
+    <section className={`sheet${continued ? ' sheet-cont' : ''}`}>
+      {['draft', 'rejected'].includes(c.v.status) && <div className="watermark">DRAFT</div>}
       {letterhead && <Letterhead />}
       <div className="sheet-body">{children}</div>
       <footer className="sheet-foot">
@@ -219,7 +221,7 @@ function BasicData({ c, part = 1 }) {
           <tr className="sub-head"><th>Description of Document</th><th className="split"><span>Document No</span><span className="sp-r">Date &nbsp; Original/Copy</span></th></tr>
           {c.docs.map((doc, i) => (
             <tr key={i}>
-              <td><F k={`doc.${i}.desc`} v={[doc.type, doc.detail1, doc.detail2, doc.detail3].filter(Boolean).join(' - ')} /></td>
+              <td><F k={`doc.${i}.desc`} v={documentDescription(doc)} /></td>
               <td className="split"><F k={`doc.${i}.no`} v={doc.number || 'NA'} /><span className="sp-r"><F k={`doc.${i}.date`} v={`${dmy(doc.date) || 'NA'} ${doc.copy || 'Copy'}`} /></span></td>
             </tr>
           ))}
@@ -247,16 +249,26 @@ function BasicData({ c, part = 1 }) {
 }
 
 function BasicData2({ c, sides, loc }) {
+  // Front / Rear / Side (from the facing) and Road, after each side's name
+  const b = c.d.boundaries || {};
+  const roles = sideRoles(b.facing);
+  const roads = Array.isArray(b.roadSides) ? b.roadSides : [];
+  const tag = (side) => {
+    const d = side[0].toUpperCase() + side.slice(1);
+    const t = [roles[d], roads.includes(d) && 'Road'].filter(Boolean).join(', ');
+    return t ? <small className="side-role"> ({t})</small> : null;
+  };
   return (
     <table className="t grid">
       <tbody>
           <Row n="11" label="Whether covered under any State / Central Govt. enactment's (e.g., Urban Land Ceiling Act) or notified under agency area / scheduled area / cantonment area." k="a.enactment" v="No" />
           <Row n="12" label="In case it is an agricultural land, any conversion to house site plots is contemplated" k="a.agri" v="No" />
+          {b.facing && <Row n="" label="Facing of the plot" k="a.facing" v={`${b.facing} facing${roads.length ? ` · Road on ${roads.join(' & ')}${Number(b.roadWidthFt) > 0 ? ` (${Number(b.roadWidthFt)} ft wide)` : ''}` : ''}`} />}
           <tr className="sub-head"><td className="c-n">13</td><th>Boundaries of the property</th><th className="split"><span>As per the Deed</span><span className="sp-r">As per Actuals</span></th></tr>
           {['north', 'south', 'east', 'west'].map((side) => (
             <tr key={side}>
               <td className="c-n" />
-              <th className="cap">{side}</th>
+              <th className="cap">{side}{tag(side)}</th>
               <td className="split"><F k={`b.${side}.deed`} v={sides[side]?.deed} /><span className="sp-r"><F k={`b.${side}.actual`} v={sides[side]?.actual || sides[side]?.deed} /></span></td>
             </tr>
           ))}
@@ -336,7 +348,8 @@ function LandValuation({ c }) {
 function BuildingTech({ c }) {
   const b = c.d.building || {};
   const B = c.r.building;
-  const floorsLabel = (b.floors || []).map((f) => f.floor).filter(Boolean).join(' and ');
+  const floorNames = (b.floors || []).map((f) => f.floor).filter(Boolean);
+  const floorsLabel = floorNames.every((f) => FLOORS.includes(f)) ? floorNames.join(' and ') : floorNames.map(floorName).join(' and ');
   return (
     <>
       <h3 className="ctr">PART B - Valuation of Building</h3>
@@ -351,7 +364,7 @@ function BuildingTech({ c }) {
           <Row label="Age of Building" k="bt.age" v={B.age} />
           <Row label="Expected future life of building" k="bt.future" v={B.age == null ? '' : Math.max(B.life - B.age, 0)} />
           <Row label="Total life of Building" k="bt.life" v={B.life} />
-          <Row label="d) Number of floors and height of each floor including basement, if any" k="bt.floors" v={`${floorsLabel ? `${floorsLabel} Floor Building` : ''}, Roof Height = 11' each floor`} />
+          <Row label="d) Number of floors and height of each floor including basement, if any" k="bt.floors" v={`${floorsLabel ? `${floorsLabel}${floorNames.every((f) => FLOORS.includes(f)) ? ' Floor' : ''} Building` : ''}, Roof Height = 11' each floor`} />
         </tbody>
       </table>
       <h4>e) Plinth Area <small>As per IS 3861-1975</small></h4>
@@ -360,7 +373,7 @@ function BuildingTech({ c }) {
         <tbody>
           {(b.floors || []).map((f, i) => (
             <tr key={i}>
-              <td><F k={`pl.${i}.floor`} v={`${f.floor || ''} Floor`} /></td>
+              <td><F k={`pl.${i}.floor`} v={floorName(f.floor)} /></td>
               <td><F k={`pl.${i}.year`} v={b.yearOfConstruction} /></td>
               <td><F k={`pl.${i}.roof`} v="RCC" /></td>
               <td><F k={`pl.${i}.main`} v={num(f.mainArea)} /></td>
@@ -455,7 +468,7 @@ function BuildingValuationTable({ c }) {
         <tbody>
           {B.floors.map((f, i) => [
             <tr key={`f${i}`}>
-              <td><F k={`dv.${i}.label`} v={`${f.floor || ''} floor (Roof Height 11')`} /></td>
+              <td><F k={`dv.${i}.label`} v={`${FLOORS.includes(f.floor) ? `${f.floor} floor` : f.floor || ''} (Roof Height 11')`} /></td>
               <td><F k={`dv.${i}.area`} v={num(f.plinthArea)} /></td>
               <td><F k={`dv.${i}.rate`} v={num(f.rate, 0)} /></td>
               <td><F k={`dv.${i}.age`} v={B.age} /></td>
@@ -691,10 +704,65 @@ function KeyPlan({ c }) {
   );
 }
 
+// satellite view of the area under the pinned points + every point's coordinates and the centre
+const coord = (v) => (Number.isFinite(Number(v)) ? Number(v).toFixed(6) : '');
+function SitePlan({ c }) {
+  const loc = c.p.location || {};
+  const pts = (loc.boundary || []).filter((p) => Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lon)));
+  const half = Math.ceil(pts.length / 2);
+  const rows = Array.from({ length: half }, (_, i) => [i, i + half < pts.length ? i + half : null]);
+  const sqm = Number(loc.areaSqm) || 0;
+  const cell = (i) => (i === null
+    ? <><td /><td /><td /></>
+    : <><td className="ctr"><b>{i + 1}</b></td><td className="ctr">{coord(pts[i].lat)}</td><td className="ctr">{coord(pts[i].lon)}</td></>);
+  return (
+    <>
+      <h3 className="ctr">Site Plan Showing the Area Under the Marked Points (Satellite View)</h3>
+      <SitePlanMap lat={loc.lat} lon={loc.lon} boundary={pts} />
+      <h4>Coordinates of the points marked at site</h4>
+      <table className="t grid coords">
+        <thead>
+          <tr><th>Point</th><th>Latitude</th><th>Longitude</th>{pts.length > 1 && <><th>Point</th><th>Latitude</th><th>Longitude</th></>}</tr>
+        </thead>
+        <tbody>
+          {rows.map(([a, b]) => <tr key={a}>{cell(a)}{pts.length > 1 && cell(b)}</tr>)}
+          <tr className="coords-centre">
+            <td className="ctr"><b>Centre</b></td><td className="ctr"><b><F k="sp.lat" v={coord(loc.lat)} /></b></td><td className="ctr"><b><F k="sp.lon" v={coord(loc.lon)} /></b></td>
+            {pts.length > 1 && <td colSpan={3} className="ctr">{sqm ? <>Area enclosed ≈ <F k="sp.area" v={`${Math.round(sqm * SQYD_PER_SQM).toLocaleString('en-IN')} Sq.Yds (${Math.round(sqm * SQFT_PER_SQM).toLocaleString('en-IN')} Sq.ft)`} /></> : ''}</td>}
+          </tr>
+        </tbody>
+      </table>
+    </>
+  );
+}
+
+// the page printed for a document: its "first page" image, else (older sheets) its first photo
+export const documentFirstPage = (doc = {}) => (doc.firstPage || []).find(printable) || (doc.files || []).find(printable) || null;
+function DocumentPage({ doc, n, file }) {
+  const pdfs = (doc.files || []).filter((f) => f.type === 'application/pdf').length;
+  return (
+    <>
+      <h3 className="ctr">Document {n}: {doc.type || 'Document'} – first page</h3>
+      <p className="doc-page-desc">{documentDescription(doc)}{doc.number ? ` · No. ${doc.number}` : ''}{pdfs ? ' · full copy on file' : ''}</p>
+      <FullPagePhoto file={file} />
+    </>
+  );
+}
+
 const PHOTOS_PER_PAGE = 6;
 const printable = (f) => f.type?.startsWith('image/') && !/hei[cf]/.test(f.type);
 export function reportPhotos(c) {
-  return [...(c.p.photos || []), ...c.docs.flatMap((d) => d.files || [])].filter(printable);
+  const order = ['north', 'south', 'east', 'west'];
+  const b = c.d.boundaries || {};
+  const roles = sideRoles(b.facing);
+  const roads = Array.isArray(b.roadSides) ? b.roadSides : [];
+  const sidePhotos = [...(b.photos || [])].sort((x, y) => order.indexOf(x.side) - order.indexOf(y.side)).map((f) => {
+    if (!f.side) return f;
+    const d = f.side[0].toUpperCase() + f.side.slice(1);
+    const tags = [roles[d], roads.includes(d) && 'Road'].filter(Boolean).join(', ');
+    return { ...f, caption: `${d} side${tags ? ` (${tags})` : ''}` };
+  });
+  return [...(c.p.photos || []), ...sidePhotos].filter(printable);
 }
 
 function Photos({ c, page = 0, pages = 1 }) {
@@ -735,8 +803,15 @@ export function sheetsFor(c) {
     { id: 'coc2', el: <CodeOfConduct c={c} part={2} /> },
     { id: 'map', el: <KeyPlan c={c} /> },
   );
+  // the satellite site plan, once the plot's corners are pinned on the map
+  if ((c.p.location?.boundary || []).length >= 3) list.push({ id: 'siteplan', el: <SitePlan c={c} /> });
   const pages = Math.max(1, Math.ceil(reportPhotos(c).length / PHOTOS_PER_PAGE));
   for (let i = 0; i < pages; i++) list.push({ id: i ? `photos${i + 1}` : 'photos', el: <Photos c={c} page={i} pages={pages} /> });
+  // documents produced: the first page of each, as a full page (older sheets: the first photo of the document)
+  c.docs.forEach((doc, i) => {
+    const first = documentFirstPage(doc);
+    if (first) list.push({ id: `docpage${i}`, el: <DocumentPage doc={doc} n={i + 1} file={first} /> });
+  });
   return list;
 }
 

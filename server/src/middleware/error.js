@@ -22,5 +22,6 @@ export function errorHandler(err, _req, res, _next) {
     console.error(err);
     if (process.env.NODE_ENV === 'production') message = 'Server error';
   }
-  res.status(status).json({ message, ...(err.details ? { errors: err.details } : {}) });
+  // err.data: extra details for the client (e.g. the open sheets behind a "duplicate" 409)
+  res.status(status).json({ message, ...(err.details ? { errors: err.details } : {}), ...(err.data && typeof err.data === 'object' ? err.data : {}) });
 }

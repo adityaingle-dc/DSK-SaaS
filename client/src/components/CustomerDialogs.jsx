@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { SECTIONS } from '@dsk/shared';
+import { Link, useNavigate } from 'react-router-dom';
+import { isFirm, linkPerson, relationOptions, relativeLabel, SECTIONS } from '@dsk/shared';
 import { api } from '../api/client.js';
 import Modal from './Modal.jsx';
+import { confirmDialog } from './ConfirmDialog.jsx';
 import { initials } from './Layout.jsx';
 import { parseLatLon } from './SiteInfo.jsx';
 import SearchBox from './SearchBox.jsx';
@@ -10,7 +11,11 @@ import { groupByProperty } from '../utils/properties.js';
 import { IconChevron, IconPlus } from './Icons.jsx';
 import { ROLE_LABELS, useAuth } from '../context/AuthContext.jsx';
 
-const applicantOptions = (key) => SECTIONS.find((s) => s.key === 'applicant')?.fields.find((f) => f.key === key)?.options || [];
+const PERSON_LINKED = ['salutation', 'name', 'relation'];
+const applicantField = (key) => SECTIONS.find((s) => s.key === 'applicant')?.fields.find((f) => f.key === key);
+const applicantOptions = (key) => applicantField(key)?.options || [];
+// relation choices in the dropdown: short form with what it means
+const RELATION_WORDS = { 'S/o.': 'S/o (son of)', 'W/o': 'W/o (wife of)', 'D/o.': 'D/o (daughter of)', 'Rep. By': 'Rep. by (represented by)' };
 export const CUSTOMER_SOURCES = ['Walk-in', 'Phone call', 'Bank referral', 'Existing customer', 'Website', 'Contact person', 'Other'];
 export const SERVICE_REQUESTS = ['Home loan valuation', 'Loan against property', 'Plot / land valuation', 'Construction stage valuation', 'Purchase / resale valuation', 'Other'];
 
@@ -94,28 +99,86 @@ function PocPicker({ selected, tried, onPick, onClear, onNew }) {
   );
 }
 
-// Add / edit a customer: an individual, or a customer brought by a contact person (POC).
-// Only the essentials are shown; everything else sits under "More details".
+// Add / edit a customer in one form. The customer's details are the same either way; "How did they come to us?"
+// picks Directly (then: how they reached us) or Through a contact person (then: who brought them).
+// Nothing typed is lost: switching between the two keeps both sides' entries, a click outside the dialog does
+// nothing, closing with details filled in asks first, and a new customer's details are kept as a draft until saved.
+const draftKey = (userId) => `dsk_customer_draft:${userId || 'me'}`;
+const readDraft = (userId) => {
+  try { return JSON.parse(localStorage.getItem(draftKey(userId)) || 'null'); } catch { return null; }
+};
+const writeDraft = (userId, value) => {
+  try {
+    if (value) localStorage.setItem(draftKey(userId), JSON.stringify(value));
+    else localStorage.removeItem(draftKey(userId));
+  } catch { /* storage unavailable: the form still works, only the draft is not kept */ }
+};
+
 export function CustomerFormModal({ customer, onClose, onSaved }) {
-  const [form, setForm] = useState(() => ({ ...EMPTY, ...(customer || {}), contactType: customer?.contactType || 'individual' }));
-  const [more, setMore] = useState(() => MORE.some((k) => customer?.[k]));
+  const { user } = useAuth();
+  const [initial] = useState(() => ({ ...EMPTY, ...(customer || {}), contactType: customer?.contactType || 'individual' }));
+  // a new customer starts from the draft left the last time the form was closed without saving
+  const [draft] = useState(() => (customer ? null : readDraft(user?._id)));
+  const [form, setForm] = useState(() => (draft?.form ? { ...initial, ...draft.form } : initial));
+  const [restored, setRestored] = useState(!!draft?.form);
+  const [more, setMore] = useState(() => MORE.some((k) => (draft?.form || customer)?.[k]));
   const [tried, setTried] = useState(false);
   const [error, setError] = useState('');
   const [dupeId, setDupeId] = useState(null);
   const [busy, setBusy] = useState(false);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  // salutation, relation and name keep each other in step (Smt. → W/o, typing "Mrs " picks Smt.)
+  const set = (k) => (e) => { const v = e.target.value; setForm((f) => ({ ...f, ...(PERSON_LINKED.includes(k) ? linkPerson(f, k, v) : { [k]: v }) })); };
   const poc = form.contactType === 'poc';
-  // pick from previous contact persons, or type a new one (editing a saved POC customer starts on its saved person)
-  const [pocMode, setPocMode] = useState('pick');
+  // pick from previous contact persons, or type a new one
+  const [pocMode, setPocMode] = useState(() => draft?.pocMode || 'pick');
+  // the "how they reached us" answer is remembered while "Through a contact person" is selected
+  const [directSource, setDirectSource] = useState(() => (form.source && form.source !== 'Contact person' ? form.source : 'Phone call'));
+
+  const dirty = Object.keys(EMPTY).some((k) => String(form[k] ?? '') !== String(initial[k] ?? ''));
+
+  // keep a new customer's details as a draft while they are being typed
+  useEffect(() => {
+    if (customer) return;
+    writeDraft(user?._id, dirty ? { form, pocMode } : null);
+  }, [form, pocMode, dirty, customer, user?._id]);
 
   const errors = {
-    name: !form.name.trim() ? (poc ? "Customer's name is required" : 'Full name is required') : null,
+    name: !form.name.trim() ? "Customer's name is required" : null,
     phone1: poc ? (form.phone1 && !mobileOk(form.phone1) ? 'Enter a 10-digit mobile number' : null) : !mobileOk(form.phone1) ? 'Enter a 10-digit mobile number' : null,
     pocName: poc && !form.pocName.trim() ? "Contact person's name is required" : null,
     pocPhone: poc && !mobileOk(form.pocPhone) ? 'Enter a 10-digit mobile number' : null,
     serviceRequest: !poc && !form.serviceRequest ? 'Choose the service needed' : null,
   };
   const show = (k) => tried && errors[k];
+
+  const setCame = (type) => setForm((f) => (f.contactType === type ? f : {
+    ...f,
+    contactType: type,
+    source: type === 'poc' ? 'Contact person' : directSource,
+  }));
+
+  // Cancel, ✕ and Escape: ask before throwing away typed details
+  const requestClose = async () => {
+    if (busy) return;
+    if (dirty && !(await confirmDialog({
+      title: customer ? 'Discard your changes?' : 'Discard this customer?',
+      message: customer ? 'The changes you made to this customer will be lost.' : 'The details you have filled in will be cleared.',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Keep editing',
+      tone: 'danger',
+    }))) return;
+    if (!customer) writeDraft(user?._id, null);
+    onClose();
+  };
+
+  const startOver = () => {
+    setForm(initial);
+    setPocMode('pick');
+    setDirectSource('Phone call');
+    setRestored(false);
+    setTried(false);
+    writeDraft(user?._id, null);
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -128,6 +191,7 @@ export function CustomerFormModal({ customer, onClose, onSaved }) {
       const payload = Object.fromEntries(Object.keys(EMPTY).map((k) => [k, form[k] ?? '']));
       if (!poc) Object.assign(payload, { pocName: '', pocPhone: '', pocRole: '' });
       const saved = customer ? await api.updateCustomer(customer._id, payload) : await api.createCustomer(payload);
+      if (!customer) writeDraft(user?._id, null);
       onSaved(saved);
     } catch (err) {
       setError(err.message);
@@ -146,8 +210,14 @@ export function CustomerFormModal({ customer, onClose, onSaved }) {
   );
 
   return (
-    <Modal title={customer ? 'Edit customer' : 'Add customer'} onClose={onClose}>
+    <Modal title={customer ? 'Edit customer' : 'Add customer'} onClose={requestClose} closeOnBackdrop={false}>
       <form className="stack customer-form" onSubmit={submit} noValidate>
+        {restored && (
+          <div className="draft-note" role="status">
+            <span>Restored the details you were filling in.</span>
+            <button type="button" className="link-btn" onClick={startOver}>Start over</button>
+          </div>
+        )}
         {error && (
           <div className="alert">
             {error}
@@ -155,71 +225,71 @@ export function CustomerFormModal({ customer, onClose, onSaved }) {
           </div>
         )}
 
-        <div className="ctype" role="radiogroup" aria-label="Customer type">
-          {[['individual', 'Individual', 'The customer contacts us directly'], ['poc', 'Through a contact person', 'An agent, bank officer, builder or relative brings them']].map(([v, t, d]) => (
-            <label key={v} className={`ctype-opt${form.contactType === v ? ' on' : ''}`}>
-              <input type="radio" name="contactType" checked={form.contactType === v} onChange={() => setForm((f) => ({ ...f, contactType: v, source: v === 'individual' && f.source === 'Contact person' ? 'Phone call' : f.source }))} />
-              <strong>{t}</strong>
-              <small>{d}</small>
-            </label>
-          ))}
-        </div>
-
-        {poc && (
-          <fieldset>
-            <legend>Contact person</legend>
-            {pocMode === 'pick' ? (
-              <PocPicker
-                selected={form.pocPhone ? form : null}
-                tried={tried}
-                onPick={(x) => setForm((f) => ({ ...f, pocName: x.pocName, pocPhone: x.pocPhone, pocRole: x.pocRole || '' }))}
-                onClear={() => setForm((f) => ({ ...f, pocName: '', pocPhone: '', pocRole: '' }))}
-                onNew={(typed) => { setPocMode('new'); setForm((f) => ({ ...f, ...newPocFrom(typed) })); }}
-              />
-            ) : (
-              <>
-                <div className="row">
-                  {field('pocName', 'Name', <input autoFocus value={form.pocName} onChange={set('pocName')} placeholder="Who brought the customer" />, { required: true })}
-                  {field('pocPhone', 'Phone', <input type="tel" inputMode="tel" value={form.pocPhone} onChange={set('pocPhone')} placeholder="10-digit mobile" />, { required: true })}
-                </div>
-                <label>Role
-                  <select value={form.pocRole} onChange={set('pocRole')}>
-                    <option value="">—</option>
-                    {POC_ROLES.map((o) => <option key={o}>{o}</option>)}
-                  </select>
-                </label>
-                <button type="button" className="link-btn" onClick={() => { setPocMode('pick'); setForm((f) => ({ ...f, pocName: '', pocPhone: '', pocRole: '' })); }}>← Choose a previous contact person</button>
-              </>
-            )}
-          </fieldset>
-        )}
-
         <fieldset>
-          <legend>{poc ? 'Customer' : 'Contact'}</legend>
+          <legend>Customer</legend>
           <div className="row salute-row">
             <label>Title
               <select value={form.salutation} onChange={set('salutation')}>
                 {applicantOptions('salutation').map((o) => <option key={o}>{o}</option>)}
               </select>
             </label>
-            {field('name', 'Full name', <input autoFocus={!poc} value={form.name} onChange={set('name')} placeholder="e.g. Ramesh Kulkarni" />, { required: true })}
+            {field('name', isFirm(form.salutation) ? 'Firm name' : 'Full name', <input autoFocus={!restored} value={form.name} onChange={set('name')} placeholder="e.g. Ramesh Kulkarni" />, { required: true })}
           </div>
-          {field('phone1', poc ? 'Customer phone (optional)' : 'Phone', <input type="tel" inputMode="tel" value={form.phone1} onChange={set('phone1')} placeholder="10-digit mobile" />, { required: !poc })}
+          <div className="row">
+            {field('phone1', poc ? 'Phone (optional)' : 'Phone', <input type="tel" inputMode="tel" value={form.phone1} onChange={set('phone1')} placeholder="10-digit mobile" />, { required: !poc })}
+            {field('serviceRequest', poc ? 'Service needed (optional)' : 'Service needed', (
+              <select value={form.serviceRequest} onChange={set('serviceRequest')}>
+                <option value="">Choose…</option>
+                {SERVICE_REQUESTS.map((o) => <option key={o}>{o}</option>)}
+              </select>
+            ), { required: !poc })}
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>How did they come to us?</legend>
+          <div className="ctype" role="radiogroup" aria-label="How did they come to us">
+            {[['individual', 'Directly', 'They contacted us themselves'], ['poc', 'Through a contact person', 'An agent, bank officer, builder or relative']].map(([v, t, d]) => (
+              <label key={v} className={`ctype-opt${form.contactType === v ? ' on' : ''}`}>
+                <input type="radio" name="contactType" checked={form.contactType === v} onChange={() => setCame(v)} />
+                <strong>{t}</strong>
+                <small>{d}</small>
+              </label>
+            ))}
+          </div>
+
           {!poc && (
-            <div className="row">
-              {field('serviceRequest', 'Service needed', (
-                <select value={form.serviceRequest} onChange={set('serviceRequest')}>
-                  <option value="">Choose…</option>
-                  {SERVICE_REQUESTS.map((o) => <option key={o}>{o}</option>)}
-                </select>
-              ), { required: true })}
-              <label>How did they reach us?
-                <select value={form.source} onChange={set('source')}>
-                  {CUSTOMER_SOURCES.filter((o) => o !== 'Contact person').map((o) => <option key={o}>{o}</option>)}
+            <label>How did they reach us?
+              <select value={form.source} onChange={(e) => { setDirectSource(e.target.value); set('source')(e); }}>
+                {CUSTOMER_SOURCES.filter((o) => o !== 'Contact person').map((o) => <option key={o}>{o}</option>)}
+              </select>
+            </label>
+          )}
+
+          {poc && (pocMode === 'pick' ? (
+            <PocPicker
+              selected={form.pocPhone ? form : null}
+              tried={tried}
+              onPick={(x) => setForm((f) => ({ ...f, pocName: x.pocName, pocPhone: x.pocPhone, pocRole: x.pocRole || '' }))}
+              onClear={() => setForm((f) => ({ ...f, pocName: '', pocPhone: '', pocRole: '' }))}
+              onNew={(typed) => { setPocMode('new'); setForm((f) => ({ ...f, ...newPocFrom(typed) })); }}
+            />
+          ) : (
+            <>
+              <div className="row">
+                {field('pocName', 'Contact person', <input autoFocus value={form.pocName} onChange={set('pocName')} placeholder="Who brought the customer" />, { required: true })}
+                {field('pocPhone', 'Their phone', <input type="tel" inputMode="tel" value={form.pocPhone} onChange={set('pocPhone')} placeholder="10-digit mobile" />, { required: true })}
+              </div>
+              <label>Role
+                <select value={form.pocRole} onChange={set('pocRole')}>
+                  <option value="">—</option>
+                  {POC_ROLES.map((o) => <option key={o}>{o}</option>)}
                 </select>
               </label>
-            </div>
-          )}
+              <button type="button" className="link-btn" onClick={() => { setPocMode('pick'); setForm((f) => ({ ...f, pocName: '', pocPhone: '', pocRole: '' })); }}>← Choose a previous contact person</button>
+            </>
+          ))}
+
           <label>Notes
             <textarea rows={2} value={form.notes} onChange={set('notes')} placeholder="What they asked for, property, preferred visit time…" />
           </label>
@@ -249,23 +319,23 @@ export function CustomerFormModal({ customer, onClose, onSaved }) {
             </div>
             <div className="row">
               <label>Pincode<input inputMode="numeric" maxLength={6} value={form.pincode} onChange={set('pincode')} /></label>
-              <label>Occupation<input value={form.occupation} onChange={set('occupation')} /></label>
+              <label>{isFirm(form.salutation) ? 'Nature of business' : 'Occupation'}<input value={form.occupation} onChange={set('occupation')} /></label>
             </div>
             <div className="row">
               <label>Relation
                 <select value={form.relation} onChange={set('relation')}>
                   <option value="">—</option>
-                  {applicantOptions('relation').map((o) => <option key={o}>{o}</option>)}
+                  {relationOptions(form.salutation, form.relation).map((o) => <option key={o} value={o}>{RELATION_WORDS[o] || o}</option>)}
                 </select>
               </label>
-              <label>Father / husband name<input value={form.relativeName} onChange={set('relativeName')} /></label>
+              <label>{relativeLabel(form.relation, form.salutation)}<input value={form.relativeName} onChange={set('relativeName')} /></label>
             </div>
           </div>
         </details>
 
         <p className="muted small">These details are copied into the input sheet when you start one for this customer.</p>
         <div className="actions">
-          <button type="button" className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" className="btn" onClick={requestClose} disabled={busy}>Cancel</button>
           <button className="btn primary" disabled={busy}>{busy ? 'Saving…' : customer ? 'Save changes' : 'Add customer'}</button>
         </div>
       </form>
@@ -277,17 +347,28 @@ export function CustomerFormModal({ customer, onClose, onSaved }) {
 // Renders its own sticky footer (Back / Cancel · Create & assign).
 function AssignForm({ customer, properties = [], initialFrom = '', onAssigned, onBack, onCancel }) {
   const { user, isSuperadmin } = useAuth();
+  const navigate = useNavigate();
+  const myId = user?._id || user?.id;
   // evaluators start the sheet for themselves: no "assign to" choice
   const self = !isSuperadmin;
   const [people, setPeople] = useState(self ? [user] : null);
-  const [pick, setPick] = useState(self ? user?._id || user?.id || 'me' : '');
+  const [pick, setPick] = useState(self ? myId || 'me' : '');
+  // filling it in yourself (evaluator, or the superadmin picking "Myself"): the site is marked in the sheet itself
+  const mine = self || (pick && pick === myId);
+  const [dupes, setDupes] = useState(null); // open sheets of this customer, shown before creating another
   const [from, setFrom] = useState(initialFrom);
   const known = properties.filter((g) => g.identified);
   // site address for a new property (what the evaluator will visit)
   const [site, setSite] = useState({ description: '', number: '', surveyNo: '', street: '', village: '', district: '', pincode: '', landmark: '', gps: '' });
   const setS = (k) => (e) => setSite((x) => ({ ...x, [k]: e.target.value }));
   const newProperty = !from;
-  const siteOk = !newProperty || site.street.trim() || site.village.trim();
+  const siteStarted = Object.entries(site).some(([k, v]) => k !== 'gps' && v.trim());
+  // the address is needed to send someone else to the site; for yourself it is optional
+  const siteOk = !newProperty || site.street.trim() || site.village.trim() || (mine && !siteStarted);
+  // the customer's own address, to copy in one tap when the property is where they live
+  const custAddr = { number: customer.houseNo || '', street: customer.street || '', village: customer.locality || '', district: customer.district || '', pincode: customer.pincode || '' };
+  const hasCustAddr = Boolean(custAddr.street || custAddr.village);
+  const useCustomerAddress = () => setSite((x) => ({ ...x, ...custAddr }));
   const gps = site.gps.trim() ? parseLatLon(site.gps) : null;
   const gpsBad = site.gps.trim() && !gps;
   const [tried, setTried] = useState(false);
@@ -299,32 +380,93 @@ function AssignForm({ customer, properties = [], initialFrom = '', onAssigned, o
     api.listUsers({ status: 'active' })
       .then((r) => {
         const order = { evaluator: 0, admin: 1, superadmin: 2 };
-        const list = (r.items || []).filter((u) => u.status === 'active').sort((a, b) => order[a.role] - order[b.role] || a.name.localeCompare(b.name));
+        // "Myself" first, then evaluators, admins
+        const list = (r.items || []).filter((u) => u.status === 'active')
+          .sort((a, b) => (b._id === myId) - (a._id === myId) || order[a.role] - order[b.role] || a.name.localeCompare(b.name));
         setPeople(list);
         if (list.length === 1) setPick(list[0]._id);
       })
       .catch((e) => setError(e.message));
   }, []);
 
-  const assign = async () => {
+  const assign = async (allowDuplicate = false) => {
     setTried(true);
     if (!pick || !siteOk || gpsBad) return;
     setBusy(true);
     setError('');
     try {
       const { gps: _gps, ...fields } = site;
-      const sitePayload = newProperty ? { ...Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, v.trim()])), ...(gps ? { location: gps } : {}) } : undefined;
-      onAssigned(await api.startCustomerValuation(customer._id, pick, from || undefined, sitePayload));
+      const filled = siteStarted || gps;
+      const sitePayload = newProperty && filled ? { ...Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, v.trim()])), ...(gps ? { location: gps } : {}) } : undefined;
+      const r = await api.startCustomerValuation(customer._id, pick, from || undefined, sitePayload, allowDuplicate || undefined);
+      // your own job: straight into the sheet
+      if (r.self || String(r.evaluator?._id) === String(myId)) return navigate(`/valuations/${r._id}/edit`);
+      onAssigned(r);
     } catch (e) {
-      setError(e.message);
+      if (e.status === 409 && e.data?.open?.length) setDupes(e.data.open);
+      else setError(e.message);
       setBusy(false);
     }
   };
+
+  if (dupes) {
+    return (
+      <div className="nv-form">
+        <section className="nv-section nv-dupes">
+          <h3 className="nv-section-title">Already open for {customer.name}</h3>
+          <p className="nv-section-hint">Continue the open sheet instead of starting the same job twice.</p>
+          <ul className="nv-dupe-list">
+            {dupes.map((d) => {
+              const yours = String(d.evaluator?._id) === String(myId);
+              return (
+                <li key={d._id}>
+                  <span className="nv-main">
+                    <strong>{d.referenceNo} <span className={`badge status-${d.status}`}>{({ rejected: 'sent back', submitted: 'in review', received: 'received' })[d.status] || 'draft'}</span></strong>
+                    <small>{[yours ? 'You' : d.evaluator?.name, d.site, `updated ${new Date(d.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`].filter(Boolean).join(' · ')}</small>
+                  </span>
+                  <Link className="btn primary small" to={yours ? `/valuations/${d._id}/edit` : `/valuations/${d._id}`}>{yours ? 'Continue' : 'Open'}</Link>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+        <div className="nv-foot">
+          <button type="button" className="btn" onClick={() => setDupes(null)} disabled={busy}>‹ Back</button>
+          <button type="button" className="btn" onClick={() => { setDupes(null); assign(true); }} disabled={busy}>It's a different job: create another</button>
+        </div>
+      </div>
+    );
+  }
 
   let n = 0; // section numbers
   return (
     <div className="nv-form">
       {error && <div className="alert">{error}</div>}
+
+      {/* who first: picking "Myself" makes the site address optional below */}
+      {!self && <section className="nv-section">
+        <h3 className="nv-section-title"><span>{++n}</span> Assign to</h3>
+        {!people ? (
+          <div className="skeleton" style={{ height: 120 }} />
+        ) : people.length === 0 ? (
+          <p className="muted">No active team members yet. Add one under Team first.</p>
+        ) : (
+          <div className="nv-options nv-people" role="radiogroup" aria-label="Assign to">
+            {people.map((u) => (
+              <label key={u._id} className={`assign-opt${pick === u._id ? ' on' : ''}`}>
+                <input type="radio" name="assignee" value={u._id} checked={pick === u._id} onChange={() => setPick(u._id)} />
+                <span className="avatar soft sm">{initials(u.name)}</span>
+                <span className="assign-text">
+                  <strong>{u._id === myId ? 'Myself' : u.name}</strong>
+                  <small>{u._id === myId ? 'Fill it in now: the sheet opens straight away' : [ROLE_LABELS[u.role], u.branch].filter(Boolean).join(' · ')}</small>
+                </span>
+                {u.stats && <span className="assign-load" title="Input sheets handled">{u.stats.total} done</span>}
+              </label>
+            ))}
+          </div>
+        )}
+        {tried && !pick && people?.length > 0 && <span className="error-text">Choose who will fill in the input sheet.</span>}
+      </section>}
 
       {known.length > 0 && (
         <section className="nv-section">
@@ -349,14 +491,17 @@ function AssignForm({ customer, properties = [], initialFrom = '', onAssigned, o
 
       {newProperty && (
         <section className="nv-section">
-          <h3 className="nv-section-title"><span>{++n}</span> Site address</h3>
-          <p className="nv-section-hint">Where the evaluator goes. It's copied into the sheet's "Property location".</p>
+          <h3 className="nv-section-title"><span>{++n}</span> Site address{mine && <span className="muted small"> (optional)</span>}</h3>
+          <p className="nv-section-hint">
+            {mine ? 'You can skip this: mark the plot on the map in the sheet and the address fills in.' : 'Where the evaluator goes. It\u2019s copied into the sheet\u2019s \u201cProperty location\u201d.'}
+            {hasCustAddr && <> <button type="button" className="link-btn" onClick={useCustomerAddress}>Same as the customer's address</button></>}
+          </p>
           <div className="site-form nv-site">
             <label className="wide">Property description<input value={site.description} onChange={setS('description')} placeholder="e.g. Independent house, G+1" /></label>
             <label>Plot / H.No. / Flat No.<input value={site.number} onChange={setS('number')} /></label>
             <label>Sy.No. / LP No.<input value={site.surveyNo} onChange={setS('surveyNo')} /></label>
-            <label className={tried && !siteOk ? 'has-error' : ''}><span>Road / street / colony <span className="req">*</span></span><input value={site.street} onChange={setS('street')} /></label>
-            <label className={tried && !siteOk ? 'has-error' : ''}><span>Village / area <span className="req">*</span></span><input value={site.village} onChange={setS('village')} /></label>
+            <label className={tried && !siteOk ? 'has-error' : ''}><span>Road / street / colony {!mine && <span className="req">*</span>}</span><input value={site.street} onChange={setS('street')} /></label>
+            <label className={tried && !siteOk ? 'has-error' : ''}><span>Village / area {!mine && <span className="req">*</span>}</span><input value={site.village} onChange={setS('village')} /></label>
             <label>District<input value={site.district} onChange={setS('district')} /></label>
             <label>Pincode<input inputMode="numeric" maxLength={6} value={site.pincode} onChange={setS('pincode')} /></label>
             <label className="wide">Landmark<input value={site.landmark} onChange={setS('landmark')} placeholder="e.g. Opposite the post office" /></label>
@@ -369,35 +514,12 @@ function AssignForm({ customer, properties = [], initialFrom = '', onAssigned, o
         </section>
       )}
 
-      {!self && <section className="nv-section">
-        <h3 className="nv-section-title"><span>{++n}</span> Assign to</h3>
-        {!people ? (
-          <div className="skeleton" style={{ height: 120 }} />
-        ) : people.length === 0 ? (
-          <p className="muted">No active team members yet. Add one under Team first.</p>
-        ) : (
-          <div className="nv-options nv-people" role="radiogroup" aria-label="Assign to">
-            {people.map((u) => (
-              <label key={u._id} className={`assign-opt${pick === u._id ? ' on' : ''}`}>
-                <input type="radio" name="assignee" value={u._id} checked={pick === u._id} onChange={() => setPick(u._id)} />
-                <span className="avatar soft sm">{initials(u.name)}</span>
-                <span className="assign-text">
-                  <strong>{u.name}</strong>
-                  <small>{[ROLE_LABELS[u.role], u.branch].filter(Boolean).join(' · ')}</small>
-                </span>
-                {u.stats && <span className="assign-load" title="Input sheets handled">{u.stats.total} done</span>}
-              </label>
-            ))}
-          </div>
-        )}
-        {tried && !pick && people?.length > 0 && <span className="error-text">Choose who will fill in the input sheet.</span>}
-      </section>}
 
       <div className="nv-foot">
         {onBack
           ? <button type="button" className="btn" onClick={onBack} disabled={busy}>‹ Back</button>
           : <button type="button" className="btn" onClick={onCancel} disabled={busy}>Cancel</button>}
-        <button type="button" className="btn primary" onClick={assign} disabled={busy || !people?.length}>{busy ? 'Creating…' : self ? 'Create input sheet' : 'Create & assign'}</button>
+        <button type="button" className="btn primary" onClick={() => assign()} disabled={busy || !people?.length}>{busy ? 'Creating…' : mine ? 'Create & open sheet' : 'Create & assign'}</button>
       </div>
     </div>
   );

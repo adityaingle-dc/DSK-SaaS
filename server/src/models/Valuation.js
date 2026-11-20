@@ -2,7 +2,11 @@ import mongoose from 'mongoose';
 import { nextId } from '../services/ids.js';
 import { computeValuation, personName, phones } from '@dsk/shared';
 
-export const STATUSES = ['draft', 'submitted', 'approved', 'rejected'];
+// draft → submitted (by the evaluator) → received (the superadmin opened it) → approved = "Completed": a report has
+// been generated from it, which locks the sheet. rejected = sent back to the evaluator with a note.
+// The evaluator is the source of truth: they can edit until the report is generated.
+export const STATUSES = ['draft', 'submitted', 'received', 'approved', 'rejected'];
+export const EVALUATOR_EDITABLE = ['draft', 'rejected', 'submitted', 'received'];
 
 // The input sheet itself lives in `data` (shape defined by @dsk/shared formSchema – sanitised before save).
 // `results` is always recomputed server-side from `data`, never trusted from the client.
@@ -38,6 +42,10 @@ const valuationSchema = new mongoose.Schema(
     reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     reviewedAt: Date,
     reviewNote: String,
+    receivedAt: Date, // the superadmin first opened the submitted sheet
+    receivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    updatedAfterReceived: Boolean, // the evaluator changed it after the superadmin had opened it
+    reportedAt: Date, // first report generated from it (locks the sheet)
     // Superadmin wording/value edits applied on the printed bank report only (key -> text); data & results untouched
     reportOverrides: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
     reportEditedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

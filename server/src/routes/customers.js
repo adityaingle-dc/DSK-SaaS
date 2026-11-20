@@ -43,7 +43,7 @@ const pick = (body) =>
   );
 import { dateRange, options, paging, searchDigits, searchRx, sorting } from '../utils/listQuery.js';
 
-const OPEN_STATUSES = ['draft', 'submitted', 'rejected'];
+const OPEN_STATUSES = ['draft', 'submitted', 'received', 'rejected'];
 
 // always checked on the full record (create: the new fields; update: saved record + changes)
 const MOBILE = /^[6-9][0-9]{9}$/;
@@ -86,7 +86,7 @@ async function statsFor(ids, sheetScope = {}) {
         _id: '$customer',
         total: { $sum: 1 },
         approved: { $sum: { $cond: [{ $eq: ['$status', 'approved'] }, 1, 0] } },
-        open: { $sum: { $cond: [{ $in: ['$status', ['draft', 'submitted', 'rejected']] }, 1, 0] } },
+        open: { $sum: { $cond: [{ $in: ['$status', OPEN_STATUSES] }, 1, 0] } },
         totalValue: { $sum: { $ifNull: ['$summary.fairMarketValue', 0] } },
         latestStatus: { $first: '$status' },
         lastAt: { $first: '$updatedAt' },
@@ -263,7 +263,7 @@ router.post(
   '/:id/valuations',
   asyncHandler(async (req, res) => {
     const c = await load(req.params.id, req);
-    const { fromValuation, site } = req.body || {};
+    const { fromValuation, site, allowDuplicate } = req.body || {};
     // an evaluator always starts the sheet for themselves
     const evaluator = fullAccess(req) ? req.body?.evaluator : String(req.user._id);
     // `site` (new property): the address the evaluator will visit, copied into the sheet's "Property location"
@@ -271,10 +271,30 @@ router.post(
     const siteFields = site && typeof site === 'object'
       ? Object.fromEntries(Object.entries(site).filter(([k, val]) => SITE_FIELDS.includes(k) && val !== '' && val != null))
       : null;
-    if (!fromValuation && siteFields && !(siteFields.street || siteFields.village) ) throw new HttpError(422, 'Enter the site street or village so the evaluator can find it');
+    // an address that was started must say where the site is (left empty = filled in later, in the sheet itself)
+    if (!fromValuation && siteFields && Object.keys(siteFields).length && !(siteFields.street || siteFields.village)) throw new HttpError(422, 'Enter the site street or village so the evaluator can find it');
     if (!mongoose.isValidObjectId(evaluator)) throw new HttpError(422, 'Choose who will fill in the input sheet');
     const assignee = await User.findById(evaluator);
     if (!assignee || assignee.status !== 'active') throw new HttpError(422, 'That team member is not active');
+
+    // no duplicate jobs by accident: any open sheet for this customer (draft, returned or in review)
+    // is shown first, with "create another" as a deliberate second click
+    if (!allowDuplicate) {
+      const open = await Valuation.find({ customer: c._id, status: { $in: OPEN_STATUSES }, ...(fullAccess(req) ? {} : { evaluator: req.user._id }) })
+        .sort({ updatedAt: -1 }).limit(5).select('referenceNo status updatedAt evaluator data.property').populate('evaluator', 'name').lean();
+      if (open.length) {
+        const err = new HttpError(409, `${c.name} already has ${open.length === 1 ? 'an open input sheet' : `${open.length} open input sheets`}.`);
+        err.data = {
+          open: open.map((o) => ({
+            _id: o._id, referenceNo: o.referenceNo, status: o.status, updatedAt: o.updatedAt,
+            evaluator: o.evaluator ? { _id: o.evaluator._id, name: o.evaluator.name } : null,
+            site: [o.data?.property?.number, o.data?.property?.street, o.data?.property?.village].filter(Boolean).join(', '),
+          })),
+        };
+        throw err;
+      }
+    }
+    const selfAssigned = String(assignee._id) === String(req.user._id);
 
     let previous = null;
     if (fromValuation) {
@@ -292,7 +312,8 @@ router.post(
       for (const key of PROPERTY_SECTIONS) if (previous.data?.[key]) data[key] = previous.data[key];
       if (previous.data?.general?.propertyType) data.general.propertyType = previous.data.general.propertyType;
     }
-    const v = new Valuation({ data: sanitize(data), evaluator: assignee._id, customer: c._id, assignedBy: req.user._id, assignedAt: new Date() });
+    // taking the job yourself: it is started straight away (not waiting in anyone's "new" column)
+    const v = new Valuation({ data: sanitize(data), evaluator: assignee._id, customer: c._id, assignedBy: req.user._id, assignedAt: new Date(), ...(selfAssigned ? { startedAt: new Date() } : {}) });
     v.recompute();
     await v.save();
     await logActivity(req, 'valuation.assigned', {
@@ -300,10 +321,10 @@ router.post(
       entityId: v._id,
       summary: previous
         ? `Started re-valuation ${v.referenceNo} for ${c.name} (property from ${previous.referenceNo}) and assigned it to ${assignee.name}`
-        : `Started ${v.referenceNo} for ${c.name} and assigned it to ${assignee.name}`,
+        : selfAssigned ? `Started ${v.referenceNo} for ${c.name} (filling it in themselves)` : `Started ${v.referenceNo} for ${c.name} and assigned it to ${assignee.name}`,
       meta: { ...valuationMeta(v), assignee: assignee.name, customer: c.name, revaluationOf: previous?.referenceNo },
     });
-    res.status(201).json({ _id: v._id, referenceNo: v.referenceNo, evaluator: { _id: assignee._id, name: assignee.name } });
+    res.status(201).json({ _id: v._id, referenceNo: v.referenceNo, evaluator: { _id: assignee._id, name: assignee.name }, self: selfAssigned });
   })
 );
 

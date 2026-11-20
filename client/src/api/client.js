@@ -28,6 +28,7 @@ async function request(path, { method = 'GET', body, query } = {}) {
     const err = new Error(data.message || `Request failed (${res.status})`);
     err.status = res.status;
     err.errors = data.errors; // field-level validation errors [{ field, message }]
+    err.data = data; // the whole answer (e.g. the open sheets behind a duplicate warning)
     throw err;
   }
   return data;
@@ -35,8 +36,10 @@ async function request(path, { method = 'GET', body, query } = {}) {
 
 const authHeaders = () => (tokenStore.get() ? { Authorization: `Bearer ${tokenStore.get()}` } : {});
 
-async function uploadFile(file) {
+// meta.gps: where/when a camera photo was taken ({ lat, lon, accuracy, takenAt })
+async function uploadFile(file, meta = {}) {
   const form = new FormData();
+  if (meta.gps) form.append('gps', JSON.stringify(meta.gps));
   form.append('file', file, file.name);
   const res = await fetch(`${BASE}/files`, { method: 'POST', headers: authHeaders(), body: form });
   const data = await res.json().catch(() => ({}));
@@ -111,7 +114,7 @@ export const api = {
   createCustomer: (payload) => request('/customers', { method: 'POST', body: payload }),
   updateCustomer: (id, patch) => request(`/customers/${id}`, { method: 'PATCH', body: patch }),
   deleteCustomer: (id) => request(`/customers/${id}`, { method: 'DELETE' }),
-  startCustomerValuation: (id, evaluator, fromValuation, site) => request(`/customers/${id}/valuations`, { method: 'POST', body: { evaluator, fromValuation, site } }),
+  startCustomerValuation: (id, evaluator, fromValuation, site, allowDuplicate) => request(`/customers/${id}/valuations`, { method: 'POST', body: { evaluator, fromValuation, site, allowDuplicate } }),
   importCustomers: () => request('/customers/import', { method: 'POST' }),
   listPocs: (q) => request('/customers/pocs', { query: q ? { q } : {} }),
 
@@ -120,6 +123,8 @@ export const api = {
   listValuations: (query) => request('/valuations', { query }),
   valuationBoard: (query) => request('/valuations/board', { query }),
   lookupIfsc: (code) => request(`/valuations/ifsc/${encodeURIComponent(code)}`),
+  reverseGeocode: (lat, lon) => request(`/valuations/reverse-geocode?lat=${lat}&lon=${lon}`),
+  searchIfsc: (bank, q) => request(`/valuations/ifsc-search?bank=${encodeURIComponent(bank)}&q=${encodeURIComponent(q)}`),
   getValuation: (id) => request(`/valuations/${id}`),
   createValuation: (payload) => request('/valuations', { method: 'POST', body: payload }),
   updateValuation: (id, payload) => request(`/valuations/${id}`, { method: 'PUT', body: payload }),

@@ -10,6 +10,8 @@ export const ACTIONS = [
   'valuation.updated',
   'valuation.submitted',
   'valuation.approved',
+  'valuation.received', // the superadmin opened a submitted sheet
+  'valuation.completed', // a report was generated from it (or the superadmin finished their own)
   'valuation.rejected',
   'valuation.deleted',
   'valuation.report_edited',

@@ -22,11 +22,12 @@ const greeting = () => {
 
 // how each stage looks and what the main button says
 const STAGE = {
-  returned: { label: 'Returned', cls: 'status-rejected', action: 'Fix & resubmit' },
+  returned: { label: 'Sent back', cls: 'status-rejected', action: 'Fix & resubmit' },
   new: { label: 'New task', cls: 'status-new', action: 'Start' },
   inProgress: { label: 'In progress', cls: 'status-draft', action: 'Continue' },
-  submitted: { label: 'With superadmin', cls: 'status-submitted' },
-  approved: { label: 'Approved', cls: 'status-approved' },
+  submitted: { label: 'In review', cls: 'status-submitted' },
+  received: { label: 'With superadmin', cls: 'status-received' },
+  approved: { label: 'Completed', cls: 'status-approved' },
 };
 const StageChip = ({ stage }) => <span className={`status ${STAGE[stage].cls}`}><span className="dot" />{STAGE[stage].label}</span>;
 
@@ -39,7 +40,7 @@ const matches = (t, q) => {
   const digits = q.replace(/\D/g, '');
   return q.toLowerCase().split(/\s+/).every((w) => h.includes(w)) || (digits.length >= 3 && h.replace(/\D/g, '').includes(digits));
 };
-const TASK_TABS = [['', 'All'], ['new', 'New'], ['inProgress', 'In progress'], ['returned', 'Returned']];
+const TASK_TABS = [['', 'All'], ['new', 'New'], ['inProgress', 'In progress'], ['returned', 'Sent back']];
 
 function TaskRow({ t }) {
   const st = STAGE[t.stage];
@@ -166,13 +167,13 @@ export default function EvaluatorDashboard() {
   const c = data.counts;
   const todo = data.todo.filter((t) => (!stage || t.stage === stage) && matches(t, q));
   const submitted = data.submitted.filter((t) => matches(t, q));
+  const received = (data.received || []).filter((t) => matches(t, q));
   const completed = data.completed.filter((t) => matches(t, q));
   const searching = Boolean(q || stage);
   const tiles = [
     { key: 'new', label: 'New tasks', caption: 'Assigned, not started', icon: <IconDraft size={18} />, count: c.new, tone: 'blue' },
-    // returned sheets are work in progress again (they also stay at the top of My tasks)
-    { key: 'inProgress', label: 'In progress', caption: c.returned ? `Drafts, incl. ${c.returned} returned` : 'Saved as draft', icon: <IconClock size={18} />, count: c.inProgress + c.returned, tone: 'slate' },
-    { key: 'submitted', label: 'Received by superadmin', caption: 'Submitted, waiting for review', icon: <IconCheck size={18} />, count: c.submitted, tone: 'amber' },
+    { key: 'submitted', label: 'In review', caption: 'Submitted, not opened yet', icon: <IconCheck size={18} />, count: c.submitted, tone: 'amber' },
+    { key: 'received', label: 'With the superadmin', caption: 'Opened by the superadmin', icon: <IconCheck size={18} />, count: c.received || 0, tone: 'blue' },
   ];
 
   return (
@@ -182,7 +183,7 @@ export default function EvaluatorDashboard() {
       {c.returned > 0 && (
         <a href="#my-tasks" className="banner banner-red">
           <span className="banner-dot" />
-          <span><strong>{c.returned} sheet{c.returned === 1 ? '' : 's'}</strong> returned by the superadmin. Please make the changes and resubmit.</span>
+          <span><strong>{c.returned} sheet{c.returned === 1 ? '' : 's'}</strong> sent back by the superadmin. Please make the changes and resubmit.</span>
           <span className="banner-cta">View <IconChevron size={16} /></span>
         </a>
       )}
@@ -205,7 +206,7 @@ export default function EvaluatorDashboard() {
           <h2>My tasks</h2>
           {data.todo.length > 0 && <span className="muted small">{searching ? `${todo.length} of ${data.todo.length}` : 'Most urgent first'}</span>}
         </div>
-        {(data.todo.length + data.submitted.length + data.completed.length) > 0 && (
+        {(data.todo.length + data.submitted.length + (data.received || []).length + data.completed.length) > 0 && (
           <div className={`card-toolbar  task-toolbar${data.todo.length <= 5 && !q ? ' few' : ''}`}>
             <SearchBox value={q} onSearch={setQ} delay={150} label="Search my tasks" placeholder="Search applicant, reference, phone, address…" />
             {data.todo.length > 0 && (
@@ -237,9 +238,9 @@ export default function EvaluatorDashboard() {
 
       <div className="grid-2">
         <section className="card flush">
-          <div className="card-head"><h2>Waiting for review</h2></div>
+          <div className="card-head"><h2>In review</h2><span className="muted small">Not opened by the superadmin yet</span></div>
           {submitted.length === 0 ? (
-            <p className="muted card-empty">{data.submitted.length ? 'No submitted sheets match your search.' : 'Nothing waiting. Submitted sheets appear here until the superadmin reviews them.'}</p>
+            <p className="muted card-empty">{data.submitted.length ? 'No sheets in review match your search.' : 'Nothing in review. A sheet you submit waits here until the superadmin opens it.'}</p>
           ) : (
             <ul className="list">
               {submitted.map((t) => (
@@ -247,7 +248,7 @@ export default function EvaluatorDashboard() {
                   <Link to={`/valuations/${t._id}`} className="list-item">
                     <span className="list-main">
                       <strong>{t.applicantName}</strong>
-                      <small>{t.referenceNo} · submitted {timeAgo(t.submittedAt || t.updatedAt)}</small>
+                      <small>{`${t.referenceNo} · ${t.updatedAfterReceived ? 'updated' : 'submitted'} ${timeAgo(t.submittedAt || t.updatedAt)}`}</small>
                     </span>
                     <StageChip stage="submitted" />
                   </Link>
@@ -257,22 +258,19 @@ export default function EvaluatorDashboard() {
           )}
         </section>
         <section className="card flush">
-          <div className="card-head">
-            <h2>Recently completed</h2>
-            {c.approved > 0 && <Link to="/valuations?status=approved" className="link-sm">View all <IconChevron size={14} /></Link>}
-          </div>
-          {completed.length === 0 ? (
-            <p className="muted card-empty">{data.completed.length ? 'No completed sheets match your search.' : 'Approved input sheets appear here.'}</p>
+          <div className="card-head"><h2>With the superadmin</h2><span className="muted small">Opened; you can edit until the report</span></div>
+          {received.length === 0 ? (
+            <p className="muted card-empty">{(data.received || []).length ? 'No sheets match your search.' : 'A sheet moves here as soon as the superadmin opens it.'}</p>
           ) : (
             <ul className="list">
-              {completed.map((t) => (
+              {received.map((t) => (
                 <li key={t._id}>
                   <Link to={`/valuations/${t._id}`} className="list-item">
                     <span className="list-main">
                       <strong>{t.applicantName}</strong>
-                      <small>{t.referenceNo} · approved {timeAgo(t.reviewedAt || t.updatedAt)}</small>
+                      <small>{`${t.referenceNo} · opened by ${t.receivedBy || 'the superadmin'} ${timeAgo(t.receivedAt || t.updatedAt)}`}</small>
                     </span>
-                    <span className="list-end"><strong className="amount">{t.fairMarketValue > 0 ? inr(t.fairMarketValue) : '—'}</strong></span>
+                    <StageChip stage="received" />
                   </Link>
                 </li>
               ))}
@@ -280,6 +278,30 @@ export default function EvaluatorDashboard() {
           )}
         </section>
       </div>
+
+      <section className="card flush">
+          <div className="card-head">
+            <h2>Recently completed</h2>
+            {c.approved > 0 && <Link to="/valuations?status=approved" className="link-sm">View all <IconChevron size={14} /></Link>}
+          </div>
+          {completed.length === 0 ? (
+            <p className="muted card-empty">{data.completed.length ? 'No completed sheets match your search.' : 'Sheets appear here once their report is generated.'}</p>
+          ) : (
+            <ul className="list">
+              {completed.map((t) => (
+                <li key={t._id}>
+                  <Link to={`/valuations/${t._id}`} className="list-item">
+                    <span className="list-main">
+                      <strong>{t.applicantName}</strong>
+                      <small>{t.referenceNo} · {t.reportedAt ? `report generated ${timeAgo(t.reportedAt)}` : `completed ${timeAgo(t.reviewedAt || t.updatedAt)}`}</small>
+                    </span>
+                    <span className="list-end"><strong className="amount">{t.fairMarketValue > 0 ? inr(t.fairMarketValue) : '—'}</strong></span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+      </section>
     </div>
   );
 }

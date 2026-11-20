@@ -11,7 +11,7 @@ import EvaluatorDashboard from './EvaluatorDashboard.jsx';
 import PeriodPicker from '../components/PeriodPicker.jsx';
 import { compareLabel, periodLabel, periodRange, prevParams, rangeParams } from '../utils/period.js';
 import { DuoHome } from '../components/DuoIcons.jsx';
-import { IconCheck, IconChevron, IconClock, IconDraft, IconX } from '../components/Icons.jsx';
+import { IconCheck, IconChevron, IconClock, IconDraft, IconEye } from '../components/Icons.jsx';
 
 // change vs the previous period: "▲ 3" / "▼ 12%" / "No change"
 // invert: for figures where going down is good (e.g. rejections)
@@ -42,6 +42,9 @@ function OverviewDashboard() {
   const [stats, setStats] = useState(null);
   const [prev, setPrev] = useState(null);
   const [recent, setRecent] = useState([]);
+  const [mine, setMine] = useState([]); // superadmin: sheets they are filling in themselves
+  // the superadmin goes straight to editing a sheet; others open its page
+  const sheetUrl = (id) => (isSuperadmin ? `/valuations/${id}/edit` : `/valuations/${id}`);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -69,6 +72,14 @@ function OverviewDashboard() {
   }, [params]);
 
   useEffect(() => {
+    const me = user?._id || user?.id;
+    if (!isSuperadmin || !me) return;
+    Promise.all([api.listValuations({ evaluator: me, status: 'draft', limit: 5 }), api.listValuations({ evaluator: me, status: 'rejected', limit: 5 })])
+      .then(([d, r]) => setMine([...(r.items || []), ...(d.items || [])].filter((v, i, all) => all.findIndex((x) => x._id === v._id) === i)))
+      .catch(() => {});
+  }, [isSuperadmin, user]);
+
+  useEffect(() => {
     if (isSuperadmin) {
       Promise.all([api.listActivity({ limit: 6 }), api.listUsers({ status: 'pending' })])
         .then(([a, p]) => setTeam({ activity: a.items, pending: p.counts?.pending || 0 }))
@@ -80,17 +91,16 @@ function OverviewDashboard() {
   if (!stats) return <DashboardSkeleton />;
   const s = stats.byStatus;
   const maxCount = Math.max(1, ...stats.byTemplate.map((t) => t.count));
-  const decided = (s.approved || 0) + (s.rejected || 0);
-  const approvalRate = decided ? Math.round(((s.approved || 0) / decided) * 100) : null;
+  const completedRate = stats.total ? Math.round(((s.approved || 0) / stats.total) * 100) : null;
   const ps = prev?.byStatus || {};
   const withPeriod = (to) => (periodQS ? `${to}${to.includes('?') ? '&' : '?'}${periodQS}` : to);
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
   const tiles = [
-    { key: 'draft', to: withPeriod('/valuations?status=draft'), label: 'Drafts', caption: 'Work in progress', icon: <IconDraft size={18} />, count: s.draft, tone: 'slate' },
-    { key: 'submitted', to: withPeriod('/valuations?status=submitted'), label: 'In review', caption: isSuperadmin ? 'Awaiting your decision' : 'With the superadmin', icon: <IconClock size={18} />, count: s.submitted, tone: 'amber' },
-    { key: 'approved', to: withPeriod('/valuations?status=approved'), label: 'Approved', caption: 'Signed off', icon: <IconCheck size={18} />, count: s.approved, tone: 'green' },
-    { key: 'rejected', to: withPeriod('/valuations?status=rejected'), label: 'Rejected', caption: 'Returned for changes', icon: <IconX size={18} />, count: s.rejected, tone: 'red' },
+    { key: 'draft', to: withPeriod('/valuations?status=draft'), label: 'Drafts', caption: s.rejected ? `Work in progress · ${s.rejected} sent back` : 'Work in progress', icon: <IconDraft size={18} />, count: (s.draft || 0) + (s.rejected || 0), tone: 'slate' },
+    { key: 'submitted', to: withPeriod('/valuations?status=submitted,received'), label: 'In review', caption: isSuperadmin ? 'New: not opened yet' : 'Not opened yet', icon: <IconClock size={18} />, count: s.submitted, tone: 'amber' },
+    { key: 'received', to: withPeriod('/valuations?status=submitted,received'), label: 'Received', caption: 'Opened, report to generate', icon: <IconEye size={18} />, count: s.received, tone: 'blue' },
+    { key: 'approved', to: withPeriod('/valuations?status=approved'), label: 'Completed', caption: 'Report generated', icon: <IconCheck size={18} />, count: s.approved, tone: 'green' },
   ];
 
   return (
@@ -140,7 +150,7 @@ function OverviewDashboard() {
         <div className="hero-metrics">
           <div><strong>{stats.total} <Delta cur={stats.total} prev={prev?.total} vs={vs} /></strong><small>Total input sheets</small></div>
           <div><strong>{stats.total ? inr(stats.totalValue / stats.total) : '—'}</strong><small>Average value</small></div>
-          <div><strong>{approvalRate == null ? '—' : `${approvalRate}%`}</strong><small>Approval rate</small></div>
+          <div><strong>{completedRate == null ? '—' : `${completedRate}%`}</strong><small>Completed</small></div>
           <div><strong>{stats.byTemplate.length}</strong><small>Report types in use</small></div>
         </div>
       </section>
@@ -161,6 +171,32 @@ function OverviewDashboard() {
         ))}
       </section>
 
+      {mine.length > 0 && (
+        <section className="card flush my-sheets">
+          <div className="card-head">
+            <h2>Your input sheets to finish</h2>
+            <span className="muted small">{mine.length} open</span>
+          </div>
+          <ul className="list">
+            {mine.map((v) => (
+              <li key={v._id}>
+                <Link to={`/valuations/${v._id}/edit`} className="list-item">
+                  <span className="avatar soft">{initials(v.summary?.applicantName)}</span>
+                  <span className="list-main">
+                    <strong>{v.summary?.applicantName || 'Unnamed applicant'}</strong>
+                    <small>{[v.referenceNo, v.summary?.bankName, `updated ${new Date(v.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`].filter(Boolean).join(' · ')}</small>
+                  </span>
+                  <span className="list-end">
+                    {v.status === 'rejected' && <StatusBadge status={v.status} />}
+                    <span className="btn primary small">Continue</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <div className="grid-2 wide-left">
         <section className="card flush">
           <div className="card-head">
@@ -178,12 +214,12 @@ function OverviewDashboard() {
                   </thead>
                   <tbody>
                     {recent.map((v) => (
-                      <tr key={v._id} className="clickable" onClick={() => navigate(`/valuations/${v._id}`)}>
+                      <tr key={v._id} className="clickable" onClick={() => navigate(sheetUrl(v._id))}>
                         <td>
                           <div className="cell-person">
                             <span className="avatar soft sm">{initials(v.summary?.applicantName)}</span>
                             <span>
-                              <Link to={`/valuations/${v._id}`} onClick={(e) => e.stopPropagation()}><strong>{v.summary?.applicantName || 'Unnamed applicant'}</strong></Link>
+                              <Link to={sheetUrl(v._id)} onClick={(e) => e.stopPropagation()}><strong>{v.summary?.applicantName || 'Unnamed applicant'}</strong></Link>
                               <small className="muted block">{v.referenceNo}</small>
                             </span>
                           </div>
@@ -199,7 +235,7 @@ function OverviewDashboard() {
               <ul className="list mobile-only">
                 {recent.map((v) => (
                   <li key={v._id}>
-                    <Link to={`/valuations/${v._id}`} className="list-item">
+                    <Link to={sheetUrl(v._id)} className="list-item">
                       <span className="avatar soft">{initials(v.summary?.applicantName)}</span>
                       <span className="list-main">
                         <strong>{v.summary?.applicantName || 'Unnamed applicant'}</strong>
@@ -265,7 +301,7 @@ function EmptyState() {
     <div className="empty">
       <div className="empty-icon"><IconDraft size={24} /></div>
       <strong>No input sheets yet</strong>
-      <p className="muted">{isSuperadmin ? <>Use <strong>New input sheet</strong> on <strong>Input Sheets</strong> or a customer's page to assign one to an evaluator.</> : 'Input sheets assigned to you by the superadmin appear here.'}</p>
+      <p className="muted">{isSuperadmin ? <>Use <strong>New input sheet</strong> on <strong>Input Sheets</strong> or a customer's page: assign it to an evaluator, or pick <strong>Myself</strong> to fill it in now.</> : 'Input sheets assigned to you by the superadmin appear here.'}</p>
     </div>
   );
 }

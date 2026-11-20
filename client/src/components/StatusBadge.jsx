@@ -1,10 +1,12 @@
-const LABELS = { draft: 'Draft', submitted: 'In review', approved: 'Approved', rejected: 'Rejected' };
+// input sheet: draft → submitted → received (the superadmin opened it) → completed (report generated, locked);
+// rejected = sent back to the evaluator with a note
+export const STATUS_LABELS = { draft: 'Draft', submitted: 'In review', received: 'Received', approved: 'Completed', rejected: 'Sent back' };
 
-export default function StatusBadge({ status }) {
+export default function StatusBadge({ status, label }) {
   return (
     <span className={`status status-${status}`}>
       <span className="dot" />
-      {LABELS[status] || status}
+      {label || STATUS_LABELS[status] || status}
     </span>
   );
 }

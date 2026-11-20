@@ -22,13 +22,15 @@ import { dateTime, timeAgo } from '../utils/format.js';
 import SheetBoard from '../components/SheetBoard.jsx';
 import ViewSwitch, { rememberView, storedView } from '../components/ViewSwitch.jsx';
 
+// All · Received (handed in by the evaluator, waiting for the report; unopened ones are tagged New) · Completed.
+// Drafts, sent-back and only-unopened / only-opened sheets are still reachable by link (dashboard tiles, search).
+const RECEIVED_TAB = 'submitted,received';
 const STATUS_TABS = [
   ['', 'All'],
-  ['draft', 'Drafts'],
-  ['submitted', 'In review'],
-  ['rejected', 'Rejected'],
-  ['approved', 'Approved'],
+  [RECEIVED_TAB, 'Received'],
+  ['approved', 'Completed'],
 ];
+const OTHER_STATUS = { draft: 'Drafts', rejected: 'Sent back', submitted: 'New (not opened yet)', received: 'Opened' };
 // sort options (column headers on desktop, a select on phones); first click on a column uses its natural direction
 const SORTS = {
   updated: { label: 'Recently updated', first: 'desc' },
@@ -55,6 +57,8 @@ function SortTh({ k, query, onSort, children, className = '' }) {
 
 export default function ValuationList() {
   const { isReviewer, isSuperadmin } = useAuth();
+  // the superadmin goes straight to editing a sheet; others open its page
+  const sheetUrl = (id) => (isSuperadmin ? `/valuations/${id}/edit` : `/valuations/${id}`);
   const navigate = useNavigate();
   const { params, query, update, filtered, clear, apiQuery } = useListParams(DEFAULTS);
   const [data, setData] = useState(null);
@@ -117,6 +121,12 @@ export default function ValuationList() {
         />
       )}
 
+      {OTHER_STATUS[query.status] && (
+        <div className="filter-pill">
+          Showing: {OTHER_STATUS[query.status]}
+          <button type="button" className="linklike" onClick={() => update({ status: '' }, { replace: true })}>Show all</button>
+        </div>
+      )}
       {query.evaluator && !isReviewer && (
         <div className="filter-pill">
           Showing one evaluator's input sheets
@@ -137,33 +147,36 @@ export default function ValuationList() {
               value={query.status}
               onChange={(status) => update({ status }, { replace: true })}
             />}
-            <MoreFilters active={[query.period !== 'all', query.template, query.bank, query.evaluator].filter(Boolean).length}>
-              <PeriodPicker value={query} onChange={(p) => update({ period: p.period, start: p.start, end: p.end })} />
-              <select className="select-pill" aria-label="Report type" value={query.template} onChange={(e) => update({ template: e.target.value })}>
-                <option value="">All report types</option>
-                {Object.entries(REPORT_TEMPLATES).map(([k, t]) => <option key={k} value={k}>{k} – {t.title}</option>)}
-              </select>
-              {(facets.banks?.length > 1 || query.bank) && (
-                <select className="select-pill" aria-label="Bank" value={query.bank} onChange={(e) => update({ bank: e.target.value })}>
-                  <option value="">All banks</option>
-                  {(facets.banks || []).map((b) => <option key={b} value={b}>{b}</option>)}
+            {/* filters + sort: one group, kept on the slider's line on computers */}
+            <div className="lp-filters">
+              <MoreFilters active={[query.period !== 'all', query.template, query.bank, query.evaluator].filter(Boolean).length}>
+                <PeriodPicker value={query} onChange={(p) => update({ period: p.period, start: p.start, end: p.end })} />
+                <select className="select-pill" aria-label="Report type" value={query.template} onChange={(e) => update({ template: e.target.value })}>
+                  <option value="">All types</option>
+                  {Object.entries(REPORT_TEMPLATES).map(([k, t]) => <option key={k} value={k}>{k} – {t.title}</option>)}
                 </select>
-              )}
-              {isReviewer && (facets.evaluators?.length > 1 || query.evaluator) && (
-                <select className="select-pill" aria-label="Evaluator" value={query.evaluator} onChange={(e) => update({ evaluator: e.target.value })}>
-                  <option value="">All evaluators</option>
-                  {(facets.evaluators || []).map((u) => <option key={u._id} value={u._id}>{u.name}</option>)}
-                </select>
-              )}
-            </MoreFilters>
-            {view === 'list' && <select className="select-pill mobile-sort" aria-label="Sort by" value={`${query.sort}:${query.dir}`} onChange={(e) => { const [sort, dir] = e.target.value.split(':'); update({ sort, dir }); }}>
-              <option value="updated:desc">Recently updated</option>
-              <option value="updated:asc">Oldest first</option>
-              <option value="applicant:asc">Applicant (A–Z)</option>
-              <option value="applicant:desc">Applicant (Z–A)</option>
-              <option value="value:desc">Highest value</option>
-              <option value="value:asc">Lowest value</option>
-            </select>}
+                {(facets.banks?.length > 1 || query.bank) && (
+                  <select className="select-pill" aria-label="Bank" value={query.bank} onChange={(e) => update({ bank: e.target.value })}>
+                    <option value="">All banks</option>
+                    {(facets.banks || []).map((b) => <option key={b} value={b}>{b}</option>)}
+                  </select>
+                )}
+                {isReviewer && (facets.evaluators?.length > 1 || query.evaluator) && (
+                  <select className="select-pill" aria-label="Evaluator" value={query.evaluator} onChange={(e) => update({ evaluator: e.target.value })}>
+                    <option value="">All evaluators</option>
+                    {(facets.evaluators || []).map((u) => <option key={u._id} value={u._id}>{u.name}</option>)}
+                  </select>
+                )}
+              </MoreFilters>
+              {view === 'list' && <select className="select-pill mobile-sort" aria-label="Sort by" value={`${query.sort}:${query.dir}`} onChange={(e) => { const [sort, dir] = e.target.value.split(':'); update({ sort, dir }); }}>
+                <option value="updated:desc">Recently updated</option>
+                <option value="updated:asc">Oldest first</option>
+                <option value="applicant:asc">Applicant (A–Z)</option>
+                <option value="applicant:desc">Applicant (Z–A)</option>
+                <option value="value:desc">Highest value</option>
+                <option value="value:asc">Lowest value</option>
+              </select>}
+            </div>
           </div>
         </div>
 
@@ -181,7 +194,7 @@ export default function ValuationList() {
             ) : (
               <>
                 <strong>No input sheets yet</strong>
-                <p className="muted">{isSuperadmin ? <>Use <strong>New input sheet</strong> to pick a customer and assign the job to an evaluator.</> : 'Input sheets assigned to you by the superadmin appear here.'}</p>
+                <p className="muted">{isSuperadmin ? <>Use <strong>New input sheet</strong> to pick a customer, then assign the job to an evaluator or pick <strong>Myself</strong> to fill it in now.</> : 'Input sheets assigned to you by the superadmin appear here.'}</p>
               </>
             )}
           </div>
@@ -206,12 +219,13 @@ export default function ValuationList() {
                 <tbody>
                   {!data && <TableSkeleton cols={cols} />}
                   {(data?.items || []).map((v) => (
-                    <tr key={v._id} className="clickable" onClick={() => navigate(`/valuations/${v._id}`)}>
+                    <tr key={v._id} className="clickable" onClick={() => navigate(sheetUrl(v._id))}>
                       <td>
                         <div className="cell-person">
                           <span className="avatar soft sm">{initials(v.summary?.applicantName)}</span>
                           <span>
-                            <Link to={`/valuations/${v._id}`} onClick={(e) => e.stopPropagation()}><strong>{v.summary?.applicantName || 'Unnamed applicant'}</strong></Link>
+                            <Link to={sheetUrl(v._id)} onClick={(e) => e.stopPropagation()}><strong>{v.summary?.applicantName || 'Unnamed applicant'}</strong></Link>
+                            {isSuperadmin && v.status === 'submitted' && <span className="new-tag" title="Submitted, not opened yet">New</span>}
                             <small className="muted block ref">{v.referenceNo}</small>
                           </span>
                         </div>
@@ -234,10 +248,10 @@ export default function ValuationList() {
             <ul className="list mobile-only">
               {(data?.items || []).map((v) => (
                 <li key={v._id}>
-                  <Link to={`/valuations/${v._id}`} className="list-item">
+                  <Link to={sheetUrl(v._id)} className="list-item">
                     <span className="avatar soft">{initials(v.summary?.applicantName)}</span>
                     <span className="list-main">
-                      <strong>{v.summary?.applicantName || 'Unnamed applicant'}</strong>
+                      <strong>{v.summary?.applicantName || 'Unnamed applicant'}{isSuperadmin && v.status === 'submitted' && <span className="new-tag" title="Submitted, not opened yet">New</span>}</strong>
                       <small>{v.referenceNo} · {v.summary?.reportTemplate} · {timeAgo(v.updatedAt)}</small>
                     </span>
                     <span className="list-end">

@@ -5,12 +5,16 @@ export * from './formSchema.js';
 export * from './validate.js';
 export * from './banks.js';
 export * from './geo.js';
+export * from './person.js';
+export * from './plot.js';
+export * from './documents.js';
 export { amountInWords } from './words.js';
 
-// All attachment ids referenced anywhere in a sheet: site photos + documents produced
+// All attachment ids referenced anywhere in a sheet: site photos, boundary photos + documents produced
 export const attachmentIds = (data = {}) => [
   ...(data.property?.photos || []).map((f) => f.id),
-  ...(data.documents?.items || []).flatMap((row) => (row.files || []).map((f) => f.id)),
+  ...(data.boundaries?.photos || []).map((f) => f.id),
+  ...(data.documents?.items || []).flatMap((row) => [...(row.firstPage || []), ...(row.files || [])].map((f) => f.id)),
 ];
 
 // Display helpers shared by web + mobile

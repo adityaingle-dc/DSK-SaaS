@@ -106,11 +106,14 @@ export default function Layout() {
   const { user, logout, isSuperadmin } = useAuth();
   const { pathname } = useLocation();
   const [pending, setPending] = useState(0);
+  const [inReview, setInReview] = useState(0);
 
   // pending-approval badge for the superadmin (refreshed on navigation)
   useEffect(() => {
     if (!isSuperadmin) return;
     api.listUsers({ status: 'pending' }).then((r) => setPending(r.counts?.pending || 0)).catch(() => {});
+    // submitted sheets the superadmin hasn't opened yet
+    api.stats({}).then((s) => setInReview(s.byStatus?.submitted || 0)).catch(() => {});
   }, [isSuperadmin, pathname]);
 
   // evaluators: number of tasks needing action (new + returned)
@@ -132,6 +135,7 @@ export default function Layout() {
   const moreActive = /^\/(team|activity|change-password)/.test(pathname);
 
   const badge = pending > 0 && <span className="nav-badge">{pending}</span>;
+  const sheetsBadge = isSuperadmin && inReview > 0 && <span className="nav-badge" title="Submitted sheets not opened yet">{inReview}</span>;
 
   return (
     <SearchProvider>
@@ -144,7 +148,7 @@ export default function Layout() {
           <div className="nav-section">Workspace</div>
           <NavLink to="/" end><DuoHome size={19} /> Dashboard {taskBadge}</NavLink>
           <NavLink to="/customers"><DuoContact size={19} /> {isSuperadmin ? 'Customers' : 'My customers'}</NavLink>
-          <NavLink to="/valuations" end><DuoList size={19} /> Input Sheets</NavLink>
+          <NavLink to="/valuations" end><DuoList size={19} /> Input Sheets {sheetsBadge}</NavLink>
           {isSuperadmin && <NavLink to="/reports"><DuoSheet size={19} /> Reports</NavLink>}
           {isSuperadmin && (
             <>
@@ -167,7 +171,7 @@ export default function Layout() {
         {isSuperadmin ? (
           <>
             <NavLink to="/customers"><DuoContact size={22} /><span>Customers</span></NavLink>
-            <NavLink to="/valuations" end><DuoList size={22} /><span>Input Sheets</span></NavLink>
+            <NavLink to="/valuations" end><span className="tab-icon"><DuoList size={22} />{sheetsBadge}</span><span>Input Sheets</span></NavLink>
             <NavLink to="/reports"><DuoSheet size={22} /><span>Reports</span></NavLink>
             <button type="button" className={`tab-more${moreActive ? ' active' : ''}`} aria-haspopup="dialog" aria-expanded={moreOpen} onClick={() => setMoreOpen(true)}>
               <span className="tab-icon"><IconMoreGrid />{pending > 0 && <span className="nav-badge">{pending}</span>}</span><span>More</span>

@@ -49,15 +49,18 @@ export async function syncAttachments(valuation, user) {
     if (linkedHere || free) allowed.set(String(a._id), a);
   }
 
-  const prop = valuation.data.property;
-  if (prop?.photos) {
-    prop.photos = prop.photos.filter((f) => allowed.has(f.id)).map((f) => allowed.get(f.id).toRef());
-    if (!prop.photos.length) delete prop.photos;
+  // photo lists: Property location → site photos, Boundaries → boundary photos
+  for (const section of [valuation.data.property, valuation.data.boundaries]) {
+    if (!section?.photos) continue;
+    section.photos = section.photos.filter((f) => allowed.has(f.id)).map((f) => ({ ...allowed.get(f.id).toRef(), ...(f.side ? { side: f.side } : {}) }));
+    if (!section.photos.length) delete section.photos;
   }
   for (const row of valuation.data.documents?.items || []) {
-    if (!row.files) continue;
-    row.files = row.files.filter((f) => allowed.has(f.id)).map((f) => allowed.get(f.id).toRef());
-    if (!row.files.length) delete row.files;
+    for (const key of ['firstPage', 'files']) {
+      if (!row[key]) continue;
+      row[key] = row[key].filter((f) => allowed.has(f.id)).map((f) => allowed.get(f.id).toRef());
+      if (!row[key].length) delete row[key];
+    }
   }
 
   const keep = [...allowed.keys()];

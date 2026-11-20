@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
-import { bankByCode, catalog, IFSC_RX, sanitize, validate, computeValuation, propertyAddress, REPORT_TEMPLATES } from '@dsk/shared';
-import Valuation from '../models/Valuation.js';
+import { bankByCode, findBank, catalog, IFSC_RX, sanitize, validate, computeValuation, propertyAddress, REPORT_TEMPLATES } from '@dsk/shared';
+import { searchBranches } from '../services/ifscDirectory.js';
+import { reverseGeocode } from '../services/geocode.js';
+import Valuation, { EVALUATOR_EDITABLE } from '../models/Valuation.js';
 import { protect, requireSuperadmin } from '../middleware/auth.js';
 import User, { isReviewer, isSuperadmin } from '../models/User.js';
 import { options, paging, searchDigits, searchRx, sorting } from '../utils/listQuery.js';
@@ -33,6 +35,7 @@ async function load(req) {
   const v = await Valuation.findOne({ _id: req.params.id, ...scope(req.user) })
     .populate('evaluator', 'name email branch')
     .populate('reviewedBy', 'name email')
+    .populate('receivedBy', 'name')
     .populate('reportEditedBy', 'name')
     .populate('customer', CUSTOMER_CONTACT);
   if (!v) throw new HttpError(404, 'Valuation not found');
@@ -69,15 +72,17 @@ router.get(
   asyncHandler(async (req, res) => {
     const rows = await Valuation.find({ evaluator: req.user._id })
       .sort({ updatedAt: -1 })
-      .select('referenceNo status summary data.property customer assignedBy assignedAt startedAt submittedAt reviewNote reviewedAt reviewedBy createdAt updatedAt')
+      .select('referenceNo status summary data.property customer assignedBy assignedAt startedAt submittedAt reviewNote reviewedAt reviewedBy receivedAt receivedBy updatedAfterReceived reportedAt createdAt updatedAt')
       .populate('customer', CUSTOMER_CONTACT)
       .populate('assignedBy', 'name')
       .populate('reviewedBy', 'name')
+      .populate('receivedBy', 'name')
       .lean();
     const task = (v) => ({
       _id: v._id,
       referenceNo: v.referenceNo,
       status: v.status,
+      // submitted = in review (not opened by the superadmin yet) · received = with the superadmin (opened)
       stage: v.status === 'rejected' ? 'returned' : v.status === 'draft' ? (v.startedAt ? 'inProgress' : 'new') : v.status,
       applicantName: v.summary?.applicantName || v.customer?.name || '',
       customer: v.customer || null,
@@ -100,6 +105,10 @@ router.get(
       reviewNote: v.reviewNote,
       reviewedBy: v.reviewedBy?.name || null,
       reviewedAt: v.reviewedAt,
+      receivedAt: v.receivedAt,
+      receivedBy: v.receivedBy?.name || null,
+      updatedAfterReceived: !!v.updatedAfterReceived,
+      reportedAt: v.reportedAt || null,
       updatedAt: v.updatedAt,
     });
     const all = rows.map(task);
@@ -109,11 +118,13 @@ router.get(
     const fresh = oldestFirst(by('new'), 'assignedAt');
     const inProgress = oldestFirst(by('inProgress'), 'assignedAt');
     const submitted = by('submitted');
+    const received = by('received');
     const approved = by('approved');
     res.json({
-      counts: { new: fresh.length, inProgress: inProgress.length, returned: returned.length, submitted: submitted.length, approved: approved.length },
+      counts: { new: fresh.length, inProgress: inProgress.length, returned: returned.length, submitted: submitted.length, received: received.length, approved: approved.length },
       todo: [...returned, ...fresh, ...inProgress], // what needs action, most urgent first
-      submitted,
+      submitted, // in review: not opened by the superadmin yet
+      received, // with the superadmin: opened by them
       completed: approved.slice(0, 5),
     });
   })
@@ -162,11 +173,13 @@ function listFilter(req) {
 }
 
 // Kanban board: the same search / filters, grouped into workflow columns.
-// new = draft never opened by the evaluator · inProgress = draft being filled · submitted · rejected (returned) · approved
+// new = draft never opened by the evaluator · inProgress = draft being filled · submitted (not opened by the superadmin yet)
+// · received (opened) · rejected (sent back) · approved (completed: report generated)
 const BOARD_COLUMNS = {
   new: { status: 'draft', startedAt: null },
   inProgress: { status: 'draft', startedAt: { $ne: null } },
   submitted: { status: 'submitted' },
+  received: { status: 'received' },
   rejected: { status: 'rejected' },
   approved: { status: 'approved' },
 };
@@ -196,7 +209,11 @@ router.get(
     // whitelisted sort keys; default is most recently updated first
     const sortSpec = sorting(req.query, { updated: 'updatedAt', applicant: 'summary.applicantName', value: 'summary.fairMarketValue', created: 'createdAt' });
     const { base, filter } = listFilter(req);
-    if (status) filter.status = String(status);
+    // one status, or several separated by commas (e.g. submitted,received = handed in, waiting for the report)
+    if (status) {
+      const list = String(status).split(',').map((x) => x.trim()).filter(Boolean);
+      filter.status = list.length > 1 ? { $in: list } : list[0];
+    }
     const { page, limit, skip } = paging(req.query);
     const [items, total, banks, evaluatorIds] = await Promise.all([
       Valuation.find(filter).sort(sortSpec).skip(skip).limit(limit).select('referenceNo summary status updatedAt createdAt evaluator').populate('evaluator', 'name'),
@@ -215,10 +232,11 @@ router.post(
   '/',
   requireSuperadmin,
   asyncHandler(async (req, res) => {
-    const approve = req.body?.status === 'approved';
-    const submit = approve || req.body?.status === 'submitted';
+    // the superadmin's own sheet needs no review: "finish" makes it complete and ready for a report (received)
+    const finish = ['received', 'approved'].includes(req.body?.status);
+    const submit = finish || req.body?.status === 'submitted';
     const v = new Valuation({ data: prepare(req.body, submit), evaluator: req.user._id, assignedBy: req.user._id, assignedAt: new Date(), startedAt: new Date() });
-    if (approve) Object.assign(v, { status: 'approved', submittedAt: new Date(), reviewedBy: req.user._id, reviewedAt: new Date() });
+    if (finish) Object.assign(v, { status: 'received', submittedAt: new Date(), receivedAt: new Date(), receivedBy: req.user._id });
     else if (submit) {
       v.status = 'submitted';
       v.submittedAt = new Date();
@@ -228,9 +246,42 @@ router.post(
     await linkCustomer(v, req.user);
     await v.save();
     await logActivity(req, 'valuation.created', { entityType: 'valuation', entityId: v._id, summary: `Created input sheet ${label(v)}`, meta: valuationMeta(v) });
-    if (approve) await logActivity(req, 'valuation.approved', { entityType: 'valuation', entityId: v._id, summary: `Approved ${label(v)}`, meta: valuationMeta(v) });
+    if (finish) await logActivity(req, 'valuation.completed', { entityType: 'valuation', entityId: v._id, summary: `Finished ${label(v)}: ready for a report`, meta: valuationMeta(v) });
     else if (submit) await logActivity(req, 'valuation.submitted', { entityType: 'valuation', entityId: v._id, summary: `Submitted ${label(v)} for review`, meta: valuationMeta(v) });
     res.status(201).json(v);
+  })
+);
+
+// bank name + branch / area → matching branches with their IFSC (Razorpay's public IFSC dataset, kept on disk)
+// map point → address parts for the Property location section (OpenStreetMap; nothing stored)
+router.get(
+  '/reverse-geocode',
+  asyncHandler(async (req, res) => {
+    const lat = Number(req.query.lat);
+    const lon = Number(req.query.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) throw new HttpError(400, 'A valid map location is needed');
+    try {
+      res.json(await reverseGeocode(lat, lon));
+    } catch (e) {
+      console.warn('[geocode] unavailable:', e.message);
+      throw new HttpError(503, 'Address lookup is unavailable right now. Fill the address manually.');
+    }
+  })
+);
+
+router.get(
+  '/ifsc-search',
+  asyncHandler(async (req, res) => {
+    const bank = String(req.query.bank || '').trim().slice(0, 120);
+    const q = String(req.query.q || '').trim().slice(0, 80);
+    if (!bank) throw new HttpError(400, 'Enter the bank name first');
+    if (q.length < 2) return res.json({ bankCode: null, bank: null, total: 0, items: [] });
+    try {
+      res.json(await searchBranches({ bank, knownCode: findBank(bank)?.code, q }));
+    } catch (e) {
+      console.warn('[ifsc] search unavailable:', e.message);
+      throw new HttpError(503, 'Branch search is unavailable right now. Enter the IFSC or branch manually.');
+    }
   })
 );
 
@@ -270,53 +321,73 @@ router.get(
   })
 );
 
-router.get('/:id', asyncHandler(async (req, res) => res.json(await load(req))));
+// The superadmin opening an evaluator's submitted sheet = received (the evaluator sees "Received by …")
+router.get('/:id', asyncHandler(async (req, res) => {
+  const v = await load(req);
+  const own = String(v.evaluator?._id || v.evaluator) === String(req.user._id);
+  if (isSuperadmin(req.user) && v.status === 'submitted' && !own) {
+    const at = new Date();
+    // not a change to the sheet itself: keep its "last updated" time
+    await Valuation.updateOne({ _id: v._id }, { $set: { status: 'received', receivedAt: at, receivedBy: req.user._id } }, { timestamps: false });
+    await logActivity(req, 'valuation.received', {
+      entityType: 'valuation', entityId: v._id, meta: { ...valuationMeta(v), evaluatorId: v.evaluator?._id, evaluatorName: v.evaluator?.name },
+      summary: `Received ${label(v)} from ${v.evaluator?.name || 'the evaluator'}`,
+    });
+    return res.json({ ...v.toJSON(), status: 'received', receivedAt: at, receivedBy: { _id: req.user._id, name: req.user.name } });
+  }
+  res.json(v);
+}));
 
 router.put(
   '/:id',
   asyncHandler(async (req, res) => {
     const v = await load(req);
-    if (!isReviewer(req.user) && !['draft', 'rejected'].includes(v.status)) {
-      throw new HttpError(409, 'Only draft or returned input sheets can be edited');
+    // the evaluator can edit until a report has been generated from the sheet
+    if (!isReviewer(req.user) && !EVALUATOR_EDITABLE.includes(v.status)) {
+      throw new HttpError(409, 'A report has already been generated from this input sheet, so it can no longer be changed. Ask the superadmin if something needs correcting.');
     }
-    const approve = req.body?.status === 'approved';
-    if (approve && !isSuperadmin(req.user)) throw new HttpError(403, 'Only the superadmin can approve');
+    // "finish" (superadmin): complete and ready for a report, no review step ('approved' from older screens means the same)
+    const finish = ['received', 'approved'].includes(req.body?.status) && isSuperadmin(req.user);
     const submit = req.body?.status === 'submitted';
-    v.data = prepare(req.body, approve || submit || ['submitted', 'approved'].includes(v.status));
-    if (!v.startedAt && String(v.evaluator?._id || v.evaluator) === String(req.user._id)) v.startedAt = new Date();
-    const newlyApproved = approve && v.status !== 'approved';
-    if (newlyApproved) Object.assign(v, { status: 'approved', submittedAt: v.submittedAt || new Date(), reviewedBy: req.user._id, reviewedAt: new Date(), reviewNote: undefined });
-    const newlySubmitted = submit && !['submitted', 'approved'].includes(v.status);
-    if (newlySubmitted) {
-      v.status = 'submitted';
-      v.submittedAt = new Date();
-    }
+    const wasReceived = v.status === 'received';
+    v.data = prepare(req.body, finish || submit || ['submitted', 'received', 'approved'].includes(v.status));
+    const own = String(v.evaluator?._id || v.evaluator) === String(req.user._id);
+    if (!v.startedAt && own) v.startedAt = new Date();
+    const newlyFinished = finish && !['received', 'approved'].includes(v.status);
+    if (newlyFinished) Object.assign(v, { status: 'received', submittedAt: v.submittedAt || new Date(), receivedAt: new Date(), receivedBy: req.user._id, reviewNote: undefined, updatedAfterReceived: false });
+    const newlySubmitted = submit && ['draft', 'rejected'].includes(v.status);
+    if (newlySubmitted) Object.assign(v, { status: 'submitted', submittedAt: new Date(), receivedAt: undefined, receivedBy: undefined, updatedAfterReceived: false });
+    // the evaluator changed a sheet the superadmin had already opened: back to "submitted" so they see it again
+    const changedAfterReceived = !newlySubmitted && !newlyFinished && wasReceived && own && !isSuperadmin(req.user);
+    if (changedAfterReceived) Object.assign(v, { status: 'submitted', updatedAfterReceived: true, submittedAt: new Date() });
     await syncAttachments(v, req.user);
     v.recompute();
     if (!v.customer) await linkCustomer(v, req.user);
     await v.save();
-    await logActivity(req, newlyApproved ? 'valuation.approved' : newlySubmitted ? 'valuation.submitted' : 'valuation.updated', {
+    await logActivity(req, newlyFinished ? 'valuation.completed' : newlySubmitted ? 'valuation.submitted' : 'valuation.updated', {
       entityType: 'valuation', entityId: v._id, meta: valuationMeta(v),
-      summary: newlyApproved ? `Saved and approved ${label(v)}` : newlySubmitted ? `Submitted ${label(v)} for review` : `Saved changes to ${label(v)}`,
+      summary: newlyFinished ? `Finished ${label(v)}: ready for a report` : newlySubmitted ? `Submitted ${label(v)}`
+        : changedAfterReceived ? `Updated ${label(v)} after the superadmin received it` : `Saved changes to ${label(v)}`,
     });
     res.json(v);
   })
 );
 
-// Submitted sheets are reviewed (approved / returned) by the superadmin
+// The superadmin can send a submitted / received sheet back to the evaluator with a note (there is no approval:
+// generating the report completes the sheet)
 router.patch(
   '/:id/review',
   requireSuperadmin,
   asyncHandler(async (req, res) => {
     const { decision, note } = req.body || {};
-    if (!['approved', 'rejected'].includes(decision)) throw new HttpError(400, 'decision must be approved or rejected');
+    if (decision !== 'rejected') throw new HttpError(400, 'Approval is no longer used: generate the report to complete the sheet. To ask for changes, send it back with a note.');
     const v = await load(req);
-    if (v.status !== 'submitted') throw new HttpError(409, 'Only submitted input sheets can be reviewed');
+    if (!['submitted', 'received'].includes(v.status)) throw new HttpError(409, 'Only a submitted input sheet can be sent back');
     Object.assign(v, { status: decision, reviewNote: note ? String(note).slice(0, 2000) : undefined, reviewedBy: req.user._id, reviewedAt: new Date() });
     await v.save();
     await logActivity(req, `valuation.${decision}`, {
       entityType: 'valuation', entityId: v._id, meta: { ...valuationMeta(v), evaluatorId: v.evaluator?._id, evaluatorName: v.evaluator?.name, note: v.reviewNote },
-      summary: `${decision === 'approved' ? 'Approved' : 'Rejected'} ${label(v)} by ${v.evaluator?.name || 'evaluator'}`,
+      summary: `Sent ${label(v)} back to ${v.evaluator?.name || 'the evaluator'}${v.reviewNote ? `: ${v.reviewNote.slice(0, 80)}` : ''}`,
     });
     res.json(await v.populate('reviewedBy', 'name email'));
   })

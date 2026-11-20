@@ -24,16 +24,25 @@
 .switch.on .switch-track span { transform: translateX(18px); }
 .switch input:focus-visible + .switch-track { box-shadow: var(--ring); }
 
-/* ---------- A4 sheets ---------- */
-.sheets { display: flex; flex-direction: column; align-items: center; gap: 24px; padding-bottom: 40px; }
+/* ---------- A4 pages ---------- */
+/* each page is exactly A4; a section longer than a page continues on the next one (Pages.jsx) */
+.sheets { display: flex; flex-direction: column; align-items: center; gap: 24px; padding-bottom: 40px; transform-origin: 0 0; }
+.sheet-group { display: contents; }
 .sheet {
   --ink-r: #111827;
-  position: relative; width: 210mm; min-height: 297mm; background: #fff; color: var(--ink-r);
+  position: relative; width: 210mm; height: 297mm; flex: none; background: #fff; color: var(--ink-r);
   padding: 11mm 14mm 7mm; box-shadow: 0 10px 30px -12px rgba(15, 23, 42, 0.25); border-radius: 4px;
   display: flex; flex-direction: column; overflow: hidden;
   font-family: Georgia, 'Times New Roman', serif; font-size: 9pt; line-height: 1.36;
 }
-.sheet-body { flex: 1; display: flex; flex-direction: column; gap: 7px; }
+.sheet-body { flex: 1 1 0; min-height: 0; overflow: clip; }
+/* the part of the section's content that falls on this page */
+.sheet-window { display: flow-root; overflow: clip; position: relative; } /* flow-root: keeps the negative offset inside */
+/* a table row that continues on the next page is closed off with a rule at the cut, like a word processor */
+.sheet-window.cut-bottom::after, .sheet-window.cut-top::before { content: ''; position: absolute; left: 0; right: 0; border-top: 1.6px solid #374151; z-index: 1; }
+.sheet-window.cut-bottom::after { bottom: 0; }
+.sheet-window.cut-top::before { top: 0; }
+.sheet-flow { display: flex; flex-direction: column; gap: 7px; }
 .sheet p { margin: 0; }
 .sheet h1, .sheet h3, .sheet h4 { font-family: inherit; letter-spacing: 0; color: var(--ink-r); display: block; }
 .doc-title { font-size: 13pt; text-align: center; margin: 4px 0 0; font-weight: 700; }
@@ -123,8 +132,6 @@
 .foot-note { display: flex; flex-direction: column; align-items: center; text-align: center; }
 .foot-page { display: flex; flex-direction: column; font-size: 8pt; }
 
-.sheet[data-overflow] { outline: 2px dashed #f59e0b; outline-offset: 4px; }
-.sheet[data-overflow]::before { content: 'This sheet runs past one A4 page and will print on two'; position: absolute; top: 4px; right: 8px; z-index: 3; background: #fffbeb; color: #92400e; border: 1px solid #fde68a; border-radius: 6px; padding: 2px 8px; font: 600 11px 'Plus Jakarta Sans', sans-serif; }
 .watermark { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; font-size: 110pt; font-weight: 800; color: rgba(220, 38, 38, 0.07); transform: rotate(-30deg); font-family: 'Plus Jakarta Sans', sans-serif; letter-spacing: 0.08em; z-index: 0; }
 .sheet-body, .sheet-foot, .letterhead { position: relative; z-index: 1; }
 
@@ -168,17 +175,55 @@
 @page { size: A4; margin: 0; }
 @media print {
   html, body { background: #fff !important; }
+  /* an A4 page is ~794px wide, so the phone layout rules apply while printing: drop their page padding
+     (it was pushing out an extra blank page at the end) */
+  .shell, .content, .report-page { padding: 0 !important; margin: 0 !important; min-height: 0 !important; }
   .report-page { gap: 0; }
+  .re-fab-group, .re-toolbar, .re-hint { display: none !important; }
   .report-toolbar, .edit-hint, .no-print-link { display: none !important; }
-  .sheets { gap: 0; padding: 0; display: block; zoom: 1 !important; }
+  /* the pages are already laid out at A4 size on screen: print them one per sheet of paper, as shown */
+  .sheets-fit { height: auto !important; }
+  .sheets { gap: 0; padding: 0; display: block; transform: none !important; width: auto !important; }
   .fit-note { display: none !important; }
-  /* never clip: a sheet with unusually long content continues on the next printed page */
-  /* 296mm (not 297) avoids sub-millimetre rounding pushing out an empty page */
-  .sheet { box-shadow: none; border-radius: 0; margin: 0; width: 210mm; min-height: 296mm; height: auto; overflow: visible; break-after: page; page-break-after: always; }
-  .sheet[data-overflow] { outline: none !important; }
-  .sheet[data-overflow]::before { display: none !important; }
-  .sheet:last-child { break-after: auto; page-break-after: auto; }
+  /* 296mm (not 297) so sub-millimetre rounding never pushes out an empty page; each page keeps a few px free */
+  .sheet { box-shadow: none; border-radius: 0; margin: 0; width: 210mm; height: 296mm; overflow: hidden; break-after: page; page-break-after: always; break-inside: avoid; }
+  .sheet-group:last-child > .sheet:last-child { break-after: auto; page-break-after: auto; }
   .f-edited, .f-editable { background: transparent !important; outline: none !important; }
   .t th, .t tr.sub-head th, .t tr.sec td, .t tr.total td, .t.list thead th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .watermark, .seal, .lh-name, .lh-title, .lh-phone { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* site plan: coordinates of the pinned points */
+.t.coords { font-variant-numeric: tabular-nums; table-layout: fixed; }
+.t.coords th { font-size: 8.5pt; }
+.t.coords td { font-size: 8.5pt; padding-top: 2px; padding-bottom: 2px; }
+.t.coords .coords-centre td { background: #f3f4f6; }
+
+/* boundaries: (Front, Road) after the side name */
+.side-role { font-weight: 400; text-transform: none; font-size: 0.92em; }
+
+/* a document’s first page, printed as a full page */
+.doc-page-desc { margin: 0 0 6px; text-align: center; font-size: 9pt; color: #374151; }
+.full-page-photo { margin: 0; display: flex; justify-content: center; align-items: flex-start; }
+.full-page-photo img { display: block; max-width: 100%; max-height: 245mm; width: auto; height: auto; object-fit: contain; border: 1px solid #d1d5db; }
+
+/* bullet / numbered points inside report text, and text added in the report editor */
+.f-list { margin: 2px 0 4px; padding-left: 20px; white-space: normal; }
+.f-list li { margin: 1px 0; }
+ul.f-list { list-style: disc; }
+ol.f-list { list-style: decimal; }
+.added-blocks { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.added-blocks:empty { display: none; }
+.added-block { position: relative; }
+.added-p .f-block { text-align: justify; }
+.f-points.f-editable { padding-left: 14px; border-left: 2px solid #c7d2fe; }
+.added-tools { position: absolute; top: -10px; right: 0; display: inline-flex; gap: 2px; align-items: center; padding: 1px 4px; border: 1px solid #c7d2fe; border-radius: 6px; background: #eef2ff; font: 600 9pt Arial, sans-serif; color: #3730a3; }
+.added-tools button { border: 0; background: none; padding: 0 4px; cursor: pointer; font: inherit; color: inherit; }
+.added-tools .added-remove { color: #b91c1c; }
+.added-kind { padding-right: 4px; font-weight: 600; }
+.added-break-mark { padding: 4px 0; border-top: 2px dashed #94a3b8; color: #64748b; font: 600 8.5pt Arial, sans-serif; text-align: center; }
+.page-break { min-height: 1px; }
+.added-add { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; border: 1px dashed #c7d2fe; border-radius: 8px; background: #f8faff; font: 600 9pt Arial, sans-serif; color: #475569; }
+.added-add button { padding: 3px 9px; border: 1px solid #c7d2fe; border-radius: 999px; background: #fff; color: #3730a3; font: inherit; cursor: pointer; }
+.added-add button:hover { background: #eef2ff; }
+@media print { .added-tools, .added-add, .added-break-mark { display: none !important; } }

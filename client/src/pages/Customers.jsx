@@ -99,28 +99,31 @@ export default function Customers() {
               value={query.stage}
               onChange={(stage) => update({ stage }, { replace: true })}
             />
-            <MoreFilters active={[query.period !== 'all', query.source, query.bank, query.district].filter(Boolean).length}>
-              <PeriodPicker value={query} onChange={(p) => update({ period: p.period, start: p.start, end: p.end })} />
-              <select className="select-pill" aria-label="Source" value={query.source} onChange={(e) => update({ source: e.target.value })}>
-                <option value="">All sources</option>
-                {(data?.sources || []).map((s) => <option key={s} value={s}>{s}</option>)}
+            {/* filters + sort: one group, kept on the slider's line on computers */}
+            <div className="lp-filters">
+              <MoreFilters active={[query.period !== 'all', query.source, query.bank, query.district].filter(Boolean).length}>
+                <PeriodPicker value={query} onChange={(p) => update({ period: p.period, start: p.start, end: p.end })} />
+                <select className="select-pill" aria-label="Source" value={query.source} onChange={(e) => update({ source: e.target.value })}>
+                  <option value="">All sources</option>
+                  {(data?.sources || []).map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                {(facets.banks?.length > 1 || query.bank) && (
+                  <select className="select-pill" aria-label="Bank" value={query.bank} onChange={(e) => update({ bank: e.target.value })}>
+                    <option value="">All banks</option>
+                    {(facets.banks || []).map((b) => <option key={b} value={b}>{b}</option>)}
+                  </select>
+                )}
+                {(facets.districts?.length > 1 || query.district) && (
+                  <select className="select-pill" aria-label="District" value={query.district} onChange={(e) => update({ district: e.target.value })}>
+                    <option value="">All districts</option>
+                    {(facets.districts || []).map((d) => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                )}
+              </MoreFilters>
+              <select className="select-pill" aria-label="Sort by" value={`${query.sort}:${query.dir}`} onChange={(e) => { const [sort, dir] = e.target.value.split(':'); update({ sort, dir }); }}>
+                {SORT_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
-              {(facets.banks?.length > 1 || query.bank) && (
-                <select className="select-pill" aria-label="Bank" value={query.bank} onChange={(e) => update({ bank: e.target.value })}>
-                  <option value="">All banks</option>
-                  {(facets.banks || []).map((b) => <option key={b} value={b}>{b}</option>)}
-                </select>
-              )}
-              {(facets.districts?.length > 1 || query.district) && (
-                <select className="select-pill" aria-label="District" value={query.district} onChange={(e) => update({ district: e.target.value })}>
-                  <option value="">All districts</option>
-                  {(facets.districts || []).map((d) => <option key={d} value={d}>{d}</option>)}
-                </select>
-              )}
-            </MoreFilters>
-            <select className="select-pill" aria-label="Sort by" value={`${query.sort}:${query.dir}`} onChange={(e) => { const [sort, dir] = e.target.value.split(':'); update({ sort, dir }); }}>
-              {SORT_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+            </div>
           </div>
         </div>
 

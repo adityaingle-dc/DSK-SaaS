@@ -19,8 +19,10 @@ const GROUPS = [
   ['valuation', 'Input sheets'],
   ['valuation.assigned', '— Assigned'],
   ['valuation.submitted', '— Submitted'],
-  ['valuation.approved', '— Approved'],
-  ['valuation.rejected', '— Rejected'],
+  ['valuation.received', '— Received'],
+  ['valuation.completed', '— Completed'],
+  ['valuation.rejected', '— Sent back'],
+  ['valuation.approved', '— Approved (earlier)'],
   ['auth', 'Sign-ins & security'],
   ['auth.login_failed', '— Failed sign-ins'],
   ['customer', 'Customers'],
@@ -176,9 +178,9 @@ function TeamReport({ report }) {
     <>
       <div className="kpis">
         <div className="kpi"><div className="kpi-value">{totals.total}</div><div className="kpi-label">Input sheets started</div></div>
-        <div className="kpi"><div className="kpi-value">{totals.submitted}</div><div className="kpi-label">Awaiting review</div></div>
-        <div className="kpi tone-green"><div className="kpi-value">{totals.approved}</div><div className="kpi-label">Approved</div></div>
-        <div className="kpi tone-red"><div className="kpi-value">{totals.rejected}</div><div className="kpi-label">Rejected</div></div>
+        <div className="kpi"><div className="kpi-value">{totals.submitted}</div><div className="kpi-label">With the superadmin</div></div>
+        <div className="kpi tone-green"><div className="kpi-value">{totals.approved}</div><div className="kpi-label">Completed</div></div>
+        <div className="kpi tone-red"><div className="kpi-value">{totals.rejected}</div><div className="kpi-label">Sent back</div></div>
         <div className="kpi"><div className="kpi-value">{inr(totals.value)}</div><div className="kpi-label">Value handled</div></div>
       </div>
 
@@ -206,8 +208,8 @@ function TeamReport({ report }) {
           <table className="table dense">
             <thead>
               <tr>
-                <th>Member</th><th className="num">Started</th><th className="num">Submitted</th><th className="num">Approved</th><th className="num">Rejected</th>
-                <th className="num">Approval</th><th className="num col-opt">Avg. submit</th><th className="num">Value</th><th className="num col-opt">Sign-ins</th><th className="col-opt">Last active</th>
+                <th>Member</th><th className="num">Started</th><th className="num">Submitted</th><th className="num">Completed</th><th className="num">Sent back</th>
+                <th className="num">Completed %</th><th className="num col-opt">Avg. submit</th><th className="num">Value</th><th className="num col-opt">Sign-ins</th><th className="col-opt">Last active</th>
               </tr>
             </thead>
             <tbody>
