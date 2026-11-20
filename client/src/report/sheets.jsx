@@ -334,9 +334,10 @@ function LandValuation({ c }) {
           <Row n="(ii)" label="Unit rate adopted in this valuation after considering the characteristics of the subject plot" k="l.pmr" v={`Rs. ${num(land.marketRate, 0)} /Sq. Yd`} />
           <tr><td className="c-n">(iii)</td><th>Value of Land by adopting PMR &nbsp; {num(L.siteArea)} Sq.Yds x {num(land.marketRate, 0)} Rs/Sq.Yd</th><td className="r b"><F k="l.pmrValue" v={rs(L.pmrValue)} /></td></tr>
           <tr className="sec"><td colSpan={3}>C – Extra items</td></tr>
-          <Row n="(i)" label="Compound wall/fencing" k="l.cw" v={amt(land.compoundWall)} />
-          <Row n="(ii)" label="Gate" k="l.gate" v={amt(land.gate)} />
-          <Row n="(iii)" label="Power supply" k="l.power" v={amt(land.powerSupply)} />
+          {(L.extraItems || []).map((x, i) => (
+            <Row key={x.key} n={`(${['i', 'ii', 'iii'][i]})`} label={x.key === 'compoundWall' ? 'Compound wall/fencing' : x.key === 'gate' ? 'Gate' : 'Power supply'} k={`l.${{ compoundWall: 'cw', gate: 'gate', powerSupply: 'power' }[x.key]}`}
+              v={x.amount ? (x.qty != null ? `${num(x.qty)} ${x.unit} x Rs. ${num(x.rate, 0)} /${x.unit === 'No.' ? 'No.' : x.unit} = ${rs(x.amount)}` : rs(x.amount)) : ''} />
+          ))}
           {(land.plusFactors || []).map((f, i) => <Row key={`p${i}`} n="+" label={f.description} k={`l.plus.${i}`} v={rs(f.amount)} />)}
           {(land.minusFactors || []).map((f, i) => <Row key={`m${i}`} n="−" label={f.description} k={`l.minus.${i}`} v={rs(f.amount)} />)}
         </tbody>
@@ -400,6 +401,7 @@ function BuildingTech({ c }) {
 }
 
 function BuildingSpecs({ c }) {
+  const cwItem = (c.r.land?.extraItems || []).find((x) => x.key === 'compoundWall');
   const b = c.d.building || {};
   const B = c.r.building;
   const spec = [
@@ -427,9 +429,9 @@ function BuildingSpecs({ c }) {
       </table>
       <table className="t grid">
         <tbody>
-          <tr><td className="c-n" rowSpan={4}>2</td><th>Compound Wall (R.ft)</th><td><F k="cw.amount" v={c.d.land?.compoundWall ? rs(c.d.land.compoundWall) : ''} /></td></tr>
-          <tr><th>Height</th><td><F k="cw.height" v={"4'6\""} /></td></tr>
-          <tr><th>Length</th><td><F k="cw.length" v="" /></td></tr>
+          <tr><td className="c-n" rowSpan={4}>2</td><th>Compound Wall (R.ft)</th><td><F k="cw.amount" v={cwItem?.amount ? rs(cwItem.amount) : ''} /></td></tr>
+          <tr><th>Height</th><td><F k="cw.height" v={c.d.land?.compoundWallHeight ? `${c.d.land.compoundWallHeight}${/['"]|ft/.test(c.d.land.compoundWallHeight) ? '' : ' ft'}` : "4'6\""} /></td></tr>
+          <tr><th>Length</th><td><F k="cw.length" v={cwItem?.qty ? `${num(cwItem.qty)} Rft` : ''} /></td></tr>
           <tr><th>Type of construction</th><td><F k="cw.type" v="Brick Masonary with Cement Motor plaster" /></td></tr>
         </tbody>
       </table>

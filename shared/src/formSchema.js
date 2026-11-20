@@ -62,7 +62,8 @@ const openingColumns = (withCounts) => [
 export const SECTIONS = [
   {
     key: 'general',
-    title: 'Valuation & bank details', intro: 'Pick the bank, then type the branch or area to fill the IFSC.',
+    title: 'Valuation & bank details',
+    siteTitle: 'Visit details', intro: 'Pick the bank, then type the branch or area to fill the IFSC.',
     fields: [
       { key: 'valuationDate', label: 'Date of valuation', type: 'date', required: true, default: 'today' },
       { key: 'inspectionDate', label: 'Date of inspection', type: 'date', required: true },
@@ -184,9 +185,19 @@ export const SECTIONS = [
       { key: 'siteAreaActual', label: 'Site area as per actual', type: 'number', unit: 'sq.yd', min: 0 },
       { key: 'glr', label: 'Guideline rate (GLR)', type: 'number', unit: '₹/sq.yd', min: 0, required: true },
       { key: 'marketRate', label: 'Prevailing market rate (PMR)', type: 'number', unit: '₹/sq.yd', min: 0, required: true },
-      { key: 'compoundWall', label: 'Extra: compound wall / fencing', type: 'number', unit: '₹', min: 0 },
-      { key: 'gate', label: 'Extra: gate', type: 'number', unit: '₹', min: 0 },
-      { key: 'powerSupply', label: 'Extra: power supply', type: 'number', unit: '₹', min: 0 },
+      // extra items: the quantity and the rate (rates differ from site to site); the amount is worked out
+      { key: 'compoundWallLength', label: 'Compound wall / fencing – length', type: 'number', unit: 'rft', min: 0, row: 'x-cw', heading: 'Extra items (quantity × rate)' },
+      { key: 'compoundWallHeight', label: 'Height', type: 'text', unit: 'ft', row: 'x-cw' },
+      { key: 'compoundWallRate', label: 'Rate', type: 'number', unit: '₹ per rft', min: 0, row: 'x-cw' },
+      { key: 'gateArea', label: 'Gate – size', type: 'number', unit: 'sq.ft', min: 0, row: 'x-gate' },
+      { key: 'gateRate', label: 'Rate', type: 'number', unit: '₹ per sq.ft', min: 0, row: 'x-gate' },
+      { key: 'powerConnections', label: 'Electricity – connections', type: 'number', unit: 'nos', min: 0, row: 'x-power' },
+      { key: 'powerRate', label: 'Rate', type: 'number', unit: '₹ per connection', min: 0, row: 'x-power' },
+      { key: 'extrasCalc', label: 'Extra items – amounts', type: 'landExtras', wide: true },
+      // older sheets: amounts typed in directly (used until a quantity is entered; not shown any more)
+      { key: 'compoundWall', label: 'Compound wall amount (old)', type: 'number', unit: '₹', min: 0, hidden: true },
+      { key: 'gate', label: 'Gate amount (old)', type: 'number', unit: '₹', min: 0, hidden: true },
+      { key: 'powerSupply', label: 'Power supply amount (old)', type: 'number', unit: '₹', min: 0, hidden: true },
       { key: 'plusFactors', label: 'Factors favouring additional value', type: 'table', wide: true, columns: [{ key: 'description', label: 'Description', type: 'text' }, { key: 'amount', label: 'Amount (₹)', type: 'number', min: 0 }] },
       { key: 'minusFactors', label: 'Factors favouring less value', type: 'table', wide: true, columns: [{ key: 'description', label: 'Description', type: 'text' }, { key: 'amount', label: 'Amount (₹)', type: 'number', min: 0 }] },
       { key: 'marketReference', label: 'Market value reference / comparable sale instances', type: 'textarea', wide: true },

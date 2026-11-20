@@ -400,7 +400,7 @@ function AssignForm({ customer, properties = [], initialFrom = '', onAssigned, o
       const sitePayload = newProperty && filled ? { ...Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, v.trim()])), ...(gps ? { location: gps } : {}) } : undefined;
       const r = await api.startCustomerValuation(customer._id, pick, from || undefined, sitePayload, allowDuplicate || undefined);
       // your own job: straight into the sheet
-      if (r.self || String(r.evaluator?._id) === String(myId)) return navigate(`/valuations/${r._id}/edit`);
+      if (r.self || String(r.evaluator?._id) === String(myId)) return navigate(isSuperadmin ? `/valuations/${r._id}/site` : `/valuations/${r._id}/edit`);
       onAssigned(r);
     } catch (e) {
       if (e.status === 409 && e.data?.open?.length) setDupes(e.data.open);

@@ -20,6 +20,27 @@ const STEPS = ['Customer', 'Input sheet', 'Report type', 'Review & generate'];
 // a report can be generated from a sheet the evaluator has handed in (generating it completes the sheet)
 const READY = ['submitted', 'received', 'approved'];
 
+// why a sheet can't be turned into a report yet, and where to go about it
+function blockedReason(v) {
+  const who = v.evaluator?.name || 'the evaluator';
+  if (v.status === 'rejected') return {
+    tag: 'Sent back', short: `Sent back to ${who}: waiting for them to resubmit`,
+    title: 'Site inspection sent back', message: `${v.referenceNo} was sent back to ${who} with a note. A report can be generated once they resubmit the site inspection.`,
+    action: 'Open site inspection', to: `/valuations/${v._id}/site`,
+  };
+  if (!READY.includes(v.status)) return {
+    tag: 'Site pending', short: `Site inspection pending: ${who} has not submitted it yet`,
+    title: 'Site inspection pending', message: `${who} has not submitted the site inspection of ${v.referenceNo} yet. A report can be generated once it is submitted; the draft sheet can be prepared meanwhile.`,
+    action: 'Open site inspection', to: `/valuations/${v._id}/site`,
+  };
+  const n = v.draftMissing || 0;
+  return {
+    tag: 'Draft incomplete', short: `Draft sheet not complete${n ? ` (${n} field${n === 1 ? '' : 's'} to fill)` : ''}`,
+    title: 'Draft sheet not complete', message: `The site inspection of ${v.referenceNo} is in, but the draft sheet still has ${n || 'some'} field${n === 1 ? '' : 's'} to fill before a report can be generated.`,
+    action: 'Complete the draft sheet', to: `/valuations/${v._id}/draft`,
+  };
+}
+
 export default function GenerateReport() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -135,6 +156,9 @@ export default function GenerateReport() {
   const reportsPerSheet = (customer?.reports || []).reduce((m, r) => ({ ...m, [r.valuation]: (m[r.valuation] || 0) + 1 }), {});
   const sheet = sheets.find((v) => v._id === sheetId);
   const approvedCount = sheets.filter((v) => READY.includes(v.status)).length;
+  const explainBlocked = async (v, b) => {
+    if (await confirmDialog({ title: b.title, message: b.message, confirmLabel: b.action, cancelLabel: 'OK' })) navigate(b.to);
+  };
 
   // report preview: the saved sheet, or the sheet being edited (recalculated as you type)
   const previewDoc = useMemo(() => {
@@ -252,19 +276,25 @@ export default function GenerateReport() {
               {approvedCount === 0 && <p className="hint wizard-hint">None of their sheets has been submitted yet. A report can be generated once the evaluator submits the sheet.</p>}
               <ul className="pick-list">
                 {sheets.map((v) => {
-                  const ok = READY.includes(v.status);
+                  const ok = READY.includes(v.status) && (v.status === 'approved' || v.draftReady !== false);
+                  const block = ok ? null : blockedReason(v);
                   return (
                     <li key={v._id}>
-                      <button type="button" className={`pick${sheetId === v._id ? ' on' : ''}`} disabled={!ok} onClick={() => { setSheetId(v._id); setStep(2); }}>
+                      <button
+                        type="button"
+                        className={`pick${sheetId === v._id ? ' on' : ''}${ok ? '' : ' blocked'}`}
+                        aria-disabled={!ok || undefined}
+                        onClick={() => (ok ? (setSheetId(v._id), setStep(2)) : explainBlocked(v, block))}
+                      >
                         <span className="pick-icon"><SectionIcon section={{ key: 'property' }} size={16} /></span>
                         <span className="pick-main">
                           <strong>{v.referenceNo} · {REPORT_TEMPLATES[v.summary?.reportTemplate]?.title || 'Input sheet'}</strong>
                           <small>{labels[v._id]} · {new Date(v.summary?.valuationDate || v.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}{reportsPerSheet[v._id] ? ` · ${reportsPerSheet[v._id]} report${reportsPerSheet[v._id] === 1 ? '' : 's'} generated` : ''}</small>
-                          {!ok && <small className="pick-why">{v.status === 'rejected' ? 'Sent back to the evaluator: wait for them to resubmit' : 'Not submitted by the evaluator yet'}</small>}
+                          {!ok && <small className="pick-why">{block.short}</small>}
                         </span>
                         <span className="pick-side">
                           <strong className="amount">{v.summary?.fairMarketValue > 0 ? inr(v.summary.fairMarketValue) : '—'}</strong>
-                          <StatusBadge status={v.status} />
+                          {ok ? <StatusBadge status={v.status} /> : <span className="not-ready-tag">{block.tag}</span>}
                         </span>
                       </button>
                     </li>

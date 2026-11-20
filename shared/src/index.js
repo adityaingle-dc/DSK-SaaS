@@ -8,6 +8,7 @@ export * from './geo.js';
 export * from './person.js';
 export * from './plot.js';
 export * from './documents.js';
+export * from './parts.js';
 export { amountInWords } from './words.js';
 
 // All attachment ids referenced anywhere in a sheet: site photos, boundary photos + documents produced

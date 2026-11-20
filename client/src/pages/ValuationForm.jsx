@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { computeValuation, emptyValuation, getContext, plotArea, sanitize, sectionPath, validate, visibleSections } from '@dsk/shared';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { computeValuation, emptyValuation, getContext, plotArea, sanitize, sectionPath, sectionsFor, validate, visibleSections } from '@dsk/shared';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import SchemaSection from '../components/SchemaForm.jsx';
@@ -34,14 +34,19 @@ const writeDraft = (key, value) => {
   } catch { /* storage full / unavailable: the form still works, only the draft is not kept */ }
 };
 
-export default function ValuationForm() {
+// part: 'site' (site inspection: the evaluator's part) · 'draft' (draft sheet: the superadmin's office part) ·
+// undefined = an evaluator gets the site inspection, the superadmin the whole sheet
+export default function ValuationForm({ part: partProp }) {
   const { id } = useParams();
   const navigate = useNavigate();
   // ?return=/reports/new?... : go back there after saving or cancelling (only in-app paths)
   const [searchParams] = useSearchParams();
   const returnTo = (searchParams.get('return') || '').startsWith('/') && !searchParams.get('return').startsWith('//') ? searchParams.get('return') : '';
   const { isSuperadmin, isReviewer, user } = useAuth();
-  const draftKey = `dsk_sheet_draft:${user?._id || 'me'}:${id || 'new'}`;
+  const part = partProp || (isReviewer ? 'full' : 'site');
+  const partOnly = part === 'full' ? undefined : part;
+  // unsaved entries are kept per part (the site inspection and the draft sheet don't restore into each other)
+  const draftKey = `dsk_sheet_draft:${user?._id || 'me'}:${id || 'new'}${partProp ? `:${partProp}` : ''}`;
   // the sheet as last saved on the server: what "unsaved changes" are compared against
   const savedJson = useRef(id ? null : JSON.stringify(emptyValuation()));
   const serverData = useRef(null);
@@ -84,7 +89,7 @@ export default function ValuationForm() {
   }, [id]);
 
   const ctx = useMemo(() => (data ? getContext(data) : null), [data]);
-  const sections = useMemo(() => (data ? visibleSections(ctx, data) : []), [ctx, data]);
+  const sections = useMemo(() => (data ? (part === 'full' ? visibleSections(ctx, data) : sectionsFor(part, ctx, data)) : []), [ctx, data, part]);
   const results = useMemo(() => (data ? computeValuation(sanitize(data)) : null), [data]);
 
   // site area from the measured sides → "Site area as per actual" (Land valuation), while that is empty or still
@@ -101,7 +106,7 @@ export default function ValuationForm() {
     const followed = prev !== undefined && Number(cur) === Number(prev);
     if ((blank || followed) && Number(cur) !== areaSqyd) setField2('land', 'siteAreaActual', areaSqyd);
   }, [areaSqyd]); // eslint-disable-line react-hooks/exhaustive-deps
-  const clientErrors = useMemo(() => (data ? validate(sanitize(data), { mode: showAllErrors ? 'submit' : 'draft' }) : []), [data, showAllErrors]);
+  const clientErrors = useMemo(() => (data ? validate(sanitize(data), { mode: showAllErrors ? 'submit' : 'draft', part: partOnly }) : []), [data, showAllErrors]);
 
   const errorMap = useMemo(() => {
     const m = {};
@@ -164,11 +169,11 @@ export default function ValuationForm() {
   const save = async (status) => {
     setMessage('');
     setServerErrors([]);
-    const payload = { data: sanitize(data), ...(status ? { status } : {}) };
-    // submitted / received / completed sheets must stay complete
-    const complete = status || ['submitted', 'received', 'approved'].includes(meta?.status);
+    const payload = { data: sanitize(data), ...(status ? { status } : {}), ...(partOnly && isReviewer ? { part: partOnly } : {}) };
+    // a handed-in site inspection must stay complete; the draft sheet may be saved half-done
+    const complete = part !== 'draft' && (status || ['submitted', 'received', 'approved'].includes(meta?.status));
     if (complete) {
-      const errs = validate(payload.data, { mode: 'submit' });
+      const errs = validate(payload.data, { mode: 'submit', part: partOnly });
       if (errs.length) {
         setShowAllErrors(true);
         setMessage(`Please complete ${errs.length} required / invalid field${errs.length > 1 ? 's' : ''} before ${status === 'received' ? 'finishing' : status ? 'submitting' : 'saving'}.`);
@@ -214,7 +219,9 @@ export default function ValuationForm() {
   //  - superadmin: Save & finish on a sheet not handed in yet (ready for a report, no approval), else Save
   const handedIn = ['submitted', 'received', 'approved'].includes(meta?.status);
   const ownSheet = !id || String(meta?.evaluator?._id || meta?.evaluator) === String(user?._id);
-  const finalAction = !isSuperadmin
+  const finalAction = part === 'draft'
+    ? { label: 'Save draft sheet', short: 'Save', hint: 'Save; preview and generate the report from the next page', run: () => save() }
+    : !isSuperadmin
     ? (handedIn
       ? { label: 'Save changes', short: 'Save', hint: 'The superadmin sees the updated sheet', run: () => save() }
       : { label: 'Submit to superadmin', short: 'Submit', run: () => save('submitted') })
@@ -223,7 +230,8 @@ export default function ValuationForm() {
       ? { label: 'Save', short: 'Save', hint: handedIn ? 'Save the changes' : 'Save; the evaluator still submits it', run: () => save() }
       : { label: 'Save & finish', short: 'Finish', hint: 'Save the sheet: ready for a report', run: () => save('received') });
   // superadmin: look at the report as it will print, with what is on screen now (saved or not), before approving
-  const canPreview = isSuperadmin && !!id;
+  const canPreview = isSuperadmin && !!id && part !== 'site';
+  const stepTitle = (s) => (part === 'site' && s.siteTitle ? s.siteTitle : s.title);
   // superadmin, on a sheet the evaluator handed in: send it back from right here (the report is generated from its preview)
   const reviewable = isSuperadmin && !!id && ['submitted', 'received'].includes(meta?.status) && String(meta?.evaluator?._id || meta?.evaluator) !== String(user?._id);
   const sendBack = async () => {
@@ -252,8 +260,8 @@ export default function ValuationForm() {
     <div className="sheet-layout">
       <PageHeader
         icon={DuoSheet}
-        back={returnTo ? { to: returnTo, label: 'Back to report review', exact: true } : id && !isSuperadmin ? { to: `/valuations/${id}`, label: 'Input sheet' } : { to: '/valuations', label: 'Input Sheets' }}
-        title={id ? 'Edit input sheet' : 'New input sheet'}
+        back={returnTo ? { to: returnTo, label: 'Back to report review', exact: true } : id && !isSuperadmin ? { to: `/valuations/${id}`, label: 'Site inspection' } : part === 'draft' ? { to: '/drafts', label: 'Draft Sheets' } : { to: '/valuations', label: 'Site Inspections' }}
+        title={part === 'site' ? 'Site inspection' : part === 'draft' ? 'Draft sheet' : id ? 'Edit input sheet' : 'New input sheet'}
         meta={meta?.referenceNo && <span className="badge">{meta.referenceNo}</span>}
         actions={reviewable && (
           <div className="actions no-print form-head-actions">
@@ -272,12 +280,12 @@ export default function ValuationForm() {
           {sections.map((s, i) => {
             const c = errorCount(s);
             const state = c > 0 ? 'error' : i < idx ? 'done' : i === idx ? 'current' : 'upcoming';
-            const label = `Step ${i + 1}: ${s.title}${c ? ` (${c} to fix)` : state === 'done' ? ' (visited)' : ''}`;
+            const label = `Step ${i + 1}: ${stepTitle(s)}${c ? ` (${c} to fix)` : state === 'done' ? ' (visited)' : ''}`;
             return (
               <li key={s.key} className={`stepper-item is-${state}${i === idx ? ' is-active' : ''}`}>
-                <button type="button" aria-current={i === idx ? 'step' : undefined} aria-label={label} title={s.title} onClick={() => setActive(s.key)}>
+                <button type="button" aria-current={i === idx ? 'step' : undefined} aria-label={label} title={stepTitle(s)} onClick={() => setActive(s.key)}>
                   <span className="stepper-dot">{state === 'error' ? c : <SectionIcon section={s} size={16} />}</span>
-                  <span className="stepper-label">{s.title}</span>
+                  <span className="stepper-label">{stepTitle(s)}</span>
                 </button>
               </li>
             );
@@ -287,6 +295,7 @@ export default function ValuationForm() {
 
       <section className="sheet-main">
         {message && <div className="alert">{message}</div>}
+        {part === 'draft' && meta && <SiteSummary meta={meta} data={data} id={id} />}
         {restored && (
           <div className={`draft-note sheet-draft-note${restored.stale ? ' warn' : ''}`} role="status">
             <span>
@@ -299,11 +308,11 @@ export default function ValuationForm() {
         <div className="card">
           <div className="section-head">
             <span className="section-step"><SectionIcon section={current} size={20} /></span>
-            <h2>{current.title}</h2>
+            <h2>{stepTitle(current)}</h2>
             <span className="section-count">Step {idx + 1} of {sections.length}</span>
           </div>
           {current.intro && <p className="section-intro">{current.intro}</p>}
-          <SchemaSection section={current} path={path} values={data[path]} onChange={setField} onChangeAt={setField2} errors={errorMap} ctx={ctx} data={data} />
+          <SchemaSection section={current} path={path} values={data[path]} onChange={setField} onChangeAt={setField2} errors={errorMap} ctx={ctx} data={data} part={partOnly} />
         </div>
         <div className="actions sticky">
           <LiveSummaryButton live={live} onOpen={() => live.setOpen(true)} />
@@ -334,6 +343,36 @@ export default function ValuationForm() {
         <LivePanel results={results} delta={live.delta} onWarningClick={goToField} />
       </aside>
       <LiveSheet results={results} live={live} />
+    </div>
+  );
+}
+
+// Draft sheet: what came from the site inspection (read-only), and whether it has been handed in yet
+function SiteSummary({ meta, data, id }) {
+  const handedIn = ['submitted', 'received', 'approved'].includes(meta.status);
+  const p = data.property || {};
+  const b = data.boundaries || {};
+  const photos = (p.photos || []).length + (b.photos || []).length;
+  const pins = (p.location?.boundary || []).length;
+  const area = plotArea(b, p.siteShape)?.sqyd;
+  const floors = (data.building?.floors || []).filter((f) => f.mainArea).length;
+  const who = meta.evaluator?.name || 'the evaluator';
+  const facts = [
+    data.general?.inspectionDate && `Visited ${new Date(data.general.inspectionDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`,
+    photos && `${photos} photo${photos === 1 ? '' : 's'}`,
+    pins && `${pins} map points`,
+    data.land?.siteAreaActual ? `Site area ${data.land.siteAreaActual} sq.yd` : area ? `Area ${area} sq.yd (from sides)` : null,
+    floors && `${floors} floor${floors === 1 ? '' : 's'} measured`,
+  ].filter(Boolean);
+  return (
+    <div className={`site-summary${handedIn ? '' : ' waiting'}`}>
+      <div className="site-summary-main">
+        <strong>{handedIn ? `Site inspection by ${who}` : `Waiting for the site visit by ${who}`}</strong>
+        <span>{handedIn
+          ? (facts.length ? facts.join(' · ') : 'Submitted')
+          : 'You can start drafting now; the report can be generated once the site inspection is submitted.'}</span>
+      </div>
+      <Link className="btn small" to={`/valuations/${id}/site`}>Open site inspection</Link>
     </div>
   );
 }

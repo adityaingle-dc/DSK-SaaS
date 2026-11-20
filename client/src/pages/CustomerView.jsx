@@ -194,7 +194,7 @@ export default function CustomerView() {
                   </div>
                   <StatusBadge status={v.status} />
                   <div className="ph-actions">
-                    <Link className="btn small" to={isSuperadmin ? `/valuations/${v._id}/edit` : `/valuations/${v._id}`}>Sheet</Link>
+                    <Link className="btn small" to={isSuperadmin ? `/valuations/${v._id}/draft` : `/valuations/${v._id}`}>Sheet</Link>
                     <Link className="btn small" to={`/valuations/${v._id}/report`}>Report</Link>
                   </div>
                 </li>
@@ -215,7 +215,7 @@ export default function CustomerView() {
             </div>
             <div className="actions">
               <Link className="btn small" to={`/valuations/${v._id}/edit`}>Edit sheet</Link>
-              <Link className="btn small" to={isSuperadmin ? `/valuations/${v._id}/edit` : `/valuations/${v._id}`}>Open <IconChevron size={14} /></Link>
+              <Link className="btn small" to={isSuperadmin ? `/valuations/${v._id}/draft` : `/valuations/${v._id}`}>Open <IconChevron size={14} /></Link>
             </div>
           </div>
           <SheetSections data={v.data || {}} variant="accordion" openFirst={i === 0} />

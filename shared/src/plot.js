@@ -73,6 +73,8 @@ export function parseFeet(input) {
   return plain ? Number(plain[1]) : NaN;
 }
 
+// area of a triangle from its three sides (Heron's formula); NaN when the sides can't make a triangle
+export const triangleArea = (a, b, c) => heron(Number(a), Number(b), Number(c));
 const heron = (a, b, c) => {
   const s = (a + b + c) / 2;
   const q = s * (s - a) * (s - b) * (s - c);
@@ -103,3 +105,15 @@ function averageArea(N, S, E, W) {
   const rect = Math.abs(N - S) < 0.01 && Math.abs(E - W) < 0.01;
   return { sqft: round2(a), sqyd: round2(a / 9), method: 'average', note: rect ? 'Length × breadth.' : 'Average of opposite sides × each other.' };
 }
+
+// one area in the units used for plots in India (from sq.ft)
+export const AREA_UNITS = [
+  { key: 'sqyd', label: 'sq.yd', per: 9 },
+  { key: 'sqft', label: 'sq.ft', per: 1 },
+  { key: 'sqm', label: 'sq.m', per: 10.7639 },
+  { key: 'guntha', label: 'guntha', per: 1089 },
+  { key: 'cent', label: 'cents', per: 435.6 },
+  { key: 'acre', label: 'acres', per: 43560 },
+  { key: 'hectare', label: 'hectares', per: 107639.1 },
+];
+export const areaIn = (sqft) => Object.fromEntries(AREA_UNITS.map((u) => [u.key, sqft / u.per]));

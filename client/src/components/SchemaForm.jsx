@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { boundaryArea, boundaryCentre, boundaryPerimeter, documentDetails, MIN_BOUNDARY_POINTS, parseLatLon, plotArea, sideRoles, SQFT_PER_SQM, SQYD_PER_SQM } from '@dsk/shared';
+import { boundaryArea, boundaryCentre, boundaryPerimeter, columnInPart, documentDetails, inPart, landExtras, MIN_BOUNDARY_POINTS, parseLatLon, plotArea, sideRoles, SQFT_PER_SQM, SQYD_PER_SQM } from '@dsk/shared';
 import { inr } from './StatusBadge.jsx';
 import FilesInput from './FilesInput.jsx';
 import DateInput from './DateInput.jsx';
@@ -12,9 +12,10 @@ const BoundaryMap = lazy(() => import('./BoundaryMap.jsx'));
 // Renders one section of the @dsk/shared input-sheet schema.
 // values = data[sectionPath]; onChange(key, value) updates one field.
 // onChangeAt(path, key, value) (optional) lets a section's links update a field in another section.
-export default function SchemaSection({ section, values = {}, onChange, onChangeAt, errors = {}, ctx, data, path }) {
+// part: 'site' | 'draft' shows only that part's fields (and table columns); none = the whole sheet
+export default function SchemaSection({ section, values = {}, onChange, onChangeAt, errors = {}, ctx, data, path, part }) {
   // optionsFrom: the options depend on other answers (e.g. relations that fit the salutation)
-  const visible = section.fields.filter((f) => (!f.when || f.when(ctx, data)) && !f.inGrid).map((f) => (f.optionsFrom ? { ...f, options: f.optionsFrom(values) } : f));
+  const visible = section.fields.filter((f) => (!f.when || f.when(ctx, data)) && !f.inGrid && !f.hidden && inPart(section, f, part)).map((f) => (f.optionsFrom ? { ...f, options: f.optionsFrom(values) } : f));
   const paired = pairShortFields(visible.filter((f) => !f.row));
   // a section can keep fields in step (salutation ↔ relation ↔ name): one change may set a few fields
   const change = (key, v) => {
@@ -35,6 +36,8 @@ export default function SchemaSection({ section, values = {}, onChange, onChange
         data={data}
         errors={errors}
         name={`${path}.${f.key}`}
+        part={part}
+        section={section}
       />
     </FieldRow>
   );
@@ -97,7 +100,7 @@ function FieldRow({ field, label = field.label, error, children, pair = false })
 
 const str = (v) => (v === undefined || v === null ? '' : String(v));
 
-export function FieldInput({ field, value, onChange, errors = {}, name, setField, values, data, inTable = false }) {
+export function FieldInput({ field, value, onChange, errors = {}, name, setField, values, data, inTable = false, part, section }) {
   // special inputs for plain-text fields (stored as text, so validation / reports are unchanged)
   if (field.widget === 'bank') return <BankInput value={value} onChange={onChange} />;
   if (field.widget === 'ifsc' && setField) return <IfscInput value={value} onChange={onChange} setField={setField} values={values} />;
@@ -138,9 +141,11 @@ export function FieldInput({ field, value, onChange, errors = {}, name, setField
       return <GridInput field={field} value={value || {}} onChange={onChange} values={values} setField={setField} />;
     case 'areaCalc':
       return <PlotAreaPanel data={data || {}} />;
+    case 'landExtras':
+      return <LandExtrasPanel values={values || {}} />;
     case 'table':
       if (field.widget === 'documents') return <DocumentsInput field={field} value={value || []} onChange={onChange} errors={errors} name={name} />;
-      return <TableInput field={field} value={value || []} onChange={onChange} errors={errors} name={name} />;
+      return <TableInput field={field} value={value || []} onChange={onChange} errors={errors} name={name} part={part} section={section} />;
     case 'tiers':
       return <TiersInput field={field} value={value || {}} onChange={onChange} />;
     case 'stages':
@@ -468,6 +473,27 @@ function PillRow({ options, value, onChange, label, clearTo }) {
   );
 }
 
+// Land valuation: each extra item's amount = quantity × rate, and the total
+function LandExtrasPanel({ values }) {
+  const items = landExtras(values);
+  const total = items.reduce((s, x) => s + x.amount, 0);
+  const fmt = (n) => Number(n).toLocaleString('en-IN');
+  return (
+    <div className="extras-calc">
+      {items.map((x) => (
+        <div key={x.key} className={`extras-line${x.missingRate ? ' warn' : ''}`}>
+          <span>{x.label}</span>
+          <span className="extras-work">
+            {x.qty != null ? (x.missingRate ? `${fmt(x.qty)} ${x.unit} × rate?` : `${fmt(x.qty)} ${x.unit} × ₹${fmt(x.rate)}`) : x.amount ? 'amount entered earlier' : '—'}
+          </span>
+          <strong>{x.amount ? inr(x.amount) : '—'}</strong>
+        </div>
+      ))}
+      <div className="extras-line total"><span>Total extra items</span><span /><strong>{inr(total)}</strong></div>
+    </div>
+  );
+}
+
 // Boundaries: site area worked out from the four sides (and the diagonal), with the map outline as a check
 function PlotAreaPanel({ data }) {
   const r = plotArea(data.boundaries, data.property?.siteShape);
@@ -630,7 +656,13 @@ function DocumentsInput({ field, value, onChange, errors, name }) {
   );
 }
 
-function TableInput({ field, value, onChange, errors, name }) {
+// part: in the site inspection, columns of the draft sheet are hidden (e.g. floor rates); in the draft sheet,
+// columns filled on site are shown read-only and rows are added on site only
+function TableInput({ field, value, onChange, errors, name, part, section }) {
+  const mixed = part && part !== 'full' && section;
+  const columns = mixed && part === 'site' ? field.columns.filter((c) => columnInPart(section, field, c, 'site')) : field.columns;
+  const readOnlyCol = (c) => mixed && part === 'draft' && !columnInPart(section, field, c, 'draft');
+  const rowsLocked = mixed && part === 'draft' && field.columns.some((c) => !columnInPart(section, field, c, 'draft'));
   const setCell = (i, key, v) => onChange(value.map((row, j) => (j === i ? { ...row, [key]: v } : row)));
   // unique columns (e.g. Floor): a value picked in one row is not offered again in the other rows
   const uniqueCols = field.columns.filter((c) => c.unique && c.options);
@@ -650,30 +682,30 @@ function TableInput({ field, value, onChange, errors, name }) {
     <div className="table-wrap">
       <table className="table input-table">
         <thead>
-          <tr>{field.columns.map((c) => <th key={c.key}>{c.label}</th>)}<th /></tr>
+          <tr>{columns.map((c) => <th key={c.key}>{c.label}</th>)}<th /></tr>
         </thead>
         <tbody>
           {value.length === 0 && (
-            <tr className="empty-row"><td colSpan={field.columns.length + 1}>No rows added</td></tr>
+            <tr className="empty-row"><td colSpan={columns.length + 1}>No rows added</td></tr>
           )}
           {value.map((row, i) => (
             <tr key={i}>
-              {field.columns.map((c) => {
+              {columns.map((c) => {
                 const err = errors[`${name}.${i}.${c.key}`];
                 return (
-                  <td key={c.key} data-label={c.label} className={err ? 'has-error' : ''} title={err || ''}>
-                    <FieldInput field={columnFor(c, i)} value={row[c.key]} onChange={(v) => setCell(i, c.key, v)} inTable />
+                  <td key={c.key} data-label={c.label} className={`${err ? 'has-error' : ''}${readOnlyCol(c) ? ' ro-cell' : ''}`} title={err || (readOnlyCol(c) ? 'Filled in on site' : '')}>
+                    {readOnlyCol(c) ? <span className="ro-value">{str(row[c.key]) || '—'}</span> : <FieldInput field={columnFor(c, i)} value={row[c.key]} onChange={(v) => setCell(i, c.key, v)} inTable />}
                   </td>
                 );
               })}
               <td className="row-actions">
-                <button type="button" className="btn ghost danger" aria-label="Remove row" onClick={() => onChange(value.filter((_, j) => j !== i))}>✕</button>
+                {!rowsLocked && <button type="button" className="btn ghost danger" aria-label="Remove row" onClick={() => onChange(value.filter((_, j) => j !== i))}>✕</button>}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      {full
+      {rowsLocked ? <p className="hint add-row-note">Rows are added in the site inspection.</p> : full
         ? <p className="hint add-row-note">All {uniqueCols[0].label.toLowerCase()}s are added.</p>
         : <button type="button" className="btn small add-row" onClick={addRow}>+ Add row</button>}
     </div>

@@ -198,7 +198,7 @@ export default function SheetBoard({ query, reloadKey = 0 }) {
                       onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', v._id); setDrag({ id: v._id, col: c.key, v }); }}
                       onDragEnd={() => { setDrag(null); setOver(''); }}
                     >
-                      <Link to={user?.role === 'superadmin' ? `/valuations/${v._id}/edit` : `/valuations/${v._id}`} className="kb-card-link" draggable={false}>
+                      <Link to={user?.role === 'superadmin' ? `/valuations/${v._id}/site` : `/valuations/${v._id}`} className="kb-card-link" draggable={false}>
                         <span className="kb-card-top">
                           <span className="avatar soft sm">{initials(v.summary?.applicantName)}</span>
                           <span className="kb-card-name">

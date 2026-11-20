@@ -44,7 +44,7 @@ function OverviewDashboard() {
   const [recent, setRecent] = useState([]);
   const [mine, setMine] = useState([]); // superadmin: sheets they are filling in themselves
   // the superadmin goes straight to editing a sheet; others open its page
-  const sheetUrl = (id) => (isSuperadmin ? `/valuations/${id}/edit` : `/valuations/${id}`);
+  const sheetUrl = (id) => (isSuperadmin ? `/valuations/${id}/draft` : `/valuations/${id}`);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 

@@ -67,3 +67,21 @@ export const DuoContact = ({ size = 20 }) => (
     <path d="M5.8 16.5a3.4 3.4 0 0 1 6.4 0M14.5 10h4M14.5 13.5h3" />
   </Duo>
 );
+
+// a finished report: a page with a tick
+export const DuoReport = ({ size = 20 }) => (
+  <Duo size={size}>
+    <path className="duo" d="M6 3h8l4 4v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+    <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7zM14 3v4h4M8 10h6M8 13h4" />
+    <path d="m9 17 1.6 1.6L14 15.2" />
+  </Duo>
+);
+
+// area calculator: a plot outline with a measuring corner
+export const DuoArea = ({ size = 20 }) => (
+  <Duo size={size}>
+    <path className="duo" d="M5 7 15 4l4 9-8 7-6-4z" />
+    <path d="M5 7 15 4l4 9-8 7-6-4zM5 7v9" />
+    <path d="M2.5 21h6M2.5 21v-6M4.5 21v-1.2M6.5 21v-1.2M2.5 19h1.2M2.5 17h1.2" />
+  </Duo>
+);

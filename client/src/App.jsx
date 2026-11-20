@@ -12,6 +12,7 @@ import Team from './pages/Team.jsx';
 import TeamMember from './pages/TeamMember.jsx';
 import Activity from './pages/Activity.jsx';
 import Customers from './pages/Customers.jsx';
+import AreaCalc from './pages/AreaCalc.jsx';
 import CustomerView from './pages/CustomerView.jsx';
 import Reports from './pages/Reports.jsx';
 import GenerateReport from './pages/GenerateReport.jsx';
@@ -52,12 +53,16 @@ export default function App() {
         <Route path="valuations/new" element={<Navigate to="/customers" replace />} />
         <Route path="valuations/:id" element={<ValuationView />} />
         <Route path="valuations/:id/edit" element={<ValuationForm />} />
+        <Route path="valuations/:id/site" element={<ValuationForm part="site" />} />
+        <Route path="valuations/:id/draft" element={<SuperadminOnly><ValuationForm part="draft" key="draft" /></SuperadminOnly>} />
+        <Route path="drafts" element={<SuperadminOnly><ValuationList module="draft" key="drafts" /></SuperadminOnly>} />
         <Route path="valuations/:id/report" element={<SuperadminOnly><ReportPage /></SuperadminOnly>} />
         <Route path="change-password" element={<ChangePassword />} />
         <Route path="team" element={<SuperadminOnly><Team /></SuperadminOnly>} />
         <Route path="team/:id" element={<SuperadminOnly><TeamMember /></SuperadminOnly>} />
         <Route path="activity" element={<SuperadminOnly><Activity /></SuperadminOnly>} />
         <Route path="customers" element={<Customers />} />
+        <Route path="area" element={<AreaCalc />} />
         <Route path="customers/:id" element={<CustomerView />} />
         <Route path="reports" element={<SuperadminOnly><Reports /></SuperadminOnly>} />
         <Route path="reports/new" element={<SuperadminOnly><GenerateReport /></SuperadminOnly>} />

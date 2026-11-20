@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { nextId } from '../services/ids.js';
-import { computeValuation, personName, phones } from '@dsk/shared';
+import { computeValuation, personName, phones, validate } from '@dsk/shared';
 
 // draft → submitted (by the evaluator) → received (the superadmin opened it) → approved = "Completed": a report has
 // been generated from it, which locks the sheet. rejected = sent back to the evaluator with a note.
@@ -46,6 +46,10 @@ const valuationSchema = new mongoose.Schema(
     receivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     updatedAfterReceived: Boolean, // the evaluator changed it after the superadmin had opened it
     reportedAt: Date, // first report generated from it (locks the sheet)
+    // draft sheet (office part): complete = every drafting field the report needs is filled in
+    draftReady: { type: Boolean, default: false, index: true },
+    draftMissing: { type: Number, default: 0 },
+    draftUpdatedAt: Date,
     // Superadmin wording/value edits applied on the printed bank report only (key -> text); data & results untouched
     reportOverrides: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
     reportEditedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -76,6 +80,9 @@ valuationSchema.methods.recompute = function recompute() {
     fairMarketValue: this.results.summary.fairMarketValue,
     valuationDate: d.general?.valuationDate,
   };
+  const missing = validate(d, { mode: 'submit', part: 'draft' });
+  this.draftReady = missing.length === 0;
+  this.draftMissing = missing.length;
   this.markModified('data');
   this.markModified('results');
 };

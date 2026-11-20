@@ -212,7 +212,7 @@ router.get(
     // evaluators see only their own sheets for the customer, and no reports
     const valuations = await Valuation.find({ customer: c._id, ...(fullAccess(req) ? {} : { evaluator: req.user._id }) })
       .sort({ createdAt: -1 })
-      .select('referenceNo status data results.summary results.context summary evaluator createdAt updatedAt submittedAt reviewedAt reviewNote reportEditedAt')
+      .select('referenceNo status data results.summary results.context summary evaluator createdAt updatedAt submittedAt reviewedAt reviewNote reportEditedAt draftReady draftMissing')
       .populate('evaluator', 'name')
       .lean();
     const reports = !fullAccess(req) ? [] : await Report.find({ customer: c._id })

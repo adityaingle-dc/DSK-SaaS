@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
-import { propertyAddress, REPORT_TEMPLATES } from '@dsk/shared';
+import { validate, propertyAddress, REPORT_TEMPLATES } from '@dsk/shared';
 import Report, { REPORT_TYPES, REPORT_TYPE_KEYS, isApprovedReport } from '../models/Report.js';
 import Valuation from '../models/Valuation.js';
 import Customer from '../models/Customer.js';
@@ -170,6 +170,13 @@ router.post(
       throw new HttpError(409, v.status === 'rejected' ? 'This input sheet was sent back to the evaluator. Wait until they resubmit it.' : 'The evaluator has not submitted this input sheet yet.');
     }
     if (!v.results?.summary) throw new HttpError(409, 'This input sheet has no calculated results');
+    // the draft sheet (office part) must be complete
+    const missing = validate(v.data || {}, { mode: 'submit', part: 'draft' });
+    if (missing.length) {
+      const err = new HttpError(409, `Complete the draft sheet first: ${missing.length} field${missing.length === 1 ? '' : 's'} to fill (${missing.slice(0, 3).map((e) => e.message.replace(/ is required$/, '')).join(', ')}${missing.length > 3 ? '…' : ''}).`);
+      err.details = missing;
+      throw err;
+    }
 
     const previous = await Report.countDocuments({ valuation: v._id, type });
     const tpl = v.summary?.reportTemplate;

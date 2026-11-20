@@ -51,6 +51,23 @@ export function getContext(data = {}) {
 }
 
 // ---------- land (Input!E3:G22, PV_DSK Part III) ----------
+// Extra items on the land: quantity × rate (rates vary from site to site). An older sheet's typed-in amount is
+// used while no quantity has been entered.
+export const LAND_EXTRAS = [
+  { key: 'compoundWall', label: 'Compound wall / fencing', qty: 'compoundWallLength', rate: 'compoundWallRate', unit: 'Rft' },
+  { key: 'gate', label: 'Gate', qty: 'gateArea', rate: 'gateRate', unit: 'Sq.ft' },
+  { key: 'powerSupply', label: 'Power supply (electricity)', qty: 'powerConnections', rate: 'powerRate', unit: 'No.' },
+];
+export function landExtras(land = {}) {
+  return LAND_EXTRAS.map((x) => {
+    const qty = num(land[x.qty]);
+    const rate = num(land[x.rate]);
+    const byQty = !isBlank(land[x.qty]) && qty > 0;
+    const amount = byQty ? Math.round(qty * rate) : num(land[x.key]);
+    return { key: x.key, label: x.label, unit: x.unit, qty: byQty ? qty : null, rate: byQty ? rate : null, amount, missingRate: byQty && !rate };
+  });
+}
+
 export function computeLand(land = {}, warnings = []) {
   const doc = land.siteAreaDocument;
   const act = land.siteAreaActual;
@@ -63,7 +80,9 @@ export function computeLand(land = {}, warnings = []) {
 
   const glrValue = siteArea * num(land.glr);
   const pmrValue = siteArea * num(land.marketRate);
-  const extras = num(land.compoundWall) + num(land.gate) + num(land.powerSupply);
+  const extraItems = landExtras(land);
+  const extras = extraItems.reduce((s, x) => s + x.amount, 0);
+  for (const x of extraItems) if (x.missingRate) warnings.push({ field: `land.${LAND_EXTRAS.find((e) => e.key === x.key).rate}`, message: `${x.label}: enter the rate to value the ${x.qty} ${x.unit} entered.` });
   const plus = (land.plusFactors || []).reduce((s, f) => s + num(f.amount), 0);
   const minus = (land.minusFactors || []).reduce((s, f) => s + num(f.amount), 0);
 
@@ -73,6 +92,7 @@ export function computeLand(land = {}, warnings = []) {
 
   return {
     siteArea,
+    extraItems,
     siteAreaSqft: siteArea * SQYD_TO_SQFT,
     siteAreaSqm: round2(siteArea * SQYD_TO_SQM),
     glrValue,

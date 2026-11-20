@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
-import { bankByCode, findBank, catalog, IFSC_RX, sanitize, validate, computeValuation, propertyAddress, REPORT_TEMPLATES } from '@dsk/shared';
+import { bankByCode, findBank, catalog, IFSC_RX, sanitize, validate, computeValuation, propertyAddress, REPORT_TEMPLATES, mergePart } from '@dsk/shared';
 import { searchBranches } from '../services/ifscDirectory.js';
 import { reverseGeocode } from '../services/geocode.js';
 import Valuation, { EVALUATOR_EDITABLE } from '../models/Valuation.js';
@@ -43,9 +43,13 @@ async function load(req) {
 }
 
 // Sanitise + validate incoming sheet; submit enforces required fields
-function prepare(body, submit) {
+// part: 'site' | 'draft' checks only that part's fields
+function prepare(body, submit, part) {
   const data = sanitize(body?.data);
-  const errors = validate(data, { mode: submit ? 'submit' : 'draft' });
+  return check(data, submit, part);
+}
+function check(data, submit, part) {
+  const errors = validate(data, { mode: submit ? 'submit' : 'draft', ...(part && part !== 'full' ? { part } : {}) });
   if (errors.length) {
     const err = new HttpError(422, submit ? 'Please complete the required fields before submitting' : 'Some values are invalid');
     err.details = errors;
@@ -134,7 +138,7 @@ router.get(
   '/stats',
   asyncHandler(async (req, res) => {
     const match = { ...scope(req.user), ...createdRange(req.query) };
-    const [byStatus, byTemplate, totals] = await Promise.all([
+    const [byStatus, byTemplate, totals, draftTodo, draftReady] = await Promise.all([
       Valuation.aggregate([{ $match: match }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
       Valuation.aggregate([
         { $match: match },
@@ -142,11 +146,14 @@ router.get(
         { $sort: { count: -1 } },
       ]),
       Valuation.aggregate([{ $match: match }, { $group: { _id: null, total: { $sum: 1 }, value: { $sum: '$summary.fairMarketValue' } } }]),
+      Valuation.countDocuments({ ...match, status: { $in: ['submitted', 'received'] }, draftReady: { $ne: true } }),
+      Valuation.countDocuments({ ...match, status: { $in: ['submitted', 'received'] }, draftReady: true }),
     ]);
     res.json({
       total: totals[0]?.total || 0,
       totalValue: totals[0]?.value || 0,
       byStatus: Object.fromEntries(byStatus.map((s) => [s._id, s.count])),
+      drafts: { todo: draftTodo, ready: draftReady },
       byTemplate: byTemplate.map((t) => ({ ...t, title: REPORT_TEMPLATES[t._id]?.title || t._id })),
     });
   })
@@ -209,6 +216,14 @@ router.get(
     // whitelisted sort keys; default is most recently updated first
     const sortSpec = sorting(req.query, { updated: 'updatedAt', applicant: 'summary.applicantName', value: 'summary.fairMarketValue', created: 'createdAt' });
     const { base, filter } = listFilter(req);
+    // draft sheets module: waiting for the site visit · to draft · ready for a report · completed
+    const DRAFT_FILTER = {
+      waiting: { status: { $in: ['draft', 'rejected'] } },
+      todo: { status: { $in: ['submitted', 'received'] }, draftReady: { $ne: true } },
+      ready: { status: { $in: ['submitted', 'received'] }, draftReady: true },
+      done: { status: 'approved' },
+    };
+    if (DRAFT_FILTER[req.query.draft]) Object.assign(filter, DRAFT_FILTER[req.query.draft]);
     // one status, or several separated by commas (e.g. submitted,received = handed in, waiting for the report)
     if (status) {
       const list = String(status).split(',').map((x) => x.trim()).filter(Boolean);
@@ -216,7 +231,7 @@ router.get(
     }
     const { page, limit, skip } = paging(req.query);
     const [items, total, banks, evaluatorIds] = await Promise.all([
-      Valuation.find(filter).sort(sortSpec).skip(skip).limit(limit).select('referenceNo summary status updatedAt createdAt evaluator').populate('evaluator', 'name'),
+      Valuation.find(filter).sort(sortSpec).skip(skip).limit(limit).select('referenceNo summary status updatedAt createdAt evaluator draftReady draftMissing draftUpdatedAt submittedAt receivedAt').populate('evaluator', 'name'),
       Valuation.countDocuments(filter),
       Valuation.distinct('summary.bankName', base),
       isReviewer(req.user) ? Valuation.distinct('evaluator', base) : [],
@@ -350,7 +365,16 @@ router.put(
     const finish = ['received', 'approved'].includes(req.body?.status) && isSuperadmin(req.user);
     const submit = req.body?.status === 'submitted';
     const wasReceived = v.status === 'received';
-    v.data = prepare(req.body, finish || submit || ['submitted', 'received', 'approved'].includes(v.status));
+    // which part is saved: the evaluator always saves the site inspection; the superadmin says which screen it came
+    // from (site inspection, draft sheet, or the whole sheet). Only that part's fields are taken from the request,
+    // the rest stays as saved, so the two screens never overwrite each other.
+    const part = !isReviewer(req.user) ? 'site' : ['site', 'draft'].includes(req.body?.part) ? req.body.part : 'full';
+    const handedIn = ['submitted', 'received', 'approved'].includes(v.status);
+    // the site inspection must stay complete once handed in; the draft sheet may be saved half-done (it is checked
+    // when the report is generated)
+    const complete = part === 'draft' ? false : (finish || submit || handedIn);
+    v.data = check(sanitize(mergePart(v.data || {}, sanitize(req.body?.data), part)), complete, part === 'full' ? undefined : part);
+    if (part === 'draft' || part === 'full') v.draftUpdatedAt = new Date();
     const own = String(v.evaluator?._id || v.evaluator) === String(req.user._id);
     if (!v.startedAt && own) v.startedAt = new Date();
     const newlyFinished = finish && !['received', 'approved'].includes(v.status);

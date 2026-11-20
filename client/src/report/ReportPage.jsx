@@ -35,7 +35,7 @@ export default function ReportPage() {
   if (!v) return <div className="center">Loading report…</div>;
 
   // the report is generated from here (from a sheet the evaluator has handed in); generating completes the sheet
-  const ready = ['submitted', 'received', 'approved'].includes(v.status);
+  const ready = ['submitted', 'received', 'approved'].includes(v.status) && (v.status === 'approved' || v.draftReady !== false);
   const generateButton = (label = v.status === 'approved' ? 'Generate again' : 'Generate report') => (
     <Link className="btn primary rt-print" to={`/reports/new?valuation=${id}`}>{label}</Link>
   );
@@ -84,7 +84,8 @@ export default function ReportPage() {
         <div className="edit-hint warn no-print">
           {!['draft', 'rejected'].includes(v.status)
             ? <>This is a live preview that follows the input sheet. Use <strong>{v.status === 'approved' ? 'Generate again' : 'Generate report'}</strong> to issue and keep a fixed copy (with its PDF){v.status !== 'approved' ? '; that completes the sheet' : ''}.</>
-            : <>This input sheet is {v.status === 'rejected' ? 'sent back to the evaluator' : 'still a draft'}, so the preview prints with a DRAFT watermark. A report can be generated once the evaluator submits it.</>}
+            : <>The site inspection is {v.status === 'rejected' ? 'sent back to the evaluator' : 'not submitted yet'}, so the preview prints with a DRAFT watermark. A report can be generated once the evaluator submits it.</>}
+          {['submitted', 'received'].includes(v.status) && v.draftReady === false && <> The draft sheet is not complete yet ({v.draftMissing} field{v.draftMissing === 1 ? '' : 's'} to fill): <Link to={`/valuations/${id}/draft`}>complete the draft sheet</Link> to generate the report.</>}
         </div>
       }
     />
