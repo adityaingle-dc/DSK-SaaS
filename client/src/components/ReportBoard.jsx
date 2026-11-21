@@ -1,36 +1,41 @@
-// Reports board: Draft (edited, not generated) · In review (sent to the bank) · Approved (by the bank).
-// The superadmin records the bank's decision by moving cards between In review and Approved; bank-approved reports
-// have their wording locked. Draft cards open the Generate flow. Drag on desktop, "Move" on phones.
+// Reports board: Drafting (with a drafter, not generated yet) · Awaiting approval · Sent back · Approved.
+// The superadmin approves a report (final: locked) or sends it back to the drafter with a note by moving its card.
+// Drafting cards open the drafting screen. Drag on desktop, "Move" on phones.
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { inr } from './StatusBadge.jsx';
 import { initials } from './Layout.jsx';
 import Modal from './Modal.jsx';
-import { alertDialog, confirmDialog } from './ConfirmDialog.jsx';
+import { alertDialog, confirmDialog, promptDialog } from './ConfirmDialog.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import { timeAgo } from '../utils/format.js';
 import { reportHref } from '../pages/Reports.jsx';
 
 export const REPORT_COLUMNS = [
-  { key: 'draft', title: 'Draft', hint: 'Edited, not generated yet', tone: 'slate' },
-  { key: 'review', title: 'In review', hint: 'Sent to the bank for review', tone: 'amber', action: 'Move back to in review' },
-  { key: 'approved', title: 'Approved', hint: 'Approved by the bank', tone: 'green', action: 'Mark approved by bank' },
+  { key: 'draft', title: 'Drafting', hint: 'With a drafter, not generated yet', tone: 'slate' },
+  { key: 'review', title: 'Awaiting approval', hint: 'Waiting for the superadmin', tone: 'amber' },
+  { key: 'approved', title: 'Approved', hint: 'Final', tone: 'green', action: 'Approve (final)' },
+  { key: 'returned', title: 'Back to drafter', hint: 'Sent back; a new version follows', tone: 'red', action: 'Send back to the drafter' },
 ];
 const DAY = 24 * 3600 * 1000;
 
-export const bankApproveDialog = (r) => ({
-  title: `Approved by the bank: ${r.reportNo}?`,
-  message: 'Record that the bank approved this report. Its wording will be locked so it stays as the bank accepted it.',
-  confirmLabel: 'Mark approved',
+export const approveDialog = (r) => ({
+  title: `Approve ${r.reportNo} (v${r.version})?`,
+  message: 'The report becomes final: it and its input sheet are locked and can no longer be changed.',
+  confirmLabel: 'Approve',
 });
-export const backToReviewDialog = (r) => ({
-  title: `Move ${r.reportNo} back to in review?`,
-  message: 'Use this if the bank has not approved it after all or asked for changes. The wording can be edited again.',
-  confirmLabel: 'Move to in review',
+// asks for the note; resolves to the note, or null when cancelled
+export const sendBackDialog = (r) => ({
+  title: `Send ${r.reportNo} back to the drafter?`,
+  message: 'Say what to change. The drafter fixes the sheet or the wording and generates a new version.',
+  placeholder: 'e.g. Market rate looks high, re-check it',
+  confirmLabel: 'Send back',
+  required: true,
 });
-
 
 export default function ReportBoard({ query, reloadKey = 0 }) {
+  const { isSuperadmin } = useAuth();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);
@@ -52,18 +57,18 @@ export default function ReportBoard({ query, reloadKey = 0 }) {
 
   useEffect(() => {
     if (!data || data.columns[tab]?.total) return;
-    const first = ['review', 'draft', 'approved'].find((k) => data.columns[k]?.total);
+    const first = ['review', 'draft', 'returned', 'approved'].find((k) => data.columns[k]?.total);
     if (first) setTab(first);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
   const move = async (r, to) => {
-    const approve = to === 'approved';
-    const ok = await confirmDialog(approve ? bankApproveDialog(r) : backToReviewDialog(r));
-    if (!ok) return;
+    let note;
+    if (to === 'approved') { if (!(await confirmDialog(approveDialog(r)))) return; }
+    else { note = await promptDialog(sendBackDialog(r)); if (note == null) return; }
     setBusy(r._id);
     try {
-      await api.setReportStatus(r._id, to);
+      await api.setReportStatus(r._id, to, note);
       setReload((n) => n + 1);
     } catch (e) {
       alertDialog({ title: "Couldn't move the report", message: e.message });
@@ -87,7 +92,8 @@ export default function ReportBoard({ query, reloadKey = 0 }) {
       <div className={`kb kb-2${drag ? ' is-dragging' : ''}`}>
         {REPORT_COLUMNS.map((c) => {
           const col = data.columns[c.key] || { items: [], total: 0 };
-          const target = drag && drag.col !== c.key && c.key !== 'draft';
+          // only a report awaiting approval moves: to Approved or Sent back
+          const target = drag && drag.col === 'review' && ['approved', 'returned'].includes(c.key);
           return (
             <section
               key={c.key}
@@ -104,19 +110,20 @@ export default function ReportBoard({ query, reloadKey = 0 }) {
                 <small className="kb-hint">{target ? `Drop to ${c.action.toLowerCase()}` : c.hint}</small>
               </header>
               <div className="kb-cards">
-                {col.items.length === 0 && <p className="kb-empty">{c.key === 'draft' ? 'No unsaved report drafts' : c.key === 'review' ? 'Nothing with the bank' : 'No bank approvals recorded yet'}</p>}
+                {col.items.length === 0 && <p className="kb-empty">{c.key === 'draft' ? 'Nothing being drafted' : c.key === 'review' ? 'No reports waiting for approval' : c.key === 'returned' ? 'Nothing sent back' : 'No approved reports yet'}</p>}
                 {col.items.map((r) => {
                   const draft = c.key === 'draft';
-                  const since = new Date(draft ? r.editedAt : c.key === 'approved' ? r.approvedAt || r.createdAt : r.createdAt);
+                  const since = new Date(draft ? r.editedAt : c.key === 'approved' ? r.approvedAt || r.createdAt : c.key === 'returned' ? r.returnedAt || r.createdAt : r.createdAt);
                   const waiting = (draft || c.key === 'review') && Date.now() - since > 2 * DAY;
-                  const who = draft ? (r.editedBy?.name ? `Edited by ${r.editedBy.name}` : 'Edited')
-                    : c.key === 'approved' ? (r.approvedBy?.name ? `Recorded by ${r.approvedBy.name}` : 'Approved by the bank')
+                  const who = draft ? (r.drafter?.name ? `Drafter ${r.drafter.name}` : 'In the queue')
+                    : c.key === 'approved' ? (r.approvedBy?.name ? `Approved by ${r.approvedBy.name}` : 'Approved')
                       : r.generatedBy?.name ? `Generated by ${r.generatedBy.name}` : '';
+                  const canMove = isSuperadmin && c.key === 'review';
                   return (
                     <article
                       key={r._id}
                       className={`kb-card${busy === r._id ? ' busy' : ''}${drag?.r?._id === r._id ? ' dragging' : ''}`}
-                      draggable={!busy && !draft}
+                      draggable={!busy && canMove}
                       onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', r._id); setDrag({ r, col: c.key }); }}
                       onDragEnd={() => { setDrag(null); setOver(''); }}
                     >
@@ -125,7 +132,7 @@ export default function ReportBoard({ query, reloadKey = 0 }) {
                           <span className="avatar soft sm">{initials(r.customer?.name || r.applicantName)}</span>
                           <span className="kb-card-name">
                             <strong>{r.customer?.name || r.applicantName || 'Unnamed'}</strong>
-                            <small className="muted">{draft ? `Not generated · v${r.version}` : `${r.reportNo} · v${r.version}`}{r.reportTemplate ? ` · ${r.reportTemplate}` : ''}</small>
+                            <small className="muted">{draft ? `Next: v${r.version}` : `${r.reportNo} · v${r.version}`}{r.reportTemplate ? ` · ${r.reportTemplate}` : ''}</small>
                           </span>
                         </span>
                         {r.snapshot?.referenceNo && <span className="kb-card-line">Sheet {r.snapshot.referenceNo}</span>}
@@ -136,8 +143,8 @@ export default function ReportBoard({ query, reloadKey = 0 }) {
                         {who && <span className="kb-card-who">{who}</span>}
                       </Link>
                       {draft
-                        ? <Link className="kb-move" to={reportHref(r)} aria-label={`Generate the report for ${r.snapshot?.referenceNo}`}>Generate ›</Link>
-                        : <button type="button" className="kb-move" onClick={() => setMoving({ r, col: c.key })} disabled={!!busy} aria-label={`Move ${r.reportNo}`}>Move ›</button>}
+                        ? <Link className="kb-move" to={reportHref(r)} aria-label={`Open the drafting of ${r.snapshot?.referenceNo}`}>Open ›</Link>
+                        : canMove && <button type="button" className="kb-move" onClick={() => setMoving({ r, col: c.key })} disabled={!!busy} aria-label={`Approve or send back ${r.reportNo}`}>Decide ›</button>}
                     </article>
                   );
                 })}
@@ -152,7 +159,7 @@ export default function ReportBoard({ query, reloadKey = 0 }) {
         <Modal title={`Move ${moving.r.reportNo}`} onClose={() => setMoving(null)} className="kb-move-modal">
           <p className="muted small kb-move-from">Now in <strong>{REPORT_COLUMNS.find((c) => c.key === moving.col).title}</strong></p>
           <div className="kb-move-list">
-            {REPORT_COLUMNS.filter((c) => c.key !== moving.col && c.key !== 'draft').map((c) => (
+            {REPORT_COLUMNS.filter((c) => ['approved', 'returned'].includes(c.key)).map((c) => (
               <button key={c.key} type="button" className="kb-move-opt" onClick={() => { const m = moving; setMoving(null); move(m.r, c.key); }}>
                 <span className={`kb-dot tone-${c.tone}`} aria-hidden="true" />
                 <span><strong>{c.title}</strong><small className="muted">{c.action}</small></span>

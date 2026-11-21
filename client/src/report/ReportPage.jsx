@@ -34,10 +34,10 @@ export default function ReportPage() {
   if (error) return <div className="alert">{error}</div>;
   if (!v) return <div className="center">Loading report…</div>;
 
-  // the report is generated from here (from a sheet the evaluator has handed in); generating completes the sheet
-  const ready = ['submitted', 'received', 'approved'].includes(v.status) && (v.status === 'approved' || v.draftReady !== false);
-  const generateButton = (label = v.status === 'approved' ? 'Generate again' : 'Generate report') => (
-    <Link className="btn primary rt-print" to={`/reports/new?valuation=${id}`}>{label}</Link>
+  // the report is generated from the drafting screen (sheet + report), by the drafter who has the sheet
+  const ready = v.canEdit && ['submitted', 'received', 'returned'].includes(v.status);
+  const generateButton = (label = 'Open drafting') => (
+    <Link className="btn primary rt-print" to={`/valuations/${id}/edit?view=report`}>{label}</Link>
   );
 
   if (fromSheet) {
@@ -69,10 +69,11 @@ export default function ReportPage() {
     <ReportViewer
       doc={v}
       overrides={v.reportOverrides || {}}
-      onSave={async (draft) => {
+      canEdit={!!v.canEdit}
+      onSave={v.canEdit ? async (draft) => {
         const res = await api.saveReportOverrides(id, draft);
         return { overrides: res.reportOverrides, editedText: `Last edited ${dateTime(res.reportEditedAt)}${res.reportEditedBy?.name ? ` by ${res.reportEditedBy.name}` : ''}` };
-      }}
+      } : undefined}
       primaryAction={ready ? generateButton() : null}
       back={{ to: `/valuations/${id}`, label: 'Input sheet' }}
       title={v.summary?.applicantName}
@@ -82,10 +83,11 @@ export default function ReportPage() {
       docTitle={`${v.referenceNo} ${v.summary?.applicantName || ''} ${v.summary?.reportTemplate || ''}`.trim()}
       banner={
         <div className="edit-hint warn no-print">
-          {!['draft', 'rejected'].includes(v.status)
-            ? <>This is a live preview that follows the input sheet. Use <strong>{v.status === 'approved' ? 'Generate again' : 'Generate report'}</strong> to issue and keep a fixed copy (with its PDF){v.status !== 'approved' ? '; that completes the sheet' : ''}.</>
-            : <>The site inspection is {v.status === 'rejected' ? 'sent back to the evaluator' : 'not submitted yet'}, so the preview prints with a DRAFT watermark. A report can be generated once the evaluator submits it.</>}
-          {['submitted', 'received'].includes(v.status) && v.draftReady === false && <> The draft sheet is not complete yet ({v.draftMissing} field{v.draftMissing === 1 ? '' : 's'} to fill): <Link to={`/valuations/${id}/draft`}>complete the draft sheet</Link> to generate the report.</>}
+          {['draft', 'rejected'].includes(v.status)
+            ? <>The site inspection is {v.status === 'rejected' ? 'back with the field evaluator' : 'not submitted yet'}, so the preview prints with a DRAFT watermark.</>
+            : v.status === 'pending' ? <>A report from this sheet is waiting for the superadmin's approval. This preview follows the sheet; the generated copy is in Reports.</>
+              : v.status === 'approved' ? <>The report for this sheet is approved and final. The approved copy is in Reports.</>
+                : <>This live preview follows the sheet. Complete the sheet and generate the report from <Link to={`/valuations/${id}/edit?view=report`}>the drafting screen</Link>{v.draftReady === false ? ` (${v.draftMissing} field${v.draftMissing === 1 ? '' : 's'} still to fill)` : ''}.</>}
         </div>
       }
     />

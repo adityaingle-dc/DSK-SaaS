@@ -1,7 +1,8 @@
 // Plot boundary helpers (pins dropped around the plot on the map in the input sheet).
 // Points are { lat, lon } in degrees. Good enough for plot-sized shapes (local flat-earth projection).
 
-export const MIN_BOUNDARY_POINTS = 10;
+// no minimum number of map points is required; 3 is the fewest that enclose an area
+export const MIN_BOUNDARY_POINTS = 3;
 export const MAX_BOUNDARY_POINTS = 60;
 export const SQFT_PER_SQM = 10.7639;
 export const SQYD_PER_SQM = 1.19599;

@@ -31,7 +31,8 @@ const choiceFields = (items, { freeTextIfNoOptions = true } = {}) =>
       : { key: c.key, label, question: c.label, type: 'text', wide: true };
   });
 
-const personFields = (required) => [
+// who: whose address it is (shown as "Address of applicant" / "Address of vendor")
+const personFields = (required, who) => [
   // row: fields shown side by side (salutation + name, relation + relative); heading: a small title above a field
   { key: 'salutation', label: 'Salutation', type: 'select', options: L.salutation, optionLabels: LIST_LABELS.salutation, default: 'Sri.', row: 'who' },
   { key: 'name', label: 'Full name', labelFrom: (v) => (isFirm(v.salutation) ? 'Firm name' : 'Full name'), type: 'text', required, row: 'who', hint: 'Without the salutation. Typing "Smt. " or "Mr " first picks it for you.' },
@@ -40,7 +41,7 @@ const personFields = (required) => [
   { key: 'occupation', label: 'Occupation', labelFrom: (v) => (isFirm(v.salutation) ? 'Nature of business' : 'Occupation'), type: 'text', heading: 'Contact' },
   { key: 'phone1', label: 'Phone 1', type: 'tel', required, ...PHONE },
   { key: 'phone2', label: 'Phone 2', type: 'tel', ...PHONE },
-  { key: 'houseNo', label: 'Plot No. / H.No.', type: 'text', heading: 'Address' },
+  { key: 'houseNo', label: 'Plot No. / H.No.', type: 'text', heading: `Address of ${who}` },
   { key: 'street', label: 'Road / Street / Colony', type: 'text' },
   { key: 'locality', label: 'Village / Mandal / Municipality', type: 'text' },
   { key: 'district', label: 'District', type: 'text' },
@@ -63,7 +64,7 @@ export const SECTIONS = [
   {
     key: 'general',
     title: 'Valuation & bank details',
-    siteTitle: 'Visit details', intro: 'Pick the bank, then type the branch or area to fill the IFSC.',
+    intro: 'Pick the bank, then type the branch or area to fill the IFSC.',
     fields: [
       { key: 'valuationDate', label: 'Date of valuation', type: 'date', required: true, default: 'today' },
       { key: 'inspectionDate', label: 'Date of inspection', type: 'date', required: true },
@@ -89,14 +90,14 @@ export const SECTIONS = [
       { key: 'feeDiscount', label: 'Fee – discount', type: 'number', unit: '₹', min: 0 },
     ],
   },
-  { key: 'applicant', title: 'Applicant / owner', intro: 'The salutation sets the relation (Smt. → W/o, M/s. → Rep. by) and only matching relations are shown.', link: linkPerson, fields: personFields(true) },
-  { key: 'vendor', title: 'Intending vendor', when: (ctx) => ctx.isPurchase, link: linkPerson, fields: personFields(false) },
+  { key: 'applicant', title: 'Applicant / owner', intro: 'The salutation sets the relation (Smt. → W/o, M/s. → Rep. by) and only matching relations are shown.', link: linkPerson, fields: personFields(true, 'applicant') },
+  { key: 'vendor', title: 'Intending vendor', when: (ctx) => ctx.isPurchase, link: linkPerson, fields: personFields(false, 'vendor') },
   {
     key: 'property',
     title: 'Property location',
     intro: 'Start with the map: mark the plot (or use your location) and the village, mandal, district and pincode fill in. Check them and add the plot number.',
     fields: [
-      { key: 'location', label: 'Plot on the map', type: 'latlon', wide: true, minPoints: 10, fillAddress: true, hint: 'Tap at least 10 points around the plot for the boundary; its centre is the GPS location.' },
+      { key: 'location', label: 'Plot on the map', type: 'latlon', wide: true, fillAddress: true, hint: 'Tap the corners of the plot for its boundary (as many as needed); its centre is the GPS location.' },
       { key: 'description', label: 'Property description', type: 'text', required: true, wide: true, hint: 'e.g. "Under Construction Ground Floor Building"' },
       { key: 'numberType', label: 'Number type', type: 'select', options: L.propertyNumberType, default: 'Plot No. / H.No.' },
       { key: 'number', label: 'Plot / H.No. / Flat No.', type: 'text' },
@@ -186,7 +187,7 @@ export const SECTIONS = [
       { key: 'glr', label: 'Guideline rate (GLR)', type: 'number', unit: '₹/sq.yd', min: 0, required: true },
       { key: 'marketRate', label: 'Prevailing market rate (PMR)', type: 'number', unit: '₹/sq.yd', min: 0, required: true },
       // extra items: the quantity and the rate (rates differ from site to site); the amount is worked out
-      { key: 'compoundWallLength', label: 'Compound wall / fencing – length', type: 'number', unit: 'rft', min: 0, row: 'x-cw', heading: 'Extra items (quantity × rate)' },
+      { key: 'compoundWallLength', label: 'Compound wall / fencing – length', type: 'number', unit: 'rft', min: 0, row: 'x-cw', heading: 'Extra items (quantity × rate)', hint: 'Fills in from the four sides (Boundaries & dimensions). Change it if the wall does not run all round.' },
       { key: 'compoundWallHeight', label: 'Height', type: 'text', unit: 'ft', row: 'x-cw' },
       { key: 'compoundWallRate', label: 'Rate', type: 'number', unit: '₹ per rft', min: 0, row: 'x-cw' },
       { key: 'gateArea', label: 'Gate – size', type: 'number', unit: 'sq.ft', min: 0, row: 'x-gate' },
@@ -250,7 +251,7 @@ export const SECTIONS = [
   {
     key: 'amenities',
     path: 'building',
-    title: 'Amenities, extra items & services', intro: 'Pick a grade for items that are present; leave the rest. Amounts fill in on their own.',
+    title: 'Amenities, extra items & services', intro: 'For items that are present, pick the amount range; the amount fills in (you can change it). Leave the rest.',
     when: (ctx) => ctx.kind === 'building',
     fields: [
       { key: 'amenities', label: 'Amenities & extra items (value after depreciation)', type: 'tiers', items: catalog.amenities, tiers: catalog.amenityTiers, wide: true },

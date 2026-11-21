@@ -2,11 +2,10 @@
 // sanitize(): keeps only known fields, trims strings, coerces numbers/booleans (safe for any client input)
 // validate(): returns [{ field: 'section.key', message }] – `mode: 'submit'` also enforces required fields
 
-import { columnInPart, fieldPart, inPart } from './parts.js';
 import { SECTIONS, sectionPath, visibleSections } from './formSchema.js';
 import { getContext } from './calc.js';
 import { STAGE_STATUS } from './constants.js';
-import { boundaryArea, cleanBoundary, MIN_BOUNDARY_POINTS } from './geo.js';
+import { boundaryArea, cleanBoundary } from './geo.js';
 
 // Upload rules shared by client (pre-check) and server (enforcement)
 export const MAX_FILES = 10;
@@ -143,9 +142,9 @@ function checkScalar(field, v, name, errors) {
   if (field.pattern && !new RegExp(field.pattern).test(String(v))) errors.push({ field: name, message: field.patternMessage || `${field.label}: invalid format` });
 }
 
-// part: 'site' | 'draft' checks only that part's fields (the evaluator submits the site inspection; the draft
-// sheet must be complete before a report); no part = the whole sheet
-export function validate(data = {}, { mode = 'draft', part } = {}) {
+// mode 'draft': only the values entered are checked (formats, options); 'submit': required fields too
+// (the sheet must be complete before a report is generated)
+export function validate(data = {}, { mode = 'draft' } = {}) {
   const errors = [];
   const ctx = getContext(data);
   for (const s of visibleSections(ctx, data)) {
@@ -153,26 +152,18 @@ export function validate(data = {}, { mode = 'draft', part } = {}) {
     const values = data[path] || {};
     for (const f of s.fields) {
       if (f.when && !f.when(ctx, data)) continue;
-      if (part && !inPart(s, f, part)) continue;
       const name = `${path}.${f.key}`;
       const v = values[f.key];
-      if (mode === 'submit' && f.required && (!part || ['both', part].includes(fieldPart(s, f)))) {
+      if (mode === 'submit' && f.required) {
         const empty = f.type === 'table' ? !(Array.isArray(v) && v.length) : isBlank(v);
         if (empty) errors.push({ field: name, message: `${f.label} is required` });
       }
       if (f.type === 'table' && Array.isArray(v)) {
-        v.forEach((row, i) => f.columns.forEach((c) => { if (!part || columnInPart(s, f, c, part)) checkScalar(c, row[c.key], `${name}.${i}.${c.key}`, errors); }));
+        v.forEach((row, i) => f.columns.forEach((c) => checkScalar(c, row[c.key], `${name}.${i}.${c.key}`, errors)));
       } else if (!['grid', 'tiers', 'stages', 'multiselect', 'latlon', 'checkbox'].includes(f.type)) {
         checkScalar(f, v, name, errors);
       }
       if (f.type === 'latlon' && v && (Math.abs(v.lat) > 90 || Math.abs(v.lon) > 180)) errors.push({ field: name, message: 'GPS coordinates out of range' });
-      // the 10-pin minimum is a submit rule: a half-marked plot can still be saved as a draft
-      if (f.type === 'latlon' && f.minPoints && mode === 'submit') {
-        const n = Array.isArray(v?.boundary) ? v.boundary.length : 0;
-        const min = f.minPoints || MIN_BOUNDARY_POINTS;
-        if (n && n < min) errors.push({ field: name, message: `Plot boundary: mark at least ${min} points on the map (${n} so far)` });
-        else if (!n) errors.push({ field: name, message: `Plot boundary: mark at least ${min} points around the plot on the map` });
-      }
     }
   }
   return errors;

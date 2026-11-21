@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { boundaryArea, boundaryCentre, boundaryPerimeter, columnInPart, documentDetails, inPart, landExtras, MIN_BOUNDARY_POINTS, parseLatLon, plotArea, sideRoles, SQFT_PER_SQM, SQYD_PER_SQM } from '@dsk/shared';
+import { boundaryArea, boundaryCentre, boundaryPerimeter, documentDetails, landExtras, MIN_BOUNDARY_POINTS, parseLatLon, plotArea, sideRoles, SQFT_PER_SQM, SQYD_PER_SQM } from '@dsk/shared';
 import { inr } from './StatusBadge.jsx';
 import FilesInput from './FilesInput.jsx';
 import DateInput from './DateInput.jsx';
@@ -12,10 +12,10 @@ const BoundaryMap = lazy(() => import('./BoundaryMap.jsx'));
 // Renders one section of the @dsk/shared input-sheet schema.
 // values = data[sectionPath]; onChange(key, value) updates one field.
 // onChangeAt(path, key, value) (optional) lets a section's links update a field in another section.
-// part: 'site' | 'draft' shows only that part's fields (and table columns); none = the whole sheet
-export default function SchemaSection({ section, values = {}, onChange, onChangeAt, errors = {}, ctx, data, path, part }) {
+// locked: sheet fields filled from the customer that can't be changed here (e.g. ['general.bankName']); shown read-only
+export default function SchemaSection({ section, values = {}, onChange, onChangeAt, errors = {}, ctx, data, path, locked = [] }) {
   // optionsFrom: the options depend on other answers (e.g. relations that fit the salutation)
-  const visible = section.fields.filter((f) => (!f.when || f.when(ctx, data)) && !f.inGrid && !f.hidden && inPart(section, f, part)).map((f) => (f.optionsFrom ? { ...f, options: f.optionsFrom(values) } : f));
+  const visible = section.fields.filter((f) => (!f.when || f.when(ctx, data)) && !f.inGrid && !f.hidden).map((f) => (f.optionsFrom ? { ...f, options: f.optionsFrom(values) } : f));
   const paired = pairShortFields(visible.filter((f) => !f.row));
   // a section can keep fields in step (salutation ↔ relation ↔ name): one change may set a few fields
   const change = (key, v) => {
@@ -25,7 +25,14 @@ export default function SchemaSection({ section, values = {}, onChange, onChange
       else if (onChangeAt) { const [p, f] = k.split('.'); onChangeAt(p, f, x); } // e.g. site.plotPosition
     }
   };
-  const render = (f) => (
+  const render = (f) => (locked.includes(`${path}.${f.key}`) ? (
+    <FieldRow key={f.key} field={{ ...f, hint: undefined }} label={f.labelFrom?.(values) || f.label} pair={paired.has(f.key)} errors={errors} name={`${path}.${f.key}`}>
+      <div className="locked-value" title="Entered with the customer. Change it in the customer's details.">
+        <span>{String(values[f.key] ?? '')}</span>
+        <small>From the customer · change it in the customer's details</small>
+      </div>
+    </FieldRow>
+  ) : (
     <FieldRow key={f.key} field={f} label={f.labelFrom?.(values) || f.label} pair={paired.has(f.key)} error={errors[`${path}.${f.key}`]} errors={errors} name={`${path}.${f.key}`}>
       <FieldInput
         field={f}
@@ -36,11 +43,9 @@ export default function SchemaSection({ section, values = {}, onChange, onChange
         data={data}
         errors={errors}
         name={`${path}.${f.key}`}
-        part={part}
-        section={section}
       />
     </FieldRow>
-  );
+  ));
   // neighbouring fields with the same `row` sit side by side (salutation | name); `heading` starts a small group title
   const items = [];
   for (let i = 0; i < visible.length; i++) {
@@ -100,7 +105,7 @@ function FieldRow({ field, label = field.label, error, children, pair = false })
 
 const str = (v) => (v === undefined || v === null ? '' : String(v));
 
-export function FieldInput({ field, value, onChange, errors = {}, name, setField, values, data, inTable = false, part, section }) {
+export function FieldInput({ field, value, onChange, errors = {}, name, setField, values, data, inTable = false }) {
   // special inputs for plain-text fields (stored as text, so validation / reports are unchanged)
   if (field.widget === 'bank') return <BankInput value={value} onChange={onChange} />;
   if (field.widget === 'ifsc' && setField) return <IfscInput value={value} onChange={onChange} setField={setField} values={values} />;
@@ -145,7 +150,7 @@ export function FieldInput({ field, value, onChange, errors = {}, name, setField
       return <LandExtrasPanel values={values || {}} />;
     case 'table':
       if (field.widget === 'documents') return <DocumentsInput field={field} value={value || []} onChange={onChange} errors={errors} name={name} />;
-      return <TableInput field={field} value={value || []} onChange={onChange} errors={errors} name={name} part={part} section={section} />;
+      return <TableInput field={field} value={value || []} onChange={onChange} errors={errors} name={name} />;
     case 'tiers':
       return <TiersInput field={field} value={value || {}} onChange={onChange} />;
     case 'stages':
@@ -233,7 +238,6 @@ const isBlank = (v) => v === undefined || v === null || String(v).trim() === '';
 function LatLonInput({ field, value, onChange, setField, values = {} }) {
   const [msg, setMsg] = useState('');
   const [focus, setFocus] = useState(null);
-  const min = field?.minPoints || MIN_BOUNDARY_POINTS;
   const points = Array.isArray(value?.boundary) ? value.boundary : [];
   const centre = value?.lat !== undefined && value?.lat !== '' && value?.lon !== undefined && value?.lon !== '' ? { lat: Number(value.lat), lon: Number(value.lon) } : null;
 
@@ -309,11 +313,11 @@ function LatLonInput({ field, value, onChange, setField, values = {} }) {
   }, [centreKey, addressEmpty]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const area = boundaryArea(points);
-  const done = points.length >= min;
+  const done = points.length >= MIN_BOUNDARY_POINTS; // enough to enclose an area (no minimum is required)
   return (
     <div className="latlon">
       <div className="bm-head">
-        <span className={`bm-count${done ? ' ok' : ''}`}>{points.length} / {min} points{done ? ' ✓' : ''}</span>
+        <span className={`bm-count${done ? ' ok' : ''}`}>{points.length} point{points.length === 1 ? '' : 's'}</span>
         {points.length >= 3 && (
           <span className="bm-area">≈ {Math.round(area * SQFT_PER_SQM).toLocaleString('en-IN')} sq.ft · {Math.round(area * SQYD_PER_SQM).toLocaleString('en-IN')} sq.yd · perimeter {Math.round(boundaryPerimeter(points))} m</span>
         )}
@@ -327,8 +331,8 @@ function LatLonInput({ field, value, onChange, setField, values = {} }) {
       </Suspense>
       <p className="hint">
         {done
-          ? 'Boundary marked. Drag a point to adjust it, or tap it to remove it.'
-          : `Zoom in on the plot and tap its corners and edges in order, going round the plot: at least ${min} points. Drag a point to adjust it, tap it to remove it.`}
+          ? 'Drag a point to adjust it, or tap it to remove it. Add more points if the plot has more corners.'
+          : 'Zoom in on the plot and tap its corners in order, going round the plot (as many as needed). Drag a point to adjust it, tap it to remove it.'}
       </p>
       <div className="ll-centre">
         <span className="ll-title">Centre of the plot (GPS location){points.length >= 3 ? ' · from the pinned points' : ''}</span>
@@ -656,13 +660,8 @@ function DocumentsInput({ field, value, onChange, errors, name }) {
   );
 }
 
-// part: in the site inspection, columns of the draft sheet are hidden (e.g. floor rates); in the draft sheet,
-// columns filled on site are shown read-only and rows are added on site only
-function TableInput({ field, value, onChange, errors, name, part, section }) {
-  const mixed = part && part !== 'full' && section;
-  const columns = mixed && part === 'site' ? field.columns.filter((c) => columnInPart(section, field, c, 'site')) : field.columns;
-  const readOnlyCol = (c) => mixed && part === 'draft' && !columnInPart(section, field, c, 'draft');
-  const rowsLocked = mixed && part === 'draft' && field.columns.some((c) => !columnInPart(section, field, c, 'draft'));
+function TableInput({ field, value, onChange, errors, name }) {
+  const { columns } = field;
   const setCell = (i, key, v) => onChange(value.map((row, j) => (j === i ? { ...row, [key]: v } : row)));
   // unique columns (e.g. Floor): a value picked in one row is not offered again in the other rows
   const uniqueCols = field.columns.filter((c) => c.unique && c.options);
@@ -693,19 +692,19 @@ function TableInput({ field, value, onChange, errors, name, part, section }) {
               {columns.map((c) => {
                 const err = errors[`${name}.${i}.${c.key}`];
                 return (
-                  <td key={c.key} data-label={c.label} className={`${err ? 'has-error' : ''}${readOnlyCol(c) ? ' ro-cell' : ''}`} title={err || (readOnlyCol(c) ? 'Filled in on site' : '')}>
-                    {readOnlyCol(c) ? <span className="ro-value">{str(row[c.key]) || '—'}</span> : <FieldInput field={columnFor(c, i)} value={row[c.key]} onChange={(v) => setCell(i, c.key, v)} inTable />}
+                  <td key={c.key} data-label={c.label} className={err ? 'has-error' : ''} title={err || ''}>
+                    <FieldInput field={columnFor(c, i)} value={row[c.key]} onChange={(v) => setCell(i, c.key, v)} inTable />
                   </td>
                 );
               })}
               <td className="row-actions">
-                {!rowsLocked && <button type="button" className="btn ghost danger" aria-label="Remove row" onClick={() => onChange(value.filter((_, j) => j !== i))}>✕</button>}
+                <button type="button" className="btn ghost danger" aria-label="Remove row" onClick={() => onChange(value.filter((_, j) => j !== i))}>✕</button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      {rowsLocked ? <p className="hint add-row-note">Rows are added in the site inspection.</p> : full
+      {full
         ? <p className="hint add-row-note">All {uniqueCols[0].label.toLowerCase()}s are added.</p>
         : <button type="button" className="btn small add-row" onClick={addRow}>+ Add row</button>}
     </div>
@@ -724,7 +723,7 @@ function TiersInput({ field, value, onChange }) {
     <div className="table-wrap">
       <table className="table input-table">
         <thead>
-          <tr><th>Item</th><th>Grade</th><th className="num">Qty</th><th className="num">Amount</th></tr>
+          <tr><th>Item</th><th>Amount range (₹)</th><th className="num">Qty</th><th className="num">Amount</th></tr>
         </thead>
         <tbody>
           {field.items.map((item) => {
@@ -738,13 +737,14 @@ function TiersInput({ field, value, onChange }) {
             return (
               <tr key={item.key} className={tier ? 'selected' : ''}>
                 <th scope="row" className="cell-title">{item.label}</th>
-                <td data-label="Grade">
+                <td data-label="Amount range (₹)" className="tier-ranges">
                   <PillRow
-                    label={`${item.label} – grade`}
+                    label={`${item.label} – amount range`}
                     value={tier}
                     clearTo={0}
                     onChange={(t) => setTier(item.key, t)}
-                    options={field.tiers.slice(1).map((t, i) => ({ value: i + 1, label: t, title: `₹ ${item.ranges[i] || inr(item.rates[i])}${tier === i + 1 ? ' · tap again to clear' : ''}` }))}
+                    // the four price ranges of this item (the amount starts at the range's lower figure)
+                    options={field.tiers.slice(1).map((t, i) => ({ value: i + 1, label: item.ranges[i] || inr(item.rates[i]), title: `₹ ${item.ranges[i] || inr(item.rates[i])}${tier === i + 1 ? ' · tap again to clear' : ''}` }))}
                   />
                 </td>
                 <td className="num" data-label="Qty">

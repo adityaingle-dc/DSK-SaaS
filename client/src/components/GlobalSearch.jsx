@@ -111,11 +111,13 @@ function SearchDialog({ onClose }) {
   const actions = useMemo(() => {
     const all = [
       { label: 'Dashboard', to: '/', icon: <DuoHome size={18} />, keywords: 'home overview' },
-      { label: 'Input Sheets', to: '/valuations', icon: <DuoList size={18} />, keywords: 'valuations list sheets input' },
-      { label: 'Drafts', to: '/valuations?status=draft', icon: <DuoList size={18} />, keywords: 'draft unfinished' },
-      { label: 'Received', to: '/valuations?status=submitted,received', icon: <DuoList size={18} />, keywords: 'received submitted new pending in review opened' },
-      { label: 'Completed', to: '/valuations?status=approved', icon: <DuoList size={18} />, keywords: 'completed approved report generated done' },
-      { label: 'Sent back', to: '/valuations?status=rejected', icon: <DuoList size={18} />, keywords: 'sent back rejected returned' },
+      { label: 'Site Inspections', to: '/valuations', icon: <DuoList size={18} />, keywords: 'valuations list sheets input site inspections' },
+      // the flow, in order (same as the tabs on Site Inspections)
+      { label: 'Site visit', to: '/valuations?status=draft,rejected', icon: <DuoList size={18} />, keywords: 'site visit draft unfinished sent back evaluator' },
+      { label: 'In queue', to: '/valuations?status=submitted', icon: <DuoList size={18} />, keywords: 'queue submitted new waiting drafter' },
+      { label: 'Drafting', to: '/valuations?status=received,returned', icon: <DuoList size={18} />, keywords: 'drafting drafter in progress sent back' },
+      { label: 'Awaiting approval', to: '/valuations?status=pending', icon: <DuoList size={18} />, keywords: 'awaiting approval pending review report' },
+      { label: 'Approved', to: '/valuations?status=approved', icon: <DuoList size={18} />, keywords: 'approved completed final report done' },
       ...(isSuperadmin ? [
         { label: 'Customers', to: '/customers', icon: <DuoContact size={18} />, keywords: 'clients enquiry customer contacts' },
         { label: 'Reports', to: '/reports', icon: <DuoSheet size={18} />, keywords: 'reports generated stored pdf print' },

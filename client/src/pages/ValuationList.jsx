@@ -21,31 +21,25 @@ import { IconPlus } from '../components/Icons.jsx';
 import { dateTime, timeAgo } from '../utils/format.js';
 import SheetBoard from '../components/SheetBoard.jsx';
 import ViewSwitch, { rememberView, storedView } from '../components/ViewSwitch.jsx';
+import { sheetLink } from '../utils/sheetLink.js';
 
-// All · Received (handed in by the evaluator, waiting for the report; unopened ones are tagged New) · Completed.
-// Drafts, sent-back and only-unopened / only-opened sheets are still reachable by link (dashboard tiles, search).
-const RECEIVED_TAB = 'submitted,received';
-const STATUS_TABS = [
-  ['', 'All'],
-  [RECEIVED_TAB, 'Received'],
-  ['approved', 'Completed'],
-];
-const OTHER_STATUS = { draft: 'Drafts', rejected: 'Sent back', submitted: 'New (not opened yet)', received: 'Opened' };
+// status tabs follow the workflow (customer → site visit → drafting → approval), per role
+const TABS = {
+  // four tabs: all · site visit (incl. sent back to the evaluator) · drafting (in the queue, being drafted, sent back to
+  // the drafter, report awaiting approval) · approved. Each row's badge says the exact status.
+  office: [['', 'All'], ['draft,rejected', 'Site visit'], ['submitted,received,returned,pending', 'Drafting'], ['approved', 'Approved']],
+  // the evaluator: to do (incl. sent back to them) → with the drafter (queue, drafting, approval) → approved
+  evaluator: [['', 'All'], ['draft,rejected', 'To do'], ['submitted,received,pending,returned', 'With drafter'], ['approved', 'Approved']],
+};
+// statuses reached by a link (dashboard tiles) that are not a tab of their own
+const OTHER_STATUS = { draft: 'Site visit in progress', rejected: 'Sent back to the evaluator', submitted: 'In the drafters\' queue', 'submitted,received,returned': 'With the drafters', 'received,returned': 'Being drafted', received: 'Being drafted', returned: 'Sent back to the drafter', pending: 'Reports awaiting approval' };
 // sort options (column headers on desktop, a select on phones); first click on a column uses its natural direction
 const SORTS = {
   updated: { label: 'Recently updated', first: 'desc' },
   applicant: { label: 'Applicant (A–Z)', first: 'asc' },
   value: { label: 'Highest value', first: 'desc' },
 };
-const DEFAULTS = { q: '', status: '', draft: '', template: '', evaluator: '', bank: '', sort: 'updated', dir: 'desc', limit: '20', page: '1', period: 'all', start: '', end: '', view: '' };
-// Draft Sheets: where each job's office part stands
-const DRAFT_TABS = [['', 'All'], ['waiting', 'Waiting for site'], ['todo', 'To draft'], ['ready', 'Ready for report'], ['done', 'Completed']];
-function DraftState({ v }) {
-  if (v.status === 'approved') return <StatusBadge status="approved" label="Completed" />;
-  if (!['submitted', 'received'].includes(v.status)) return <StatusBadge status="draft" label="Waiting for site" />;
-  if (v.draftReady) return <StatusBadge status="received" label="Ready for report" />;
-  return <StatusBadge status="submitted" label={v.draftMissing ? `To draft · ${v.draftMissing} left` : 'To draft'} />;
-}
+const DEFAULTS = { q: '', status: '', drafter: '', template: '', evaluator: '', bank: '', sort: 'updated', dir: 'desc', limit: '20', page: '1', period: 'all', start: '', end: '', view: '' };
 const VIEW_KEY = 'dsk.sheets.view';
 
 const fmv = (v) => (v.summary?.fairMarketValue > 0 ? inr(v.summary.fairMarketValue) : '—');
@@ -63,13 +57,14 @@ function SortTh({ k, query, onSort, children, className = '' }) {
   );
 }
 
-// module: 'site' = Site Inspections (the evaluators' part; also the superadmin's overview of site visits)
-//         'draft' = Draft Sheets (the superadmin's office part; reports are generated from here)
-export default function ValuationList({ module = 'site' }) {
-  const { isReviewer, isSuperadmin } = useAuth();
-  const drafts = module === 'draft';
-  // the superadmin goes straight into the site inspection / draft sheet; others open the sheet's page
-  const sheetUrl = (id) => (isSuperadmin ? `/valuations/${id}/${drafts ? 'draft' : 'site'}` : `/valuations/${id}`);
+// Site Inspections: every job's sheet. Evaluators see theirs; drafters every sheet handed in (the shared queue);
+// the superadmin all of them.
+export default function ValuationList() {
+  const auth = useAuth();
+  const { isReviewer, isSuperadmin, isOffice } = auth;
+  const tabs = isOffice ? TABS.office : TABS.evaluator;
+  // with the drafters: the drafting screen; with the evaluator: their sheet; otherwise the sheet's page
+  const sheetUrl = (v) => sheetLink(v, auth);
   const navigate = useNavigate();
   const { params, query, update, filtered, clear, apiQuery } = useListParams(DEFAULTS);
   const [data, setData] = useState(null);
@@ -78,7 +73,7 @@ export default function ValuationList({ module = 'site' }) {
   const [creating, setCreating] = useState(false);
   const [notice, setNotice] = useState(null);
   const [reload, setReload] = useState(0);
-  const view = drafts ? 'list' : query.view === 'board' || query.view === 'list' ? query.view : storedView(VIEW_KEY) === 'board' ? 'board' : 'list';
+  const view = query.view === 'board' || query.view === 'list' ? query.view : storedView(VIEW_KEY) === 'board' ? 'board' : 'list';
   const setView = (v) => {
     rememberView(VIEW_KEY, v);
     update({ view: v, page: '1' }, { replace: true });
@@ -100,22 +95,22 @@ export default function ValuationList({ module = 'site' }) {
   };
   const clearAll = clear;
   const facets = data?.facets || {};
-  const cols = isReviewer ? 9 : 8;
+  const cols = isOffice ? 10 : 8;
 
   return (
     <div className="page">
       <PageHeader
         icon={DuoList}
-        title={drafts ? 'Draft Sheets' : 'Site Inspections'}
+        title="Site Inspections"
         actions={(
           <div className="lp-head">
-            {!drafts && <ViewSwitch view={view} onChange={setView} />}
-            <SearchBox value={query.q} onSearch={(q) => update({ q }, { replace: true })} label={drafts ? 'Search draft sheets' : 'Search site inspections'} placeholder="Search applicant, phone, reference, bank, village…" />
-            {isSuperadmin && <button className="btn primary desktop-only" onClick={() => setCreating(true)}><IconPlus size={16} /> New input sheet</button>}
+            {isReviewer && <ViewSwitch view={view} onChange={setView} />}
+            <SearchBox value={query.q} onSearch={(q) => update({ q }, { replace: true })} label="Search site inspections" placeholder="Search applicant, phone, reference, bank, village…" />
+            {isSuperadmin && <button className="btn primary desktop-only" onClick={() => setCreating(true)}><IconPlus size={16} /> New inspection</button>}
           </div>
         )}
       />
-      {isSuperadmin && <Fab label="New input sheet" onClick={() => setCreating(true)} />}
+      {isSuperadmin && <Fab label="New inspection" onClick={() => setCreating(true)} />}
       {notice && (
         <div className="alert success">
           {notice.text} <Link to={`/valuations/${notice.id}`}>Open the sheet</Link>
@@ -126,7 +121,7 @@ export default function ValuationList({ module = 'site' }) {
           onClose={() => setCreating(false)}
           onAssigned={(r) => {
             setCreating(false);
-            setNotice({ id: r._id, text: `Input sheet ${r.referenceNo} created and assigned to ${r.evaluator?.name || 'the evaluator'}.` });
+            setNotice({ id: r._id, text: `Site inspection ${r.referenceNo} created for ${r.evaluator?.name || 'the evaluator'}.` });
             setReload((n) => n + 1);
           }}
         />
@@ -136,6 +131,12 @@ export default function ValuationList({ module = 'site' }) {
         <div className="filter-pill">
           Showing: {OTHER_STATUS[query.status]}
           <button type="button" className="linklike" onClick={() => update({ status: '' }, { replace: true })}>Show all</button>
+        </div>
+      )}
+      {query.drafter === 'me' && (
+        <div className="filter-pill">
+          Showing the sheets you are drafting
+          <button type="button" className="linklike" onClick={() => update({ drafter: '' }, { replace: true })}>Show all</button>
         </div>
       )}
       {query.evaluator && !isReviewer && (
@@ -150,15 +151,13 @@ export default function ValuationList({ module = 'site' }) {
       <div className={`card flush list-card lp-card${loading && data ? ' is-loading' : ''}${view === 'board' ? ' kb-card-wrap' : ''}`}>
         <div className="card-toolbar">
           <div className="toolbar lp-toolbar">
-            {view === 'board' && <span className="kb-toolbar-note">Drag a card to approve, return or submit it.</span>}
-            {view === 'list' && (drafts ? (
-              <Segmented label="Draft state" className="lp-status" options={DRAFT_TABS.map(([value, label]) => ({ value, label }))} value={query.draft} onChange={(draft) => update({ draft }, { replace: true })} />
-            ) : (
-              <Segmented label="Status" className="lp-status" options={STATUS_TABS.map(([value, label]) => ({ value, label }))} value={query.status} onChange={(status) => update({ status }, { replace: true })} />
-            ))}
+            {view === 'board' && <span className="kb-toolbar-note">Where each job stands, from the site visit to the approved report.</span>}
+            {view === 'list' && (
+              <Segmented label="Status" className="lp-status" options={tabs.map(([value, label]) => ({ value, label }))} value={tabs.some(([v]) => v === query.status) ? query.status : ''} onChange={(status) => update({ status }, { replace: true })} />
+            )}
             {/* filters + sort: one group, kept on the slider's line on computers */}
             <div className="lp-filters">
-              <MoreFilters active={[query.period !== 'all', query.template, query.bank, query.evaluator].filter(Boolean).length}>
+              <MoreFilters active={[query.period !== 'all', query.template, query.bank, query.evaluator, query.drafter].filter(Boolean).length}>
                 <PeriodPicker value={query} onChange={(p) => update({ period: p.period, start: p.start, end: p.end })} />
                 <select className="select-pill" aria-label="Report type" value={query.template} onChange={(e) => update({ template: e.target.value })}>
                   <option value="">All types</option>
@@ -174,6 +173,12 @@ export default function ValuationList({ module = 'site' }) {
                   <select className="select-pill" aria-label="Evaluator" value={query.evaluator} onChange={(e) => update({ evaluator: e.target.value })}>
                     <option value="">All evaluators</option>
                     {(facets.evaluators || []).map((u) => <option key={u._id} value={u._id}>{u.name}</option>)}
+                  </select>
+                )}
+                {isOffice && (
+                  <select className="select-pill" aria-label="Drafter" value={query.drafter === 'me' ? 'me' : ''} onChange={(e) => update({ drafter: e.target.value })}>
+                    <option value="">Any drafter</option>
+                    <option value="me">Drafted by me</option>
                   </select>
                 )}
               </MoreFilters>
@@ -203,7 +208,7 @@ export default function ValuationList({ module = 'site' }) {
             ) : (
               <>
                 <strong>No input sheets yet</strong>
-                <p className="muted">{isSuperadmin ? <>Use <strong>New input sheet</strong> to pick a customer, then assign the job to an evaluator or pick <strong>Myself</strong> to fill it in now.</> : 'Input sheets assigned to you by the superadmin appear here.'}</p>
+                <p className="muted">{isSuperadmin ? <>Add a customer with the service they need (<strong>New inspection</strong>): the site inspection sheet is created for the evaluator you choose.</> : isOffice ? 'Site inspections appear here once the field evaluators submit them.' : 'Site inspections assigned to you, or for the customers you add, appear here.'}</p>
               </>
             )}
           </div>
@@ -219,8 +224,9 @@ export default function ValuationList({ module = 'site' }) {
                     <th className="col-opt">Property</th>
                     <th>Report</th>
                     <SortTh k="value" query={query} onSort={sortBy} className="num">Fair market value</SortTh>
-                    <th>{drafts ? 'Draft sheet' : 'Status'}</th>
-                    {isReviewer && <th className="col-opt">Evaluator</th>}
+                    <th>Status</th>
+                    {isOffice && <th className="col-opt">Evaluator</th>}
+                    {isOffice && <th className="col-opt">Drafter</th>}
                     <SortTh k="updated" query={query} onSort={sortBy} className="col-opt">Updated</SortTh>
                     <th className="col-go"><span className="sr-only">Open</span></th>
                   </tr>
@@ -228,13 +234,13 @@ export default function ValuationList({ module = 'site' }) {
                 <tbody>
                   {!data && <TableSkeleton cols={cols} />}
                   {(data?.items || []).map((v) => (
-                    <tr key={v._id} className="clickable" onClick={() => navigate(sheetUrl(v._id))}>
+                    <tr key={v._id} className="clickable" onClick={() => navigate(sheetUrl(v))}>
                       <td>
                         <div className="cell-person">
                           <span className="avatar soft sm">{initials(v.summary?.applicantName)}</span>
                           <span>
-                            <Link to={sheetUrl(v._id)} onClick={(e) => e.stopPropagation()}><strong>{v.summary?.applicantName || 'Unnamed applicant'}</strong></Link>
-                            {isSuperadmin && v.status === 'submitted' && <span className="new-tag" title="Submitted, not opened yet">New</span>}
+                            <Link to={sheetUrl(v)} onClick={(e) => e.stopPropagation()}><strong>{v.summary?.applicantName || 'Unnamed applicant'}</strong></Link>
+                            {isOffice && v.status === 'submitted' && <span className="new-tag" title="Submitted, no drafter has taken it yet">New</span>}
                             <small className="muted block ref">{v.referenceNo}</small>
                           </span>
                         </div>
@@ -243,8 +249,9 @@ export default function ValuationList({ module = 'site' }) {
                       <td className="col-opt">{v.summary?.propertyType || '—'}<small className="muted block">{v.summary?.loanCategory}</small></td>
                       <td><span className="badge" title={REPORT_TEMPLATES[v.summary?.reportTemplate]?.title}>{v.summary?.reportTemplate || '—'}</span></td>
                       <td className="num"><strong>{fmv(v)}</strong></td>
-                      <td>{drafts ? <DraftState v={v} /> : <StatusBadge status={v.status} />}</td>
-                      {isReviewer && <td className="col-opt">{v.evaluator?.name || '—'}</td>}
+                      <td><StatusBadge status={v.status} />{isOffice && ['received', 'returned'].includes(v.status) && <small className="muted block">{v.draftReady ? 'Ready to generate' : `${v.draftMissing || 0} to fill`}</small>}</td>
+                      {isOffice && <td className="col-opt">{v.evaluator?.name || '—'}</td>}
+                      {isOffice && <td className="col-opt">{v.drafter?.name || (v.status === 'submitted' ? <span className="muted">In queue</span> : '—')}</td>}
                       <td className="muted nowrap col-opt" title={dateTime(v.updatedAt)}>{timeAgo(v.updatedAt)}</td>
                       <td className="col-go" aria-hidden="true"><IconChevron size={16} /></td>
                     </tr>
@@ -257,15 +264,15 @@ export default function ValuationList({ module = 'site' }) {
             <ul className="list mobile-only">
               {(data?.items || []).map((v) => (
                 <li key={v._id}>
-                  <Link to={sheetUrl(v._id)} className="list-item">
+                  <Link to={sheetUrl(v)} className="list-item">
                     <span className="avatar soft">{initials(v.summary?.applicantName)}</span>
                     <span className="list-main">
-                      <strong>{v.summary?.applicantName || 'Unnamed applicant'}{isSuperadmin && v.status === 'submitted' && <span className="new-tag" title="Submitted, not opened yet">New</span>}</strong>
-                      <small>{v.referenceNo} · {v.summary?.reportTemplate} · {timeAgo(v.updatedAt)}</small>
+                      <strong>{v.summary?.applicantName || 'Unnamed applicant'}{isOffice && v.status === 'submitted' && <span className="new-tag" title="Submitted, no drafter has taken it yet">New</span>}</strong>
+                      <small>{[v.referenceNo, v.summary?.reportTemplate, v.drafter?.name && `drafter ${v.drafter.name}`, timeAgo(v.updatedAt)].filter(Boolean).join(' · ')}</small>
                     </span>
                     <span className="list-end">
                       <strong className="amount">{fmv(v)}</strong>
-                      {drafts ? <DraftState v={v} /> : <StatusBadge status={v.status} />}
+                      <StatusBadge status={v.status} />
                     </span>
                   </Link>
                 </li>

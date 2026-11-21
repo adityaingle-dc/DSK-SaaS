@@ -19,11 +19,17 @@ import { WhatsAppLink } from '../components/CustomerContact.jsx';
 import Fab from '../components/Fab.jsx';
 import { timeAgo, dateTime } from '../utils/format.js';
 
-// where a customer stands, from their valuations
+// where a customer stands in the flow: the earliest stage of their jobs (worked out on the server, see @dsk/shared)
+const STAGE_LOOK = {
+  new: { label: 'New', cls: 'status-new' },
+  site: { label: 'Site visit', cls: 'status-draft' },
+  drafting: { label: 'Drafting', cls: 'status-received' },
+  approval: { label: 'Awaiting approval', cls: 'status-pending' },
+  done: { label: 'Approved', cls: 'status-approved' },
+};
 export function customerStage(stats = {}) {
-  if (!stats.total) return { key: 'new', label: 'New enquiry', cls: 'status-draft' };
-  if (stats.open > 0) return { key: 'open', label: 'In progress', cls: 'status-submitted' };
-  return { key: 'done', label: 'Completed', cls: 'status-approved' };
+  const key = stats.stage || (!stats.total ? 'new' : stats.open > 0 ? 'drafting' : 'done');
+  return { key, ...STAGE_LOOK[key] };
 }
 export const CustomerStage = ({ stats }) => {
   const s = customerStage(stats);
@@ -31,7 +37,9 @@ export const CustomerStage = ({ stats }) => {
 };
 const DEFAULTS = { q: '', stage: '', source: '', bank: '', district: '', period: 'all', start: '', end: '', sort: 'updated', dir: 'desc', limit: '20', page: '1' };
 // [value, label, count key, short label on phones]
-const STAGE_TABS = [['', 'All', 'all', 'All'], ['new', 'New enquiry', 'new', 'New'], ['open', 'In progress', 'open', 'Active'], ['done', 'Completed', 'done', 'Done']];
+// four tabs: all · new (no job yet) · in progress (a job anywhere in the flow) · approved (every job approved).
+// Each customer's badge still says where exactly they are (site visit, drafting, awaiting approval).
+const STAGE_TABS = [['', 'All', 'all', 'All'], ['new', 'New', 'new', 'New'], ['open', 'In progress', 'open', 'In progress'], ['done', 'Approved', 'done', 'Approved']];
 const SORT_OPTIONS = [['updated:desc', 'Recently updated'], ['created:desc', 'Newest customers'], ['created:asc', 'Oldest customers'], ['name:asc', 'Name (A–Z)'], ['name:desc', 'Name (Z–A)']];
 const address = (c) => [c.locality, c.district].filter(Boolean).join(', ');
 

@@ -72,3 +72,36 @@ export async function reverseGeocode(lat, lon) {
   queue = p.catch(() => {});
   return p;
 }
+
+// Address → map point (the site address typed in Add customer, shown on a map). Same service, queue and politeness as
+// above; India only. → { lat, lon, place } or null when nothing matches.
+const SEARCH_URL = process.env.GEOCODE_SEARCH_URL || 'https://nominatim.openstreetmap.org/search';
+const searchCache = new Map();
+export async function forwardGeocode(query) {
+  const q = String(query || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  if (!q) return null;
+  const key = q.toLowerCase();
+  if (searchCache.has(key)) return searchCache.get(key);
+  const run = async () => {
+    const gap = last + MIN_GAP_MS - Date.now();
+    if (gap > 0) await wait(gap);
+    last = Date.now();
+    const url = `${SEARCH_URL}?format=jsonv2&limit=1&countrycodes=in&accept-language=en&q=${encodeURIComponent(q)}`;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    try {
+      const r = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' }, signal: ctrl.signal });
+      if (!r.ok) throw new Error(`geocoder answered ${r.status}`);
+      const [hit] = await r.json();
+      const result = hit ? { lat: +Number(hit.lat).toFixed(7), lon: +Number(hit.lon).toFixed(7), place: clean(hit.display_name), kind: hit.addresstype || hit.type || '' } : null;
+      searchCache.set(key, result);
+      if (searchCache.size > CACHE_MAX) searchCache.delete(searchCache.keys().next().value);
+      return result;
+    } finally {
+      clearTimeout(t);
+    }
+  };
+  const p = queue.then(run, run);
+  queue = p.catch(() => {});
+  return p;
+}

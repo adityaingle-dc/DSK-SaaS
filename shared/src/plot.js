@@ -106,6 +106,16 @@ function averageArea(N, S, E, W) {
   return { sqft: round2(a), sqyd: round2(a / 9), method: 'average', note: rect ? 'Length × breadth.' : 'Average of opposite sides × each other.' };
 }
 
+// the plot's perimeter in feet (North + South + East + West, actual or else as per deed): the compound wall length
+// → number, or null until all four sides are measured
+export function plotPerimeter(boundaries = {}) {
+  const sides = boundaries.sides || {};
+  const len = (k) => parseFeet(sides[k]?.dimActual || sides[k]?.dimDeed);
+  const all = ['north', 'south', 'east', 'west'].map(len);
+  if (!all.every((x) => Number.isFinite(x) && x > 0)) return null;
+  return round2(all.reduce((s, x) => s + x, 0));
+}
+
 // one area in the units used for plots in India (from sq.ft)
 export const AREA_UNITS = [
   { key: 'sqyd', label: 'sq.yd', per: 9 },

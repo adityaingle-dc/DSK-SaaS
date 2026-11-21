@@ -13,8 +13,10 @@ import { IconPencil, IconTick } from '../components/Icons.jsx';
 //   doc       – { referenceNo, status, data, results } (a valuation, or a stored report's frozen copy)
 //   overrides – saved wording edits; onSave(draft) must resolve to { overrides, editedAt, editedBy }
 // primaryAction (optional): the main button at the top right instead of Print / Save PDF (e.g. Generate report)
-export default function ReportViewer({ doc, overrides: savedProp, onSave, back, title, meta, badge, edited, docTitle, banner, previewOnly = false, embedded = false, onDirtyChange, heading, primaryAction }) {
-  const { isSuperadmin } = useAuth();
+// canEdit: wording edits allowed (default: the superadmin); they also need onSave
+export default function ReportViewer({ doc, overrides: savedProp, onSave, back, title, meta, badge, edited, docTitle, banner, previewOnly = false, embedded = false, onDirtyChange, heading, primaryAction, canEdit }) {
+  const auth = useAuth();
+  const isSuperadmin = canEdit ?? auth.isSuperadmin;
   const [saved, setSaved] = useState(savedProp || {});
   const [draft, setDraft] = useState(savedProp || {});
   const [editing, setEditing] = useState(false);

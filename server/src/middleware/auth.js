@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import User, { isReviewer, isSuperadmin } from '../models/User.js';
+import User, { isOffice, isReviewer, isSuperadmin } from '../models/User.js';
 import { asyncHandler, HttpError } from '../utils/asyncHandler.js';
 
 export const signToken = (user) =>
@@ -42,3 +42,4 @@ export const requireRole = (...roles) => (req, _res, next) => {
 
 export const requireReviewer = (req, _res, next) => (isReviewer(req.user) ? next() : next(new HttpError(403, 'Forbidden')));
 export const requireSuperadmin = (req, _res, next) => (isSuperadmin(req.user) ? next() : next(new HttpError(403, 'Forbidden')));
+export const requireOffice = (req, _res, next) => (isOffice(req.user) ? next() : next(new HttpError(403, 'Forbidden')));

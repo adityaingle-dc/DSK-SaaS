@@ -9,21 +9,26 @@ export const DOCUMENT_DETAILS = {
   'Building Permission': { labels: ['Issued by (authority)', 'In the name of', 'Permit / file no.'], words: ['issued by', 'in the name of', 'file no.'] },
   'Legal opinion': { labels: ['Given by (advocate)', 'For (bank / branch)', 'Opinion in brief'], words: ['given by', 'for', '–'] },
 };
-const OTHER = { labels: ['Issued / executed by', 'In favour of / in the name of', 'Remarks'], words: ['issued by', 'in favour of', '–'] };
+// Other (and any type typed in): two free notes and remarks; the report lists the notes after the type
+const OTHER = { labels: ['Note 1', 'Note 2', 'Remarks'], words: ['note', 'note', '–'] };
 export const documentDetails = (type) => DOCUMENT_DETAILS[type] || OTHER;
 
-// "Sale Deed executed by A in favour of B, registered at SRO Wakad" · "Legal opinion given by Adv. X: clear title"
+// "Sale Deed executed by A in favour of B, registered at SRO Wakad" · "Legal opinion given by Adv. X: clear title" ·
+// "Encumbrance certificate – 2010 to 2024, nil encumbrance: original seen" (Other: notes)
 export function documentDescription(doc = {}) {
   const { words } = documentDetails(doc.type);
   let text = doc.type || 'Document';
   let remark = '';
+  const notes = [];
   [doc.detail1, doc.detail2, doc.detail3].forEach((raw, i) => {
     const v = String(raw || '').trim();
     if (!v) return;
     const w = words[i];
-    if (w === '–') remark = v; // free remarks go at the end, after a colon
+    if (w === 'note') notes.push(v); // free notes: listed after the type
+    else if (w === '–') remark = v; // free remarks go at the end, after a colon
     else if (i === 2) text += `, ${w} ${v}`; // place / number: after a comma
     else text += ` ${w} ${v}`;
   });
+  if (notes.length) text += ` – ${notes.join(', ')}`;
   return remark ? `${text}: ${remark}` : text;
 }

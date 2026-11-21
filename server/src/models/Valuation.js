@@ -1,12 +1,12 @@
 import mongoose from 'mongoose';
 import { nextId } from '../services/ids.js';
-import { computeValuation, personName, phones, validate } from '@dsk/shared';
+import { computeValuation, personName, phones, validate, VALUATION_STATUSES, EVALUATOR_EDITABLE } from '@dsk/shared';
 
-// draft → submitted (by the evaluator) → received (the superadmin opened it) → approved = "Completed": a report has
-// been generated from it, which locks the sheet. rejected = sent back to the evaluator with a note.
-// The evaluator is the source of truth: they can edit until the report is generated.
-export const STATUSES = ['draft', 'submitted', 'received', 'approved', 'rejected'];
-export const EVALUATOR_EDITABLE = ['draft', 'rejected', 'submitted', 'received'];
+// The workflow (see @dsk/shared workflow.js): draft (evaluator) → submitted (drafters' queue) → received (a drafter
+// took it) → pending (report generated, waiting for the superadmin) → approved (final, locked).
+// rejected = the drafter sent it back to the evaluator · returned = the superadmin sent the report back to the drafter.
+export const STATUSES = VALUATION_STATUSES;
+export { EVALUATOR_EDITABLE };
 
 // The input sheet itself lives in `data` (shape defined by @dsk/shared formSchema – sanitised before save).
 // `results` is always recomputed server-side from `data`, never trusted from the client.
@@ -32,6 +32,15 @@ const valuationSchema = new mongoose.Schema(
     },
     status: { type: String, enum: STATUSES, default: 'draft', index: true },
     evaluator: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    // the service the customer asked for with this job (Site Visit · Building Permission · Valuation)
+    service: { type: String, trim: true, maxlength: 60 },
+    // sheet fields filled from the customer that can't be changed on the sheet (e.g. 'general.bankName'); they follow
+    // the customer's details instead
+    lockedFields: { type: [String], default: undefined },
+    // reused site inspection: the sheet this one was started from ("Use for another report"), and every sheet before it
+    // (their photos and documents are shared with this sheet, they stay attached to the sheet they were taken on)
+    basedOn: { type: mongoose.Schema.Types.ObjectId, ref: 'Valuation' },
+    sources: { type: [mongoose.Schema.Types.ObjectId], default: undefined },
     // the customer this job is for (Customers module); linked automatically by applicant phone/name
     customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', index: true },
     // task tracking for the evaluator's dashboard
@@ -42,13 +51,22 @@ const valuationSchema = new mongoose.Schema(
     reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     reviewedAt: Date,
     reviewNote: String,
-    receivedAt: Date, // the superadmin first opened the submitted sheet
+    // the drafter: took the sheet from the queue by opening it first (the superadmin can reassign it)
+    drafter: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
+    receivedAt: Date, // when the drafter took it
     receivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    updatedAfterReceived: Boolean, // the evaluator changed it after the superadmin had opened it
-    reportedAt: Date, // first report generated from it (locks the sheet)
-    // draft sheet (office part): complete = every drafting field the report needs is filled in
+    updatedAfterReceived: Boolean, // legacy
+    reportedAt: Date, // last report generated from it (sent for approval)
+    // the superadmin's decision on the latest report
+    returnNote: String, // why the report was sent back to the drafter
+    returnedAt: Date,
+    returnedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    approvedAt: Date,
+    approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    // complete = every required field of the sheet is filled in (needed to generate the report)
     draftReady: { type: Boolean, default: false, index: true },
     draftMissing: { type: Number, default: 0 },
+    checkVersion: Number, // 2: draftReady / draftMissing checked against the whole sheet
     draftUpdatedAt: Date,
     // Superadmin wording/value edits applied on the printed bank report only (key -> text); data & results untouched
     reportOverrides: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
@@ -80,9 +98,10 @@ valuationSchema.methods.recompute = function recompute() {
     fairMarketValue: this.results.summary.fairMarketValue,
     valuationDate: d.general?.valuationDate,
   };
-  const missing = validate(d, { mode: 'submit', part: 'draft' });
+  const missing = validate(d, { mode: 'submit' });
   this.draftReady = missing.length === 0;
   this.draftMissing = missing.length;
+  this.checkVersion = 2;
   this.markModified('data');
   this.markModified('results');
 };

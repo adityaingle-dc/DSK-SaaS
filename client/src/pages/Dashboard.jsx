@@ -8,6 +8,8 @@ import ActivityItem from '../components/ActivityItem.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import { SearchTrigger } from '../components/GlobalSearch.jsx';
 import EvaluatorDashboard from './EvaluatorDashboard.jsx';
+import DrafterDashboard from './DrafterDashboard.jsx';
+import { sheetLink } from '../utils/sheetLink.js';
 import PeriodPicker from '../components/PeriodPicker.jsx';
 import { compareLabel, periodLabel, periodRange, prevParams, rangeParams } from '../utils/period.js';
 import { DuoHome } from '../components/DuoIcons.jsx';
@@ -35,7 +37,8 @@ const greeting = () => {
 };
 
 function OverviewDashboard() {
-  const { user, logout, isReviewer, isSuperadmin } = useAuth();
+  const auth = useAuth();
+  const { user, logout, isReviewer, isSuperadmin } = auth;
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [team, setTeam] = useState(null);
@@ -43,8 +46,9 @@ function OverviewDashboard() {
   const [prev, setPrev] = useState(null);
   const [recent, setRecent] = useState([]);
   const [mine, setMine] = useState([]); // superadmin: sheets they are filling in themselves
-  // the superadmin goes straight to editing a sheet; others open its page
-  const sheetUrl = (id) => (isSuperadmin ? `/valuations/${id}/draft` : `/valuations/${id}`);
+  const [awaiting, setAwaiting] = useState([]); // reports waiting for the superadmin's approval
+  // with the drafters: the drafting screen; otherwise the sheet's page
+  const sheetUrl = (v) => sheetLink(v, auth);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -80,6 +84,11 @@ function OverviewDashboard() {
   }, [isSuperadmin, user]);
 
   useEffect(() => {
+    if (!isSuperadmin) return;
+    api.listReports({ status: 'review', limit: 6, sort: 'created', dir: 'asc' }).then((r) => setAwaiting(r.items || [])).catch(() => {});
+  }, [isSuperadmin]);
+
+  useEffect(() => {
     if (isSuperadmin) {
       Promise.all([api.listActivity({ limit: 6 }), api.listUsers({ status: 'pending' })])
         .then(([a, p]) => setTeam({ activity: a.items, pending: p.counts?.pending || 0 }))
@@ -97,10 +106,10 @@ function OverviewDashboard() {
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
   const tiles = [
-    { key: 'draft', to: withPeriod('/valuations?status=draft'), label: 'Drafts', caption: s.rejected ? `Work in progress · ${s.rejected} sent back` : 'Work in progress', icon: <IconDraft size={18} />, count: (s.draft || 0) + (s.rejected || 0), tone: 'slate' },
-    { key: 'submitted', to: withPeriod('/valuations?status=submitted,received'), label: 'In review', caption: isSuperadmin ? 'New: not opened yet' : 'Not opened yet', icon: <IconClock size={18} />, count: s.submitted, tone: 'amber' },
-    { key: 'received', to: withPeriod('/valuations?status=submitted,received'), label: 'Received', caption: 'Opened, report to generate', icon: <IconEye size={18} />, count: s.received, tone: 'blue' },
-    { key: 'approved', to: withPeriod('/valuations?status=approved'), label: 'Completed', caption: 'Report generated', icon: <IconCheck size={18} />, count: s.approved, tone: 'green' },
+    { key: 'draft', to: withPeriod('/valuations?status=draft,rejected'), label: 'Site visits', caption: s.rejected ? `With evaluators · ${s.rejected} sent back` : 'With the field evaluators', icon: <IconDraft size={18} />, count: (s.draft || 0) + (s.rejected || 0), tone: 'slate' },
+    { key: 'submitted', to: withPeriod('/valuations?status=submitted,received,returned'), label: 'Drafting', caption: s.submitted ? `${s.submitted} in the queue, not taken yet` : 'With the drafters', icon: <IconClock size={18} />, count: (s.submitted || 0) + (s.received || 0) + (s.returned || 0), tone: 'amber' },
+    { key: 'pending', to: withPeriod('/reports?status=review'), label: 'Awaiting approval', caption: isSuperadmin ? 'Reports for you to approve' : 'Reports with the superadmin', icon: <IconEye size={18} />, count: s.pending, tone: 'blue' },
+    { key: 'approved', to: withPeriod('/valuations?status=approved'), label: 'Approved', caption: 'Final reports', icon: <IconCheck size={18} />, count: s.approved, tone: 'green' },
   ];
 
   return (
@@ -171,10 +180,36 @@ function OverviewDashboard() {
         ))}
       </section>
 
+      {awaiting.length > 0 && (
+        <section className="card flush my-sheets">
+          <div className="card-head">
+            <h2>Reports to approve</h2>
+            <Link to="/reports?status=review" className="link-sm">View all <IconChevron size={14} /></Link>
+          </div>
+          <ul className="list">
+            {awaiting.map((r) => (
+              <li key={r._id}>
+                <Link to={`/reports/${r._id}`} className="list-item">
+                  <span className="avatar soft">{initials(r.applicantName || r.customer?.name)}</span>
+                  <span className="list-main">
+                    <strong>{r.applicantName || r.customer?.name || 'Unnamed applicant'}</strong>
+                    <small>{[`${r.reportNo} · v${r.version}`, r.generatedBy?.name && `by ${r.generatedBy.name}`, new Date(r.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })].filter(Boolean).join(' · ')}</small>
+                  </span>
+                  <span className="list-end">
+                    <strong className="amount">{inr(r.fairMarketValue)}</strong>
+                    <span className="btn primary small">Review</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {mine.length > 0 && (
         <section className="card flush my-sheets">
           <div className="card-head">
-            <h2>Your input sheets to finish</h2>
+            <h2>Your site inspections to finish</h2>
             <span className="muted small">{mine.length} open</span>
           </div>
           <ul className="list">
@@ -214,12 +249,12 @@ function OverviewDashboard() {
                   </thead>
                   <tbody>
                     {recent.map((v) => (
-                      <tr key={v._id} className="clickable" onClick={() => navigate(sheetUrl(v._id))}>
+                      <tr key={v._id} className="clickable" onClick={() => navigate(sheetUrl(v))}>
                         <td>
                           <div className="cell-person">
                             <span className="avatar soft sm">{initials(v.summary?.applicantName)}</span>
                             <span>
-                              <Link to={sheetUrl(v._id)} onClick={(e) => e.stopPropagation()}><strong>{v.summary?.applicantName || 'Unnamed applicant'}</strong></Link>
+                              <Link to={sheetUrl(v)} onClick={(e) => e.stopPropagation()}><strong>{v.summary?.applicantName || 'Unnamed applicant'}</strong></Link>
                               <small className="muted block">{v.referenceNo}</small>
                             </span>
                           </div>
@@ -235,7 +270,7 @@ function OverviewDashboard() {
               <ul className="list mobile-only">
                 {recent.map((v) => (
                   <li key={v._id}>
-                    <Link to={sheetUrl(v._id)} className="list-item">
+                    <Link to={sheetUrl(v)} className="list-item">
                       <span className="avatar soft">{initials(v.summary?.applicantName)}</span>
                       <span className="list-main">
                         <strong>{v.summary?.applicantName || 'Unnamed applicant'}</strong>
@@ -301,7 +336,7 @@ function EmptyState() {
     <div className="empty">
       <div className="empty-icon"><IconDraft size={24} /></div>
       <strong>No input sheets yet</strong>
-      <p className="muted">{isSuperadmin ? <>Use <strong>New input sheet</strong> on <strong>Input Sheets</strong> or a customer's page: assign it to an evaluator, or pick <strong>Myself</strong> to fill it in now.</> : 'Input sheets assigned to you by the superadmin appear here.'}</p>
+      <p className="muted">{isSuperadmin ? <>Add a customer with the service they need under <strong>Customers</strong>: the site inspection sheet is created for the evaluator you choose.</> : 'Input sheets assigned to you by the superadmin appear here.'}</p>
     </div>
   );
 }
@@ -317,8 +352,10 @@ function DashboardSkeleton() {
   );
 }
 
-// Field evaluators see the tasks assigned to them; the superadmin and admins see the overview
+// Field evaluators see the tasks assigned to them, drafters their drafting work; the superadmin the overview
 export default function Dashboard() {
   const { user } = useAuth();
-  return user.role === 'evaluator' ? <EvaluatorDashboard /> : <OverviewDashboard />;
+  if (user.role === 'evaluator') return <EvaluatorDashboard />;
+  if (user.role === 'drafter') return <DrafterDashboard />;
+  return <OverviewDashboard />;
 }

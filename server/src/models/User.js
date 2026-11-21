@@ -2,13 +2,17 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { nextId } from '../services/ids.js';
 
-// superadmin ⊃ admin (valuer / reviewer) ⊃ evaluator (field staff)
-export const ROLES = ['superadmin', 'admin', 'evaluator'];
+// superadmin (approves reports) · drafter (completes sheets in the office and generates the reports) ·
+// evaluator (field staff: the site inspection) · admin (older Valuer / Reviewer accounts, treated like a superadmin)
+export const ROLES = ['superadmin', 'admin', 'drafter', 'evaluator'];
 // pending = self-registered, waiting for superadmin approval
 export const USER_STATUSES = ['pending', 'active', 'disabled'];
 
 export const isSuperadmin = (user) => user?.role === 'superadmin';
 export const isReviewer = (user) => user?.role === 'admin' || user?.role === 'superadmin';
+export const isDrafter = (user) => user?.role === 'drafter';
+// office staff: see every handed-in sheet and the reports
+export const isOffice = (user) => isReviewer(user) || isDrafter(user);
 
 const userSchema = new mongoose.Schema(
   {

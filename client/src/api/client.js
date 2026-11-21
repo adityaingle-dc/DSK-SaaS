@@ -102,7 +102,8 @@ export const api = {
   reportTypes: () => request('/reports/types'),
   listReports: (query) => request('/reports', { query }),
   reportBoard: (query) => request('/reports/board', { query }),
-  setReportStatus: (id, status) => request(`/reports/${id}/status`, { method: 'PATCH', body: { status } }),
+  // the superadmin's decision: 'approved' or 'returned' (with a note for the drafter)
+  setReportStatus: (id, status, note) => request(`/reports/${id}/status`, { method: 'PATCH', body: { status, note } }),
   getReport: (id) => request(`/reports/${id}`),
   generateReport: (valuation, type) => request('/reports', { method: 'POST', body: { valuation, type } }),
   saveStoredReportOverrides: (id, overrides) => request(`/reports/${id}/overrides`, { method: 'PUT', body: { overrides } }),
@@ -114,16 +115,23 @@ export const api = {
   createCustomer: (payload) => request('/customers', { method: 'POST', body: payload }),
   updateCustomer: (id, patch) => request(`/customers/${id}`, { method: 'PATCH', body: patch }),
   deleteCustomer: (id) => request(`/customers/${id}`, { method: 'DELETE' }),
-  startCustomerValuation: (id, evaluator, fromValuation, site, allowDuplicate) => request(`/customers/${id}/valuations`, { method: 'POST', body: { evaluator, fromValuation, site, allowDuplicate } }),
+  // job: { evaluator, fromValuation, site, propertyType, purpose, bankName, branch, ifsc, allowDuplicate }
+  startCustomerValuation: (id, job) => request(`/customers/${id}/valuations`, { method: 'POST', body: job }),
   importCustomers: () => request('/customers/import', { method: 'POST' }),
   listPocs: (q) => request('/customers/pocs', { query: q ? { q } : {} }),
 
   myTasks: () => request('/valuations/tasks'),
+  draftingTasks: () => request('/valuations/drafting'),
+  setDrafter: (id, drafter) => request(`/valuations/${id}/drafter`, { method: 'PATCH', body: { drafter } }),
+  // a new drafting sheet from this sheet's site inspection, for another report
+  reuseValuation: (id) => request(`/valuations/${id}/reuse`, { method: 'POST' }),
   stats: (query) => request('/valuations/stats', { query }),
   listValuations: (query) => request('/valuations', { query }),
   valuationBoard: (query) => request('/valuations/board', { query }),
   lookupIfsc: (code) => request(`/valuations/ifsc/${encodeURIComponent(code)}`),
   reverseGeocode: (lat, lon) => request(`/valuations/reverse-geocode?lat=${lat}&lon=${lon}`),
+  // address → map point ({ result: { lat, lon, place } | null })
+  geocode: (q) => request(`/valuations/geocode?q=${encodeURIComponent(q)}`),
   searchIfsc: (bank, q) => request(`/valuations/ifsc-search?bank=${encodeURIComponent(bank)}&q=${encodeURIComponent(q)}`),
   getValuation: (id) => request(`/valuations/${id}`),
   createValuation: (payload) => request('/valuations', { method: 'POST', body: payload }),

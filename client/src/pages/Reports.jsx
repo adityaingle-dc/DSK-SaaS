@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { REPORT_TEMPLATES } from '@dsk/shared';
+import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 import StatusBadge, { inr } from '../components/StatusBadge.jsx';
 import { initials } from '../components/Layout.jsx';
@@ -20,12 +21,17 @@ import ReportBoard from '../components/ReportBoard.jsx';
 import ViewSwitch, { rememberView, storedView } from '../components/ViewSwitch.jsx';
 
 const VIEW_KEY = 'dsk.reports.view';
-const STATUS_TABS = [['', 'All'], ['draft', 'Draft'], ['review', 'In review'], ['approved', 'Approved']];
-// a draft is an input sheet with saved report edits, not generated yet: it opens in the Generate flow (step 4)
-export const reportHref = (r) => (r.kind === 'draft' ? `/reports/new?valuation=${r.valuation}&type=bank&step=4` : `/reports/${r._id}`);
-// Draft (edited, not generated) · In review (with the bank) · Approved (by the bank); nothing recorded = in review
+// four tabs, the flow: drafting → awaiting approval → approved (versions sent back to the drafter are listed under All)
+const STATUS_TABS = [['', 'All'], ['draft', 'Drafting'], ['review', 'Awaiting approval'], ['approved', 'Approved']];
+// "drafting" rows are sheets with a drafter, not generated yet (or sent back for a new version): they open the
+// drafting screen (sheet + report)
+export const reportHref = (r) => (r.kind === 'draft' ? `/valuations/${r.valuation}/edit?view=report` : `/reports/${r._id}`);
+// Drafting · Awaiting approval (with the superadmin) · Sent back (to the drafter; a newer version follows) · Approved
 export function ReportStatus({ r }) {
-  return r.kind === 'draft' ? <StatusBadge status="draft" /> : r.status === 'approved' ? <StatusBadge status="approved" label="Approved" /> : <StatusBadge status="submitted" label="In review" />;
+  if (r.kind === 'draft') return <StatusBadge status={r.sheetStatus === 'returned' ? 'returned' : 'received'} label={r.sheetStatus === 'returned' ? 'Back to drafter' : r.sheetStatus === 'submitted' ? 'In queue' : 'Drafting'} />;
+  if (r.status === 'approved') return <StatusBadge status="approved" label="Approved" />;
+  if (r.status === 'returned') return <StatusBadge status="returned" label="Back to drafter" />;
+  return <StatusBadge status="pending" label="Awaiting approval" />;
 }
 
 const DEFAULTS = { q: '', status: '', template: '', type: '', generatedBy: '', bank: '', period: 'all', start: '', end: '', sort: 'created', dir: 'desc', limit: '20', page: '1', view: '' };
@@ -33,6 +39,7 @@ const SORT_OPTIONS = [['created:desc', 'Newest first'], ['created:asc', 'Oldest 
 
 // Every generated (stored) report, newest first
 export default function Reports() {
+  const { isSuperadmin } = useAuth();
   const navigate = useNavigate();
   const { params, query, update, filtered, clear, apiQuery } = useListParams(DEFAULTS);
   const view = query.view === 'board' || query.view === 'list' ? query.view : storedView(VIEW_KEY) === 'board' ? 'board' : 'list';
@@ -67,11 +74,13 @@ export default function Reports() {
           <div className="lp-head">
             <ViewSwitch view={view} onChange={setView} />
             <SearchBox value={query.q} onSearch={(q) => update({ q }, { replace: true })} label="Search reports" placeholder="Search report no., customer, phone, sheet reference…" />
-            <Link className="btn primary desktop-only" to="/reports/new"><IconPlus size={16} /> Generate report</Link>
+            {isSuperadmin
+              ? <Link className="btn primary desktop-only" to="/reports/new"><IconPlus size={16} /> Generate report</Link>
+              : <Link className="btn primary desktop-only" to="/valuations?drafter=me&status=received,returned">My drafting</Link>}
           </div>
         )}
       />
-      <Fab label="Generate report" to="/reports/new" />
+      {isSuperadmin && <Fab label="Generate report" to="/reports/new" />}
       {error && <div className="alert">{error}</div>}
 
       <div className={`card flush list-card lp-card${loading && data ? ' is-loading' : ''}`}>

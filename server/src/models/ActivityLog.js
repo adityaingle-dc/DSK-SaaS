@@ -16,11 +16,13 @@ export const ACTIONS = [
   'valuation.deleted',
   'valuation.report_edited',
   'valuation.assigned',
+  'valuation.claimed', // a drafter took the sheet from the queue
+  'valuation.drafter_changed', // the superadmin reassigned the drafter
   'customer.created',
   'customer.updated',
   'customer.deleted',
   'customer.imported',
-  'report.generated', 'report.approved', 'report.reopened',
+  'report.generated', 'report.approved', 'report.returned',
   'report.edited',
   'report.deleted',
   'file.uploaded',

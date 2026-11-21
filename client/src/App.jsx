@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.jsx';
 import Layout from './components/Layout.jsx';
 import Login from './pages/Login.jsx';
@@ -35,6 +35,18 @@ function SuperadminOnly({ children }) {
   return isSuperadmin ? children : <Navigate to="/" replace />;
 }
 
+// superadmin and drafters
+function OfficeOnly({ children }) {
+  const { isOffice } = useAuth();
+  return isOffice ? children : <Navigate to="/" replace />;
+}
+
+// older links (site inspection / draft sheet screens) open the sheet
+function SheetLink() {
+  const { id } = useParams();
+  return <Navigate to={`/valuations/${id}/edit`} replace />;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -53,10 +65,10 @@ export default function App() {
         <Route path="valuations/new" element={<Navigate to="/customers" replace />} />
         <Route path="valuations/:id" element={<ValuationView />} />
         <Route path="valuations/:id/edit" element={<ValuationForm />} />
-        <Route path="valuations/:id/site" element={<ValuationForm part="site" />} />
-        <Route path="valuations/:id/draft" element={<SuperadminOnly><ValuationForm part="draft" key="draft" /></SuperadminOnly>} />
-        <Route path="drafts" element={<SuperadminOnly><ValuationList module="draft" key="drafts" /></SuperadminOnly>} />
-        <Route path="valuations/:id/report" element={<SuperadminOnly><ReportPage /></SuperadminOnly>} />
+        <Route path="valuations/:id/site" element={<SheetLink />} />
+        <Route path="valuations/:id/draft" element={<SheetLink />} />
+        <Route path="drafts" element={<Navigate to="/valuations" replace />} />
+        <Route path="valuations/:id/report" element={<OfficeOnly><ReportPage /></OfficeOnly>} />
         <Route path="change-password" element={<ChangePassword />} />
         <Route path="team" element={<SuperadminOnly><Team /></SuperadminOnly>} />
         <Route path="team/:id" element={<SuperadminOnly><TeamMember /></SuperadminOnly>} />
@@ -64,9 +76,9 @@ export default function App() {
         <Route path="customers" element={<Customers />} />
         <Route path="area" element={<AreaCalc />} />
         <Route path="customers/:id" element={<CustomerView />} />
-        <Route path="reports" element={<SuperadminOnly><Reports /></SuperadminOnly>} />
-        <Route path="reports/new" element={<SuperadminOnly><GenerateReport /></SuperadminOnly>} />
-        <Route path="reports/:id" element={<SuperadminOnly><StoredReport /></SuperadminOnly>} />
+        <Route path="reports" element={<OfficeOnly><Reports /></OfficeOnly>} />
+        <Route path="reports/new" element={<OfficeOnly><GenerateReport /></OfficeOnly>} />
+        <Route path="reports/:id" element={<OfficeOnly><StoredReport /></OfficeOnly>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

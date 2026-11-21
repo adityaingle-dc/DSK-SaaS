@@ -14,30 +14,41 @@ import SheetEditor, { hydrate } from '../components/SheetEditor.jsx';
 import { propertyLabels, groupByProperty } from '../utils/properties.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 
-// Reports → Generate: ① customer → ② approved input sheet → ③ report type → generate & store
+// Reports → Generate: ① customer → ② input sheet with the drafters → ③ report type → review & generate (it goes
+// to the superadmin for approval)
 const STEPS = ['Customer', 'Input sheet', 'Report type', 'Review & generate'];
 
-// a report can be generated from a sheet the evaluator has handed in (generating it completes the sheet)
-const READY = ['submitted', 'received', 'approved'];
+// a report can be generated from a sheet with the drafters (submitted, being drafted, or sent back for a new version)
+const READY = ['submitted', 'received', 'returned'];
 
-// why a sheet can't be turned into a report yet, and where to go about it
+// why a sheet can't be turned into a report now, and where to go about it
 function blockedReason(v) {
   const who = v.evaluator?.name || 'the evaluator';
   if (v.status === 'rejected') return {
-    tag: 'Sent back', short: `Sent back to ${who}: waiting for them to resubmit`,
+    tag: 'Back to evaluator', short: `Sent back to ${who}: waiting for them to resubmit`,
     title: 'Site inspection sent back', message: `${v.referenceNo} was sent back to ${who} with a note. A report can be generated once they resubmit the site inspection.`,
-    action: 'Open site inspection', to: `/valuations/${v._id}/site`,
+    action: 'Open the sheet', to: `/valuations/${v._id}`,
   };
-  if (!READY.includes(v.status)) return {
+  if (v.status === 'draft') return {
     tag: 'Site pending', short: `Site inspection pending: ${who} has not submitted it yet`,
-    title: 'Site inspection pending', message: `${who} has not submitted the site inspection of ${v.referenceNo} yet. A report can be generated once it is submitted; the draft sheet can be prepared meanwhile.`,
-    action: 'Open site inspection', to: `/valuations/${v._id}/site`,
+    title: 'Site inspection pending', message: `${who} has not submitted the site inspection of ${v.referenceNo} yet. A report can be generated once it is submitted.`,
+    action: 'Open the sheet', to: `/valuations/${v._id}`,
+  };
+  if (v.status === 'pending') return {
+    tag: 'Awaiting approval', short: 'A report from this sheet is waiting for approval',
+    title: 'Report awaiting approval', message: `A report generated from ${v.referenceNo} is waiting for approval. Approve it, or send it back to the drafter for a new version.`,
+    action: 'Open the sheet', to: `/valuations/${v._id}`,
+  };
+  if (v.status === 'approved') return {
+    tag: 'Approved', short: 'Approved: the report is final',
+    title: 'Report approved', message: `The report for ${v.referenceNo} is approved and final.`,
+    action: 'Open the sheet', to: `/valuations/${v._id}`,
   };
   const n = v.draftMissing || 0;
   return {
-    tag: 'Draft incomplete', short: `Draft sheet not complete${n ? ` (${n} field${n === 1 ? '' : 's'} to fill)` : ''}`,
-    title: 'Draft sheet not complete', message: `The site inspection of ${v.referenceNo} is in, but the draft sheet still has ${n || 'some'} field${n === 1 ? '' : 's'} to fill before a report can be generated.`,
-    action: 'Complete the draft sheet', to: `/valuations/${v._id}/draft`,
+    tag: 'Sheet incomplete', short: `Sheet not complete${n ? ` (${n} field${n === 1 ? '' : 's'} to fill)` : ''}`,
+    title: 'Sheet not complete', message: `${v.referenceNo} still has ${n || 'some'} field${n === 1 ? '' : 's'} to fill before a report can be generated.`,
+    action: 'Complete the sheet', to: `/valuations/${v._id}/edit`,
   };
 }
 
@@ -196,7 +207,7 @@ export default function GenerateReport() {
   };
   const saveSheet = async () => {
     const data = sanitize(draft);
-    const errs = validate(data, { mode: 'submit' }); // the sheet is approved, so it must stay complete
+    const errs = validate(data, { mode: 'submit' }); // the report needs the whole sheet
     if (errs.length) {
       setShowSheetErrors(true);
       setSheetNotice('');
@@ -273,10 +284,10 @@ export default function GenerateReport() {
             <p className="muted">This customer has no input sheets yet. Start one from their customer page.</p>
           ) : (
             <>
-              {approvedCount === 0 && <p className="hint wizard-hint">None of their sheets has been submitted yet. A report can be generated once the evaluator submits the sheet.</p>}
+              {approvedCount === 0 && <p className="hint wizard-hint">None of their sheets is with the drafters right now. A report can be generated once the evaluator submits the site inspection.</p>}
               <ul className="pick-list">
                 {sheets.map((v) => {
-                  const ok = READY.includes(v.status) && (v.status === 'approved' || v.draftReady !== false);
+                  const ok = READY.includes(v.status) && v.draftReady !== false;
                   const block = ok ? null : blockedReason(v);
                   return (
                     <li key={v._id}>

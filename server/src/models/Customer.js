@@ -4,9 +4,9 @@ import { nextId } from '../services/ids.js';
 // A customer is the entry point for work: someone contacts the superadmin and asks for a valuation.
 // Profile fields mirror the "Applicant / owner" section of the input sheet so a new sheet can be prefilled 1:1.
 export const CUSTOMER_SOURCES = ['Walk-in', 'Phone call', 'Bank referral', 'Existing customer', 'Website', 'Contact person', 'Other'];
-// what the customer wants done
+// older service names (kept so older customers stay valid); new customers use SERVICES from @dsk/shared
 export const SERVICE_REQUESTS = ['Home loan valuation', 'Loan against property', 'Plot / land valuation', 'Construction stage valuation', 'Purchase / resale valuation', 'Other'];
-// individual: the customer contacts us directly · poc: a middle person (point of contact) brings the customer
+// individual: a new customer who contacts us directly · poc: a middle person (point of contact) brings the customer
 export const CONTACT_TYPES = ['individual', 'poc'];
 export const POC_ROLES = ['Agent / broker', 'Bank officer', 'Builder', 'Relative', 'Other'];
 
@@ -35,8 +35,10 @@ const customerSchema = new mongoose.Schema(
     // the bank that will receive the report
     bankName: { type: String, trim: true, maxlength: 160 },
     branch: { type: String, trim: true, maxlength: 160 },
+    ifsc: { type: String, trim: true, uppercase: true, maxlength: 11 },
     source: { type: String, enum: CUSTOMER_SOURCES, default: 'Phone call' },
-    serviceRequest: { type: String, enum: [...SERVICE_REQUESTS, ''], default: '' },
+    // service requested (Site Visit · Building Permission · Valuation), checked in the route
+    serviceRequest: { type: String, trim: true, maxlength: 300, default: '' },
     notes: { type: String, trim: true, maxlength: 2000 },
     // normalised key used to match valuations to customers (last 10 digits of phone, else the name)
     matchKey: { type: String, index: true },

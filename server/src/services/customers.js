@@ -18,6 +18,49 @@ export const sheetPrefillFromCustomer = (c) => ({
   general: pickDefined(c, ['bankName', 'branch']),
 });
 
+// The customer's details as they appear on the sheet: section → field → customer field
+const SHEET_MAP = [
+  ...APPLICANT_FIELDS.map((k) => ['applicant', k, k]),
+  ['general', 'bankName', 'bankName'],
+  ['general', 'branch', 'branch'],
+  ['general', 'ifsc', 'ifsc'],
+];
+const BANK_PATHS = ['general.bankName', 'general.branch', 'general.ifsc'];
+// sheets that can still take changes (not waiting for approval, not approved)
+const SYNC_STATUSES = ['draft', 'rejected', 'submitted', 'received', 'returned'];
+
+// After the customer is edited: carry the change into their open sheets. A sheet field is updated when it is locked
+// (the bank details given with the customer), empty, or still shows the customer's previous value; a value someone
+// changed on the sheet itself is kept. Bank details given now are locked on the sheet from then on.
+// before = the customer's fields before the edit. Returns the number of sheets updated.
+export async function syncCustomerToSheets(customer, before) {
+  const changed = SHEET_MAP.filter(([, , ck]) => String(before[ck] ?? '') !== String(customer[ck] ?? ''));
+  if (!changed.length) return 0;
+  const sheets = await Valuation.find({ customer: customer._id, status: { $in: SYNC_STATUSES } });
+  let n = 0;
+  for (const v of sheets) {
+    const data = v.data || {};
+    let touched = false;
+    const locked = new Set(v.lockedFields || []);
+    for (const [section, key, ck] of changed) {
+      const path = `${section}.${key}`;
+      const cur = data[section]?.[key];
+      if (locked.has(path) || cur === undefined || cur === null || cur === '' || String(cur) === String(before[ck] ?? '')) {
+        data[section] = { ...(data[section] || {}), [key]: customer[ck] ?? '' };
+        touched = true;
+        if (BANK_PATHS.includes(path)) { if (customer[ck]) locked.add(path); else locked.delete(path); }
+      }
+    }
+    v.lockedFields = locked.size ? [...locked] : undefined;
+    if (!touched) continue;
+    v.data = data;
+    v.recompute();
+    await v.save();
+    n += 1;
+  }
+  return n;
+}
+
 // Link a valuation to its customer (same phone, else same name); create the customer if there is none.
 // Returns the customer, or null when the sheet has no applicant name/phone yet.
 export async function linkCustomer(valuation, actor, { create = true } = {}) {

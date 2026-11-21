@@ -5,7 +5,7 @@ import { ROLE_LABELS, useAuth } from '../context/AuthContext.jsx';
 import { IconChevron, IconChevronDown, IconKey, IconLogout } from './Icons.jsx';
 import Brand from './Brand.jsx';
 import PoweredBy from './PoweredBy.jsx';
-import { DuoArea, DuoContact, DuoHome, DuoList, DuoPulse, DuoReport, DuoSheet, DuoUsers } from './DuoIcons.jsx';
+import { DuoArea, DuoContact, DuoHome, DuoList, DuoPulse, DuoReport, DuoUsers } from './DuoIcons.jsx';
 import { SearchProvider } from './GlobalSearch.jsx';
 
 const IconMoreGrid = () => (
@@ -103,19 +103,22 @@ function MoreSheet({ open, onClose, items, user, logout }) {
 }
 
 export default function Layout() {
-  const { user, logout, isSuperadmin } = useAuth();
+  const { user, logout, isSuperadmin, isDrafter } = useAuth();
   const { pathname } = useLocation();
   const [pending, setPending] = useState(0);
-  const [inReview, setInReview] = useState(0);
-  const [toDraft, setToDraft] = useState(0);
+  const [queue, setQueue] = useState(0); // site inspections waiting for a drafter
+  const [awaiting, setAwaiting] = useState(0); // reports waiting for the superadmin's approval
+  const [backToMe, setBackToMe] = useState(0); // drafter: reports the superadmin sent back
 
-  // pending-approval badge for the superadmin (refreshed on navigation)
+  // badges (refreshed on navigation)
   useEffect(() => {
-    if (!isSuperadmin) return;
-    api.listUsers({ status: 'pending' }).then((r) => setPending(r.counts?.pending || 0)).catch(() => {});
-    // submitted sheets the superadmin hasn't opened yet
-    api.stats({}).then((s) => { setInReview(s.byStatus?.submitted || 0); setToDraft(s.drafts?.todo || 0); }).catch(() => {});
-  }, [isSuperadmin, pathname]);
+    if (isSuperadmin) {
+      api.listUsers({ status: 'pending' }).then((r) => setPending(r.counts?.pending || 0)).catch(() => {});
+      api.stats({}).then((s) => { setQueue(s.byStatus?.submitted || 0); setAwaiting(s.byStatus?.pending || 0); }).catch(() => {});
+    } else if (isDrafter) {
+      api.draftingTasks().then((r) => { setQueue(r.counts?.queue || 0); setBackToMe(r.counts?.returned || 0); }).catch(() => {});
+    }
+  }, [isSuperadmin, isDrafter, pathname]);
 
   // evaluators: number of tasks needing action (new + returned)
   const isEvaluator = user.role === 'evaluator';
@@ -124,22 +127,22 @@ export default function Layout() {
     if (!isEvaluator) return;
     api.myTasks().then((r) => setTaskCount((r.counts?.new || 0) + (r.counts?.returned || 0))).catch(() => {});
   }, [isEvaluator, pathname]);
-  const taskBadge = taskCount > 0 && <span className="nav-badge" title="Tasks needing action">{taskCount}</span>;
+  const homeCount = isEvaluator ? taskCount : isDrafter ? backToMe : 0;
+  const taskBadge = homeCount > 0 && <span className="nav-badge" title={isDrafter ? 'Reports sent back to you' : 'Tasks needing action'}>{homeCount}</span>;
 
   // phones (superadmin): pages behind the "More" tab
   const [moreOpen, setMoreOpen] = useState(false);
   const closeMore = useCallback(() => setMoreOpen(false), []);
   const moreItems = [
-    { to: '/customers', label: 'Customers', icon: <DuoContact size={20} /> },
     { to: '/area', label: 'Area calculator', icon: <DuoArea size={20} /> },
     { to: '/team', label: 'Team', icon: <DuoUsers size={20} />, badge: pending > 0 && <span className="nav-badge">{pending}</span> },
     { to: '/activity', label: 'Activity', icon: <DuoPulse size={20} /> },
   ];
-  const moreActive = /^\/(customers|area|team|activity|change-password)/.test(pathname);
+  const moreActive = /^\/(area|team|activity|change-password)/.test(pathname);
 
   const badge = pending > 0 && <span className="nav-badge">{pending}</span>;
-  const sheetsBadge = isSuperadmin && inReview > 0 && <span className="nav-badge" title="Site inspections submitted, not opened yet">{inReview}</span>;
-  const draftsBadge = isSuperadmin && toDraft > 0 && <span className="nav-badge" title="Draft sheets to complete">{toDraft}</span>;
+  const sheetsBadge = (isSuperadmin || isDrafter) && queue > 0 && <span className="nav-badge" title="Site inspections waiting for a drafter">{queue}</span>;
+  const reportsBadge = isSuperadmin && awaiting > 0 && <span className="nav-badge" title="Reports waiting for your approval">{awaiting}</span>;
 
   return (
     <SearchProvider>
@@ -151,10 +154,9 @@ export default function Layout() {
         <nav className="side-nav">
           <div className="nav-section">Workspace</div>
           <NavLink to="/" end><DuoHome size={19} /> Dashboard {taskBadge}</NavLink>
-          <NavLink to="/customers"><DuoContact size={19} /> {isSuperadmin ? 'Customers' : 'My customers'}</NavLink>
+          {!isDrafter && <NavLink to="/customers"><DuoContact size={19} /> {isSuperadmin ? 'Customers' : 'My customers'}</NavLink>}
           <NavLink to="/valuations" end><DuoList size={19} /> Site Inspections {sheetsBadge}</NavLink>
-          {isSuperadmin && <NavLink to="/drafts"><DuoSheet size={19} /> Draft Sheets {draftsBadge}</NavLink>}
-          {isSuperadmin && <NavLink to="/reports"><DuoReport size={19} /> Reports</NavLink>}
+          {(isSuperadmin || isDrafter) && <NavLink to="/reports"><DuoReport size={19} /> Reports {reportsBadge}</NavLink>}
           <NavLink to="/area"><DuoArea size={19} /> Area calculator</NavLink>
           {isSuperadmin && (
             <>
@@ -176,12 +178,18 @@ export default function Layout() {
         <NavLink to="/" end><span className="tab-icon"><DuoHome size={22} />{taskBadge}</span><span>Home</span></NavLink>
         {isSuperadmin ? (
           <>
-            <NavLink to="/valuations" end><span className="tab-icon"><DuoList size={22} />{sheetsBadge}</span><span>Site</span></NavLink>
-            <NavLink to="/drafts"><span className="tab-icon"><DuoSheet size={22} />{draftsBadge}</span><span>Drafts</span></NavLink>
-            <NavLink to="/reports"><DuoReport size={22} /><span>Reports</span></NavLink>
+            <NavLink to="/customers"><DuoContact size={22} /><span>Customers</span></NavLink>
+            <NavLink to="/valuations" end><span className="tab-icon"><DuoList size={22} />{sheetsBadge}</span><span>Sheets</span></NavLink>
+            <NavLink to="/reports"><span className="tab-icon"><DuoReport size={22} />{reportsBadge}</span><span>Reports</span></NavLink>
             <button type="button" className={`tab-more${moreActive ? ' active' : ''}`} aria-haspopup="dialog" aria-expanded={moreOpen} onClick={() => setMoreOpen(true)}>
               <span className="tab-icon"><IconMoreGrid />{pending > 0 && <span className="nav-badge">{pending}</span>}</span><span>More</span>
             </button>
+          </>
+        ) : isDrafter ? (
+          <>
+            <NavLink to="/valuations" end><span className="tab-icon"><DuoList size={22} />{sheetsBadge}</span><span>Sheets</span></NavLink>
+            <NavLink to="/reports"><DuoReport size={22} /><span>Reports</span></NavLink>
+            <NavLink to="/area"><DuoArea size={22} /><span>Area</span></NavLink>
           </>
         ) : (
           <>

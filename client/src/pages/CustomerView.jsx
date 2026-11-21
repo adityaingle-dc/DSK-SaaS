@@ -12,10 +12,12 @@ import { DuoContact } from '../components/DuoIcons.jsx';
 import { IconChevron, IconPlus } from '../components/Icons.jsx';
 import { AssignValuationModal, CustomerFormModal } from '../components/CustomerDialogs.jsx';
 import { CustomerStage } from './Customers.jsx';
+import { customerStageOf } from '@dsk/shared';
 import { dateTime, timeAgo } from '../utils/format.js';
 import { PhoneActions, WhatsAppLink } from '../components/CustomerContact.jsx';
 import { groupByProperty, propertyLabels } from '../utils/properties.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import { sheetLink } from '../utils/sheetLink.js';
 
 const fullAddress = (c) => [c.houseNo, c.street, c.locality, c.district, c.pincode].filter(Boolean).join(', ');
 const fmv = (v) => (v.summary?.fairMarketValue > 0 ? inr(v.summary.fairMarketValue) : '—');
@@ -33,7 +35,8 @@ function Info({ label, children }) {
 export default function CustomerView() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isSuperadmin } = useAuth();
+  const auth = useAuth();
+  const { isSuperadmin } = auth;
   const [params, setParams] = useSearchParams();
   const [state, setState] = useState(null);
   const [error, setError] = useState('');
@@ -51,9 +54,10 @@ export default function CustomerView() {
   const { customer: c, valuations, reports = [] } = state;
   const stats = {
     total: valuations.length,
-    open: valuations.filter((v) => ['draft', 'submitted', 'received', 'rejected'].includes(v.status)).length,
+    open: valuations.filter((v) => v.status !== 'approved').length,
     approved: valuations.filter((v) => v.status === 'approved').length,
     totalValue: valuations.reduce((s, v) => s + (v.summary?.fairMarketValue || 0), 0),
+    stage: customerStageOf(valuations.map((v) => v.status)),
   };
   // tab switches don't add history entries, so Back leaves the page in one step
   const properties = groupByProperty(valuations);
@@ -71,7 +75,7 @@ export default function CustomerView() {
     }
   };
 
-  const startButton = <button className="btn primary" onClick={() => openAssign('')}><IconPlus size={16} /> New input sheet</button>;
+  const startButton = <button className="btn primary" onClick={() => openAssign('')}><IconPlus size={16} /> New request</button>;
 
   return (
     <div className="page">
@@ -101,8 +105,8 @@ export default function CustomerView() {
       <div className="kpis kpis-compact">
         <div className="kpi"><div className="kpi-value">{properties.filter((g) => g.identified).length}</div><div className="kpi-label">Properties</div></div>
         <div className="kpi"><div className="kpi-value">{stats.total}</div><div className="kpi-label">Input sheets</div></div>
-        <div className="kpi tone-amber"><div className="kpi-value">{stats.open}</div><div className="kpi-label">In progress</div></div>
-        <div className="kpi tone-green"><div className="kpi-value">{stats.approved}</div><div className="kpi-label">Completed</div></div>
+        <div className="kpi tone-amber"><div className="kpi-value">{stats.open}</div><div className="kpi-label">Open jobs</div></div>
+        <div className="kpi tone-green"><div className="kpi-value">{stats.approved}</div><div className="kpi-label">Approved</div></div>
         <div className="kpi"><div className="kpi-value">{stats.totalValue ? inr(stats.totalValue) : '—'}</div><div className="kpi-label">Total value</div></div>
       </div>
 
@@ -139,9 +143,9 @@ export default function CustomerView() {
             </dl>
           </section>
           <section className="card">
-            <h2>Valuation request</h2>
+            <h2>Request</h2>
             <dl className="kv">
-              <Info label="Service needed">{c.serviceRequest}</Info>
+              <Info label="Service requested">{c.serviceRequest}</Info>
               <Info label="Bank">{c.bankName}</Info>
               <Info label="Branch">{c.branch}</Info>
               <Info label="Came via">{c.source}</Info>
@@ -194,7 +198,7 @@ export default function CustomerView() {
                   </div>
                   <StatusBadge status={v.status} />
                   <div className="ph-actions">
-                    <Link className="btn small" to={isSuperadmin ? `/valuations/${v._id}/draft` : `/valuations/${v._id}`}>Sheet</Link>
+                    <Link className="btn small" to={sheetLink(v, auth)}>Sheet</Link>
                     <Link className="btn small" to={`/valuations/${v._id}/report`}>Report</Link>
                   </div>
                 </li>
@@ -215,7 +219,7 @@ export default function CustomerView() {
             </div>
             <div className="actions">
               <Link className="btn small" to={`/valuations/${v._id}/edit`}>Edit sheet</Link>
-              <Link className="btn small" to={isSuperadmin ? `/valuations/${v._id}/draft` : `/valuations/${v._id}`}>Open <IconChevron size={14} /></Link>
+              <Link className="btn small" to={sheetLink(v, auth)}>Open <IconChevron size={14} /></Link>
             </div>
           </div>
           <SheetSections data={v.data || {}} variant="accordion" openFirst={i === 0} />
@@ -230,7 +234,7 @@ export default function CustomerView() {
           </div>
           {reports.length === 0 ? (
             <p className="muted card-empty">
-              {stats.approved || stats.open ? 'No reports generated yet. Use Generate report once the evaluator has submitted the input sheet.' : 'Reports can be generated once one of this customer\'s input sheets is submitted by the evaluator.'}
+              {stats.approved || stats.open ? 'No reports generated yet. The drafter generates the report once the evaluator has submitted the site inspection.' : 'Reports can be generated once one of this customer\'s input sheets is submitted by the evaluator.'}
             </p>
           ) : (
             <ul className="list">

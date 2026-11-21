@@ -13,8 +13,9 @@ export const REPORT_TYPE_KEYS = REPORT_TYPES.map((t) => t.key);
 
 // A generated report is stored as a frozen copy of the input sheet at the time it was generated,
 // so it always prints exactly as issued even if the sheet is edited later (generate a new version then).
-export const REPORT_STATUSES = ['review', 'approved'];
-// the bank's decision, recorded by the superadmin; reports with nothing recorded yet are in review with the bank
+// review = waiting for the superadmin's approval · returned = sent back to the drafter (a new version replaces it) ·
+// approved = final (locked)
+export const REPORT_STATUSES = ['review', 'returned', 'approved'];
 export const isApprovedReport = (r) => r.status === 'approved';
 
 const reportSchema = new mongoose.Schema(
@@ -44,11 +45,13 @@ const reportSchema = new mongoose.Schema(
     editedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     editedAt: Date,
     generatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    // review: generated and sent to the bank, waiting for the bank's decision (also older reports with nothing recorded)
-    // approved: the bank approved it (recorded by the superadmin); the wording is locked to match what the bank accepted
     status: { type: String, enum: REPORT_STATUSES, index: true },
     approvedAt: Date,
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    // sent back to the drafter: what to change
+    returnNote: String,
+    returnedAt: Date,
+    returnedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true, minimize: false }
 );

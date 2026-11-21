@@ -1,7 +1,6 @@
-// Kanban board for Input Sheets: Drafts · In review · Received · Sent back · Completed.
-// Received = the superadmin opened it; Completed = a report was generated from it (that locks it for the evaluator).
-// Moving a card runs the same action as the buttons on the sheet (send back with a note, finish, submit), so the
-// server's rules and the completeness check still apply. There is no approval step.
+// Kanban board for Site Inspections: Site visit · Back to evaluator · In queue · Drafting · Awaiting approval · Approved.
+// Moving a card runs the same action as the buttons on the sheet (submit, send back with a note), so the server's
+// rules still apply. Reports are approved in Reports.
 // Desktop: drag and drop. Phones: one column at a time (tabs) and a "Move" button on each card.
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -12,53 +11,41 @@ import { initials } from './Layout.jsx';
 import Modal from './Modal.jsx';
 import { alertDialog, confirmDialog, promptDialog } from './ConfirmDialog.jsx';
 import { timeAgo } from '../utils/format.js';
+import { sheetLink } from '../utils/sheetLink.js';
 
-// same names and order as the status tabs on the list view
+// the workflow, left to right
 export const BOARD_COLUMNS = [
-  { key: 'draft', title: 'Drafts', hint: 'Being filled in by the evaluator', tone: 'blue' },
-  { key: 'submitted', title: 'In review', hint: 'Submitted, not opened by the superadmin yet', tone: 'amber' },
-  { key: 'received', title: 'Received', hint: 'Opened; generate the report', tone: 'blue' },
-  { key: 'rejected', title: 'Sent back', hint: 'Returned with a note', tone: 'red' },
-  { key: 'approved', title: 'Completed', hint: 'Report generated', tone: 'green' },
+  { key: 'draft', title: 'Site visit', hint: 'The evaluator is filling the site inspection', tone: 'blue' },
+  { key: 'rejected', title: 'Back to evaluator', hint: 'Sent back with a note', tone: 'red' },
+  { key: 'submitted', title: 'In queue', hint: 'Submitted, no drafter has taken it yet', tone: 'amber' },
+  { key: 'received', title: 'Drafting', hint: 'A drafter is completing the sheet and report', tone: 'blue' },
+  { key: 'pending', title: 'Awaiting approval', hint: 'Report with the superadmin', tone: 'amber' },
+  { key: 'approved', title: 'Approved', hint: 'Final report', tone: 'green' },
 ];
 const TITLE = Object.fromEntries(BOARD_COLUMNS.map((c) => [c.key, c.title]));
 const DAY = 24 * 3600 * 1000;
 
 // which moves each role may make: from column → { to column: action }
 function movesFor(role) {
-  if (role === 'superadmin') {
-    return {
-      draft: { received: 'finish' },
-      submitted: { rejected: 'return' },
-      received: { rejected: 'return' },
-      rejected: { received: 'finish' },
-      approved: {},
-    };
-  }
-  if (role === 'evaluator') {
-    return {
-      draft: { submitted: 'submit' },
-      rejected: { submitted: 'submit' },
-      submitted: {},
-      received: {},
-      approved: {},
-    };
-  }
-  return {}; // legacy reviewers: view only
+  if (role === 'superadmin') return { submitted: { rejected: 'return' }, received: { rejected: 'return' } };
+  if (role === 'evaluator') return { draft: { submitted: 'submit' }, rejected: { submitted: 'submit' } };
+  return {}; // view only
 }
-const ACTION_LABEL = { return: 'Send back with a note', finish: 'Finish (ready for a report)', submit: 'Submit to the superadmin' };
+const ACTION_LABEL = { return: 'Send back to the evaluator with a note', submit: 'Submit to the drafter' };
 
 // when the card entered its column, for "waiting 3 days"
 const enteredAt = (v, col) => new Date(
   col === 'draft' ? (v.startedAt ? v.updatedAt : v.assignedAt || v.createdAt)
     : col === 'submitted' ? v.submittedAt || v.updatedAt
-      : col === 'received' ? v.receivedAt || v.updatedAt
+      : col === 'received' ? v.returnedAt || v.receivedAt || v.updatedAt
+        : col === 'pending' ? v.reportedAt || v.updatedAt
         : col === 'rejected' ? v.reviewedAt || v.updatedAt
         : v.updatedAt,
 );
 
 export default function SheetBoard({ query, reloadKey = 0 }) {
-  const { user, isReviewer } = useAuth();
+  const auth = useAuth();
+  const { user, isReviewer } = auth;
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -92,7 +79,7 @@ export default function SheetBoard({ query, reloadKey = 0 }) {
     if (!data) return;
     const cols = data.columns;
     if (cols[tab]?.total) return;
-    const pref = isReviewer ? ['submitted', 'received', 'draft', 'rejected', 'approved'] : ['rejected', 'draft', 'submitted', 'received', 'approved'];
+    const pref = isReviewer ? ['pending', 'submitted', 'received', 'draft', 'rejected', 'approved'] : ['rejected', 'draft', 'submitted', 'received', 'pending', 'approved'];
     const first = pref.find((k) => cols[k]?.total);
     if (first) setTab(first);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -109,16 +96,15 @@ export default function SheetBoard({ query, reloadKey = 0 }) {
         setBusy(v._id);
         await api.reviewValuation(v._id, 'rejected', note);
       } else {
-        const finishing = action === 'finish';
         const ok = await confirmDialog({
-          title: finishing ? `Finish ${v.referenceNo}?` : `Submit ${v.referenceNo}?`,
-          message: finishing ? `${name}'s sheet will be marked ready for a report. It must be complete.` : 'The superadmin will see it. You can still make changes until the report is generated.',
-          confirmLabel: finishing ? 'Finish' : 'Submit',
+          title: `Submit ${v.referenceNo}?`,
+          message: 'It goes to the drafter. You can\'t change it after submitting unless the drafter sends it back to you.',
+          confirmLabel: 'Submit',
         });
         if (!ok) return;
         setBusy(v._id);
         const full = await api.getValuation(v._id);
-        await api.updateValuation(v._id, { data: full.data, status: finishing ? 'received' : 'submitted' });
+        await api.updateValuation(v._id, { data: full.data, status: 'submitted' });
       }
       setReload((n) => n + 1);
     } catch (e) {
@@ -188,7 +174,7 @@ export default function SheetBoard({ query, reloadKey = 0 }) {
                 {col.items.map((v) => {
                   const since = enteredAt(v, c.key);
                   const notOpened = c.key === 'draft' && !v.startedAt;
-                  const waiting = (notOpened || ['submitted', 'received', 'rejected'].includes(c.key)) && Date.now() - since > 2 * DAY;
+                  const waiting = (notOpened || ['submitted', 'received', 'pending', 'rejected'].includes(c.key)) && Date.now() - since > 2 * DAY;
                   const canMove = Object.keys(moves[c.key] || {}).length > 0;
                   return (
                     <article
@@ -198,13 +184,14 @@ export default function SheetBoard({ query, reloadKey = 0 }) {
                       onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', v._id); setDrag({ id: v._id, col: c.key, v }); }}
                       onDragEnd={() => { setDrag(null); setOver(''); }}
                     >
-                      <Link to={user?.role === 'superadmin' ? `/valuations/${v._id}/site` : `/valuations/${v._id}`} className="kb-card-link" draggable={false}>
+                      <Link to={sheetLink(v, auth)} className="kb-card-link" draggable={false}>
                         <span className="kb-card-top">
                           <span className="avatar soft sm">{initials(v.summary?.applicantName)}</span>
                           <span className="kb-card-name">
                             <strong>{v.summary?.applicantName || 'Unnamed applicant'}</strong>
                             <small className="muted">{v.referenceNo}{v.summary?.reportTemplate ? ` · ${v.summary.reportTemplate}` : ''}</small>
                             {notOpened && <span className="kb-tag">Not opened</span>}
+                            {v.status === 'returned' && <span className="kb-tag">Sent back by superadmin</span>}
                           </span>
                         </span>
                         {(v.summary?.bankName || v.summary?.branch) && <span className="kb-card-line">{[v.summary?.bankName, v.summary?.branch].filter(Boolean).join(' · ')}</span>}
@@ -212,7 +199,7 @@ export default function SheetBoard({ query, reloadKey = 0 }) {
                           <strong className="kb-value">{v.summary?.fairMarketValue > 0 ? inr(v.summary.fairMarketValue) : '—'}</strong>
                           <span className={`kb-age${waiting ? ' late' : ''}`} title={since.toLocaleString('en-IN')}>{waiting ? `Waiting ${timeAgo(since).replace(/ ago$/, '')}` : timeAgo(since)}</span>
                         </span>
-                        {isReviewer && v.evaluator?.name && <span className="kb-card-who">{v.evaluator.name}</span>}
+                        {isReviewer && (v.evaluator?.name || v.drafter?.name) && <span className="kb-card-who">{[v.evaluator?.name, v.drafter?.name && `drafter ${v.drafter.name}`].filter(Boolean).join(' · ')}</span>}
                       </Link>
                       {canMove && (
                         <button type="button" className="kb-move" onClick={() => setMoving({ v, col: c.key })} disabled={!!busy} aria-label={`Move ${v.referenceNo}`}>

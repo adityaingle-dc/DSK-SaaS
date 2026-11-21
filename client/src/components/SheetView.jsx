@@ -55,7 +55,7 @@ export function display(field, v) {
       return (
         <ul className="plain">
           {field.items.filter((i) => v[i.key]).map((i) => (
-            <li key={i.key}>{i.label}: {field.tiers[v[i.key].tier]}{i.unit && v[i.key].qty ? ` × ${v[i.key].qty} ${i.unit}` : ''}{v[i.key].amount !== undefined ? ` · ${inr(v[i.key].amount)}` : ''}</li>
+            <li key={i.key}>{i.label}: ₹{i.ranges?.[v[i.key].tier - 1] || field.tiers[v[i.key].tier]}{i.unit && v[i.key].qty ? ` × ${v[i.key].qty} ${i.unit}` : ''}{v[i.key].amount !== undefined ? ` · ${inr(v[i.key].amount)}` : ''}</li>
           ))}
         </ul>
       );

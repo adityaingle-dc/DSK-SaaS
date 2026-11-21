@@ -1,10 +1,11 @@
-// input sheet: draft → submitted → received (the superadmin opened it) → completed (report generated, locked);
-// rejected = sent back to the evaluator with a note
-export const STATUS_LABELS = { draft: 'Draft', submitted: 'In review', received: 'Received', approved: 'Completed', rejected: 'Sent back' };
+import { STATUS_HELP, STATUS_LABELS } from '@dsk/shared';
+
+// the job workflow (see @dsk/shared workflow.js)
+export { STATUS_LABELS };
 
 export default function StatusBadge({ status, label }) {
   return (
-    <span className={`status status-${status}`}>
+    <span className={`status status-${status}`} title={STATUS_HELP[status]}>
       <span className="dot" />
       {label || STATUS_LABELS[status] || status}
     </span>

@@ -8,7 +8,6 @@ export * from './geo.js';
 export * from './person.js';
 export * from './plot.js';
 export * from './documents.js';
-export * from './parts.js';
 export { amountInWords } from './words.js';
 
 // All attachment ids referenced anywhere in a sheet: site photos, boundary photos + documents produced
@@ -38,3 +37,4 @@ export const propertyAddress = (p = {}) => {
   const place = [p.district, p.pincode].filter(Boolean).join(' ');
   return [num, sy, p.street, p.village, p.localBodyName && p.localBodyName !== p.village ? p.localBodyName : '', place].filter(Boolean).join(', ');
 };
+export * from './workflow.js';

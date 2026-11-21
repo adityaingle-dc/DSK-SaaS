@@ -3,9 +3,9 @@ import { api, tokenStore } from '../api/client.js';
 
 const AuthContext = createContext(null);
 
-export const ROLE_LABELS = { superadmin: 'Super admin', admin: 'Valuer · Reviewer', evaluator: 'Field evaluator' };
+export const ROLE_LABELS = { superadmin: 'Super admin', admin: 'Valuer · Reviewer', drafter: 'Drafter', evaluator: 'Field evaluator' };
 // roles that can be given to a member (Valuer · Reviewer is no longer offered)
-export const ASSIGNABLE_ROLES = [['evaluator', 'Field evaluator'], ['superadmin', 'Super admin']];
+export const ASSIGNABLE_ROLES = [['evaluator', 'Field evaluator'], ['drafter', 'Drafter'], ['superadmin', 'Super admin']];
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -26,6 +26,10 @@ export function AuthProvider({ children }) {
     isSuperadmin: user?.role === 'superadmin',
     // reviewers (valuer admins and the superadmin) see every valuation and can approve / reject
     isReviewer: user?.role === 'admin' || user?.role === 'superadmin',
+    // drafters complete the sheets in the office and generate the reports
+    isDrafter: user?.role === 'drafter',
+    // office staff (superadmin, drafters): every handed-in sheet and the reports
+    isOffice: ['admin', 'superadmin', 'drafter'].includes(user?.role),
     // returns { user } when signed in, or { challenge } when an emailed code is needed first
     login: async (email, password) => {
       const res = await api.login(email, password);

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { attachmentIds } from '@dsk/shared';
 import Attachment from '../models/Attachment.js';
-import { isReviewer } from '../models/User.js';
+import { isDrafter, isReviewer } from '../models/User.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || path.join(here, '../../uploads'));
@@ -34,6 +34,8 @@ export async function canAccess(user, attachment) {
   if (isReviewer(user) || String(attachment.owner) === String(user._id)) return true;
   if (!attachment.valuation) return false;
   const Valuation = (await import('../models/Valuation.js')).default;
+  // drafters: files of any sheet handed in by an evaluator (the sheets they can open)
+  if (isDrafter(user)) return Boolean(await Valuation.exists({ _id: attachment.valuation, status: { $ne: 'draft' } }));
   return Boolean(await Valuation.exists({ _id: attachment.valuation, evaluator: user._id }));
 }
 
@@ -43,10 +45,14 @@ export async function syncAttachments(valuation, user) {
   const ids = [...new Set(attachmentIds(valuation.data))];
   const found = ids.length ? await Attachment.find({ _id: { $in: ids } }) : [];
   const allowed = new Map();
+  const own = []; // attached to this sheet (or free and now attached); shared ones stay with their sheet
+  const shared = new Set((valuation.sources || []).map(String)); // reused site inspection: the sheets it came from
   for (const a of found) {
     const linkedHere = a.valuation && String(a.valuation) === String(valuation._id);
     const free = !a.valuation && (isReviewer(user) || String(a.owner) === String(user._id));
-    if (linkedHere || free) allowed.set(String(a._id), a);
+    const fromSource = a.valuation && shared.has(String(a.valuation));
+    if (linkedHere || free || fromSource) allowed.set(String(a._id), a);
+    if (linkedHere || free) own.push(String(a._id));
   }
 
   // photo lists: Property location → site photos, Boundaries → boundary photos
@@ -63,9 +69,8 @@ export async function syncAttachments(valuation, user) {
     }
   }
 
-  const keep = [...allowed.keys()];
-  await Attachment.updateMany({ _id: { $in: keep } }, { $set: { valuation: valuation._id } });
-  await Attachment.updateMany({ valuation: valuation._id, _id: { $nin: keep } }, { $set: { valuation: null } });
+  await Attachment.updateMany({ _id: { $in: own } }, { $set: { valuation: valuation._id } });
+  await Attachment.updateMany({ valuation: valuation._id, _id: { $nin: own } }, { $set: { valuation: null } });
 }
 
 export async function removeAttachment(a) {
