@@ -78,7 +78,7 @@ export default function App() {
         <Route path="customers/:id" element={<CustomerView />} />
         <Route path="reports" element={<OfficeOnly><Reports /></OfficeOnly>} />
         <Route path="reports/new" element={<OfficeOnly><GenerateReport /></OfficeOnly>} />
-        <Route path="reports/:id" element={<OfficeOnly><StoredReport /></OfficeOnly>} />
+        <Route path="reports/:id" element={<StoredReport />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

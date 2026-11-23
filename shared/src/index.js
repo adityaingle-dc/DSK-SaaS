@@ -14,6 +14,7 @@ export { amountInWords } from './words.js';
 export const attachmentIds = (data = {}) => [
   ...(data.property?.photos || []).map((f) => f.id),
   ...(data.boundaries?.photos || []).map((f) => f.id),
+  ...(data.land?.reportImages || []).map((f) => f.id),
   ...(data.documents?.items || []).flatMap((row) => [...(row.firstPage || []), ...(row.files || [])].map((f) => f.id)),
 ];
 

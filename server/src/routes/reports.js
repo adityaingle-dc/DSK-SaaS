@@ -4,7 +4,7 @@ import { validate, propertyAddress, REPORT_TEMPLATES } from '@dsk/shared';
 import Report, { REPORT_TYPES, REPORT_TYPE_KEYS, isApprovedReport } from '../models/Report.js';
 import Valuation from '../models/Valuation.js';
 import Customer from '../models/Customer.js';
-import User, { isDrafter } from '../models/User.js';
+import User, { isDrafter, isOffice } from '../models/User.js';
 import { dateRange, options, paging, searchDigits, searchRx, sorting } from '../utils/listQuery.js';
 import { protect, requireOffice, requireSuperadmin } from '../middleware/auth.js';
 import { asyncHandler, HttpError } from '../utils/asyncHandler.js';
@@ -15,7 +15,11 @@ import { nextId } from '../services/ids.js';
 // to the superadmin. The superadmin approves it (final: the report and the sheet are locked) or sends it back to the
 // drafter with a note; the drafter then fixes the sheet / wording and generates the next version.
 const router = Router();
-router.use(protect, requireOffice);
+router.use(protect);
+// the evaluator who drafts their own site inspection may generate its report and open its reports; everything else is
+// for office staff
+const draftsIt = (user, v) => !!v?.drafter && String(v.drafter?._id || v.drafter) === String(user._id);
+const officeOnly = (req, _res, next) => (isOffice(req.user) ? next() : requireOffice(req, _res, next));
 
 const LIST_FIELDS = 'reportNo type version customer valuation applicantName reportTemplate templateTitle fairMarketValue propertyAddress generatedBy editedAt createdAt snapshot.referenceNo status approvedAt approvedBy returnNote returnedAt returnedBy';
 // review = waiting for the superadmin (also older reports with nothing recorded) · returned = sent back · approved
@@ -90,7 +94,7 @@ async function withVersions(r) {
 // report number, e.g. DSK-RPT-0001 (atomic counter)
 const nextReportNo = () => nextId('rpt');
 
-router.get('/types', (_req, res) => res.json({ types: REPORT_TYPES }));
+router.get('/types', officeOnly, (_req, res) => res.json({ types: REPORT_TYPES }));
 
 // search + filters shared by the list and the board
 async function listFilter(req) {
@@ -123,6 +127,7 @@ async function reportFacets() {
 const BOARD_LIMIT = 60;
 router.get(
   '/board',
+  officeOnly,
   asyncHandler(async (req, res) => {
     const filter = await listFilter(req);
     const keys = Object.keys(STATUS_FILTER);
@@ -143,6 +148,7 @@ router.get(
 
 router.get(
   '/',
+  officeOnly,
   asyncHandler(async (req, res) => {
     const { status } = req.query;
     const { page: pg, limit: lim } = paging(req.query);
@@ -187,6 +193,7 @@ router.post(
     if (!mongoose.isValidObjectId(valuationId)) throw new HttpError(422, 'Choose an input sheet');
     const v = await Valuation.findById(valuationId).populate('evaluator', 'name').populate('reviewedBy', 'name').populate('drafter', 'name');
     if (!v) throw new HttpError(404, 'Input sheet not found');
+    if (!isOffice(req.user) && !draftsIt(req.user, v)) throw new HttpError(403, 'Forbidden');
     const reasons = {
       draft: 'The field evaluator has not submitted the site inspection yet.',
       rejected: 'This sheet was sent back to the field evaluator. A report can be generated once they resubmit it.',
@@ -255,7 +262,11 @@ router.post(
   })
 );
 
-router.get('/:id', asyncHandler(async (req, res) => res.json(await withVersions(await load(req.params.id)))));
+router.get('/:id', asyncHandler(async (req, res) => {
+  const r = await load(req.params.id);
+  if (!isOffice(req.user) && !draftsIt(req.user, await Valuation.findById(r.valuation).select('drafter').lean())) throw new HttpError(404, 'Report not found');
+  res.json(await withVersions(r));
+}));
 
 // The superadmin's decision: approved (final: the report and the sheet are locked) or returned (back to the drafter
 // with a note; the next report is a new version)

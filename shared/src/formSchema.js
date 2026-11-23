@@ -184,8 +184,11 @@ export const SECTIONS = [
     fields: [
       { key: 'siteAreaDocument', label: 'Site area as per document', type: 'number', unit: 'sq.yd', min: 0, required: true },
       { key: 'siteAreaActual', label: 'Site area as per actual', type: 'number', unit: 'sq.yd', min: 0 },
-      { key: 'glr', label: 'Guideline rate (GLR)', type: 'number', unit: '₹/sq.yd', min: 0, required: true },
-      { key: 'marketRate', label: 'Prevailing market rate (PMR)', type: 'number', unit: '₹/sq.yd', min: 0, required: true },
+      // GLR · PMR · value details, side by side on their own line
+      { key: 'glr', label: 'Guideline rate (GLR)', type: 'number', unit: '₹/sq.yd', min: 0, required: true, row: 'x-rates' },
+      { key: 'marketRate', label: 'Prevailing market rate (PMR)', type: 'number', unit: '₹/sq.yd', min: 0, required: true, row: 'x-rates' },
+      // value details: image(s) printed as the last page(s) of the report, one full page each, nothing else on the page
+      { key: 'reportImages', label: 'Value details', type: 'files', accept: 'image/*', imagesOnly: true, maxFiles: 4, compact: true, row: 'x-rates', hint: 'Prints as the last page of the report.' },
       // extra items: the quantity and the rate (rates differ from site to site); the amount is worked out
       { key: 'compoundWallLength', label: 'Compound wall / fencing – length', type: 'number', unit: 'rft', min: 0, row: 'x-cw', heading: 'Extra items (quantity × rate)', hint: 'Fills in from the four sides (Boundaries & dimensions). Change it if the wall does not run all round.' },
       { key: 'compoundWallHeight', label: 'Height', type: 'text', unit: 'ft', row: 'x-cw' },

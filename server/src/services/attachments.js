@@ -61,6 +61,11 @@ export async function syncAttachments(valuation, user) {
     section.photos = section.photos.filter((f) => allowed.has(f.id)).map((f) => ({ ...allowed.get(f.id).toRef(), ...(f.side ? { side: f.side } : {}) }));
     if (!section.photos.length) delete section.photos;
   }
+  // Land valuation → images printed as the last page(s) of the report
+  if (valuation.data.land?.reportImages) {
+    valuation.data.land.reportImages = valuation.data.land.reportImages.filter((f) => allowed.has(f.id)).map((f) => allowed.get(f.id).toRef());
+    if (!valuation.data.land.reportImages.length) delete valuation.data.land.reportImages;
+  }
   for (const row of valuation.data.documents?.items || []) {
     for (const key of ['firstPage', 'files']) {
       if (!row[key]) continue;

@@ -8,7 +8,10 @@ const idOf = (x) => String(x?._id || x || '');
 //    (a drafter clicking a sheet another drafter has gets its page)
 export function sheetLink(v, auth) {
   const id = v._id;
-  if (!auth?.isOffice) return EVALUATOR_EDITABLE.includes(v.status) ? `/valuations/${id}/edit` : `/valuations/${id}`;
+  if (!auth?.isOffice) {
+    const drafting = DRAFTING_STATUSES.includes(v.status) && (v.draftingMine || (v.drafter && idOf(v.drafter) === idOf(auth.user)));
+    return EVALUATOR_EDITABLE.includes(v.status) || drafting ? `/valuations/${id}/edit` : `/valuations/${id}`;
+  }
   if (DRAFTING_STATUSES.includes(v.status)) {
     const me = idOf(auth.user);
     if (auth.isDrafter && v.drafter && idOf(v.drafter) !== me) return `/valuations/${id}`;

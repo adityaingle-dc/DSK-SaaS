@@ -141,7 +141,7 @@ export function FieldInput({ field, value, onChange, errors = {}, name, setField
     case 'latlon':
       return <LatLonInput field={field} value={value} onChange={onChange} setField={setField} values={values} />;
     case 'files':
-      return <FilesInput value={value || []} onChange={onChange} accept={field.accept} max={field.maxFiles} noun={field.imagesOnly ? 'photos' : undefined} gpsCamera={!!field.gpsCamera} />;
+      return <FilesInput value={value || []} onChange={onChange} accept={field.accept} max={field.maxFiles} noun={field.imagesOnly ? 'photos' : undefined} gpsCamera={!!field.gpsCamera} compact={!!field.compact} addLabel={field.compact ? '+ Upload' : undefined} />;
     case 'grid':
       return <GridInput field={field} value={value || {}} onChange={onChange} values={values} setField={setField} />;
     case 'areaCalc':

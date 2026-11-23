@@ -58,7 +58,7 @@ function SiteMap({ site, pin, onPin }) {
       for (const [i, q] of tries.entries()) {
         const { result } = await api.geocode(q);
         if (result) {
-          const exact = i <= 1;
+          const exact = result.exact ?? i <= 1; // Google says when it found the exact address
           setFocus({ lat: result.lat, lon: result.lon, zoom: exact ? 18 : 15 });
           onPin({ lat: result.lat, lon: result.lon });
           setMsg(exact ? 'Found the address. Drag the pin or tap to put it exactly on the plot.' : `Found ${q}: the area only. Tap the exact plot on the map.`);

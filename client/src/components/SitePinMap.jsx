@@ -1,15 +1,25 @@
 // One pin for the site (Add customer → site address): the typed address is found on the map, and a tap or a drag puts
-// the pin exactly on the plot. Same free imagery as the plot map (Esri satellite + OpenStreetMap streets), no API key.
+// the pin exactly on the plot. Google Maps when a key is set (GoogleSitePinMap.jsx); otherwise the free imagery of the
+// plot map (Esri satellite + OpenStreetMap streets).
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { LAYERS } from './BoundaryMap.jsx';
+import { useGoogleMaps } from '../utils/googleMaps.js';
+import GoogleSitePinMap from './GoogleSitePinMap.jsx';
 
 const INDIA = { center: [20.6, 78.9], zoom: 5 };
 const siteIcon = L.divIcon({ className: 'sp-pin', html: '<span></span>', iconSize: [28, 38], iconAnchor: [14, 36] });
 
 // pin: { lat, lon } | null · focus: { lat, lon, zoom } to move the view to (e.g. the address found) · onChange(pin)
-export default function SitePinMap({ pin, focus, onChange }) {
+// Google Maps when a key is set and Google accepts it; otherwise the free map below
+export default function SitePinMap(props) {
+  const g = useGoogleMaps();
+  if (g === undefined) return <div className="bm-map sp-map bm-loading">Loading map…</div>;
+  return g ? <GoogleSitePinMap g={g} {...props} /> : <LeafletSitePinMap {...props} />;
+}
+
+function LeafletSitePinMap({ pin, focus, onChange }) {
   const box = useRef(null);
   const map = useRef(null);
   const layer = useRef(null);

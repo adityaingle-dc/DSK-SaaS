@@ -266,10 +266,10 @@ export default function EvaluatorDashboard() {
             <ul className="list">
               {received.map((t) => (
                 <li key={t._id}>
-                  <Link to={`/valuations/${t._id}`} className="list-item">
+                  <Link to={t.draftingMine && ['received', 'returned'].includes(t.status) ? `/valuations/${t._id}/edit` : `/valuations/${t._id}`} className="list-item">
                     <span className="list-main">
                       <strong>{t.applicantName}</strong>
-                      <small>{`${t.referenceNo} · ${t.drafter ? `with ${t.drafter}` : 'with the drafters'}${t.status === 'pending' ? ' · report awaiting approval' : ''} · ${timeAgo(t.receivedAt || t.updatedAt)}`}</small>
+                      <small>{`${t.referenceNo} · ${t.draftingMine ? 'you are drafting it' : t.drafter ? `with ${t.drafter}` : 'with the drafters'}${t.status === 'pending' ? ' · report awaiting approval' : ''} · ${timeAgo(t.receivedAt || t.updatedAt)}`}</small>
                     </span>
                     <StageChip stage="drafting" />
                   </Link>

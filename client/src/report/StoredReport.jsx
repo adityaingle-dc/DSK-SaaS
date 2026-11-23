@@ -17,7 +17,7 @@ import { reuseSheet } from '../utils/reuseSheet.js';
 export default function StoredReport() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isSuperadmin } = useAuth();
+  const { isSuperadmin, isOffice } = useAuth();
   const [r, setR] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -82,7 +82,7 @@ export default function StoredReport() {
         return { overrides: res.overrides, editedText: `${generated} · wording edited ${dateTime(res.editedAt)}${res.editedBy?.name ? ` by ${res.editedBy.name}` : ''}` };
       } : undefined}
       primaryAction={decision}
-      back={{ to: '/reports', label: 'Reports' }}
+      back={isOffice ? { to: '/reports', label: 'Reports' } : { to: `/valuations/${r.valuation}`, label: 'Sheet' }}
       title={r.applicantName || r.customer?.name}
       meta={`${r.reportNo} · v${r.version} · ${r.templateTitle || ''}`}
       badge={<><ReportStatus r={r} /><span className="badge frozen-badge" title="Values as they were when the report was generated">Frozen copy</span></>}

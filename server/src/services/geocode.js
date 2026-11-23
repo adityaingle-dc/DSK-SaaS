@@ -1,5 +1,6 @@
-// Map point → address, for filling the input sheet's Property location from the map.
-// Uses OpenStreetMap's Nominatim reverse geocoder (free, no key). Its usage policy asks for at most one request
+// Map point → address (fill the sheet's Property location from the map) and address → map point (Add customer's map).
+// With GOOGLE_MAPS_KEY in server/.env: Google's Geocoding API (a server key, restricted to this server's IP address).
+// Without it, or when Google refuses the request: OpenStreetMap's Nominatim (free, no key). Its usage policy asks for at most one request
 // per second and an identifying User-Agent, so requests are queued one at a time, results are cached in memory,
 // and GEOCODE_USER_AGENT should name the deployment (e.g. "valuation-desk/1.0 (admin@your-domain)").
 // Nothing is stored in the database.
@@ -46,7 +47,7 @@ export function toSheetFields(a = {}, name = '') {
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function reverseGeocode(lat, lon) {
+async function nominatimReverse(lat, lon) {
   const key = `${lat.toFixed(5)},${lon.toFixed(5)}`;
   if (cache.has(key)) return cache.get(key);
   const run = async () => {
@@ -77,7 +78,7 @@ export async function reverseGeocode(lat, lon) {
 // above; India only. → { lat, lon, place } or null when nothing matches.
 const SEARCH_URL = process.env.GEOCODE_SEARCH_URL || 'https://nominatim.openstreetmap.org/search';
 const searchCache = new Map();
-export async function forwardGeocode(query) {
+async function nominatimSearch(query) {
   const q = String(query || '').replace(/\s+/g, ' ').trim().slice(0, 300);
   if (!q) return null;
   const key = q.toLowerCase();
@@ -104,4 +105,94 @@ export async function forwardGeocode(query) {
   const p = queue.then(run, run);
   queue = p.catch(() => {});
   return p;
+}
+
+// ---------- Google Geocoding API ----------
+const GOOGLE_KEY = (process.env.GOOGLE_MAPS_KEY || '').trim();
+const GOOGLE_URL = process.env.GOOGLE_GEOCODE_URL || 'https://maps.googleapis.com/maps/api/geocode/json';
+const gCache = new Map();
+let googleOff = false; // set when Google refuses the key (logged once); the free service takes over
+
+async function google(params) {
+  const q = new URLSearchParams({ ...params, key: GOOGLE_KEY, language: 'en', region: 'in' });
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const r = await fetch(`${GOOGLE_URL}?${q}`, { signal: ctrl.signal });
+    const j = await r.json();
+    if (j.status === 'OK') return j.results;
+    if (j.status === 'ZERO_RESULTS') return [];
+    if (['REQUEST_DENIED', 'OVER_DAILY_LIMIT'].includes(j.status)) {
+      if (!googleOff) console.warn(`[geocode] Google refused the key (${j.status}: ${j.error_message || ''}); using OpenStreetMap`);
+      googleOff = true;
+    }
+    throw new Error(`Google geocoding: ${j.status}`);
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+// Google's address parts → the sheet's fields (India: locality = town / city, sublocality = area / colony,
+// administrative_area_level_3 or _2 = district / taluka)
+export function googleToSheetFields(result = {}) {
+  const part = (type) => result.address_components?.find((c) => c.types.includes(type))?.long_name || '';
+  const town = part('locality');
+  const area = part('sublocality_level_1') || part('sublocality') || part('neighborhood');
+  const district = dropSuffix((part('administrative_area_level_3') || part('administrative_area_level_2')).replace(/\s+division$/i, ''));
+  const street = uniq([part('route'), part('premise'), part('sublocality_level_3'), part('sublocality_level_2')]).slice(0, 3).join(', ');
+  const pin = part('postal_code').replace(/\s/g, '');
+  const poi = result.types?.some((x) => ['point_of_interest', 'establishment'].includes(x)) ? clean(result.address_components?.[0]?.long_name) : '';
+  const out = {
+    number: clean(part('street_number')),
+    street,
+    village: clean(area || town),
+    localBodyType: town ? 'Municipality' : '',
+    localBodyName: clean(town),
+    district,
+    pincode: /^[1-9][0-9]{5}$/.test(pin) ? pin : '',
+    landmark: poi ? `Near ${poi}` : '',
+  };
+  return Object.fromEntries(Object.entries(out).filter(([, v]) => v));
+}
+
+const useGoogle = () => GOOGLE_KEY && !googleOff;
+
+export async function reverseGeocode(lat, lon) {
+  if (useGoogle()) {
+    const key = `r:${lat.toFixed(5)},${lon.toFixed(5)}`;
+    if (gCache.has(key)) return gCache.get(key);
+    try {
+      const results = await google({ latlng: `${lat},${lon}` });
+      const best = results.find((x) => !x.types?.includes('plus_code')) || results[0];
+      const result = best ? { fields: googleToSheetFields(best), place: clean(best.formatted_address), found: true, source: 'google' } : { fields: {}, place: '', found: false, source: 'google' };
+      gCache.set(key, result);
+      if (gCache.size > CACHE_MAX) gCache.delete(gCache.keys().next().value);
+      return result;
+    } catch (e) {
+      if (!googleOff) throw e;
+    }
+  }
+  return nominatimReverse(lat, lon);
+}
+
+export async function forwardGeocode(query) {
+  const q = String(query || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  if (!q) return null;
+  if (useGoogle()) {
+    const key = `f:${q.toLowerCase()}`;
+    if (gCache.has(key)) return gCache.get(key);
+    try {
+      const [hit] = await google({ address: q, components: 'country:IN' });
+      const result = hit ? {
+        lat: +hit.geometry.location.lat.toFixed(7), lon: +hit.geometry.location.lng.toFixed(7), place: clean(hit.formatted_address),
+        kind: hit.types?.[0] || '', exact: ['ROOFTOP', 'RANGE_INTERPOLATED'].includes(hit.geometry.location_type), source: 'google',
+      } : null;
+      gCache.set(key, result);
+      if (gCache.size > CACHE_MAX) gCache.delete(gCache.keys().next().value);
+      return result;
+    } catch (e) {
+      if (!googleOff) throw e;
+    }
+  }
+  return nominatimSearch(q);
 }

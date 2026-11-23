@@ -64,6 +64,11 @@ export function editBlock(v, user) {
     return null;
   }
   if (!same(v.evaluator, user._id)) return 'This sheet is assigned to someone else.';
+  // the evaluator drafting their own site inspection ("Start drafting"): like a drafter on this sheet
+  if (v.drafter && same(v.drafter, user._id)) {
+    if (v.status === 'pending') return "The report is waiting for the superadmin's approval. It can be changed again if they send it back.";
+    if (DRAFTING_STATUSES.includes(v.status)) return null;
+  }
   if (!EVALUATOR_EDITABLE.includes(v.status)) return 'You have submitted this site inspection, so it is with the drafter now. They can send it back to you if something is needed.';
   return null;
 }
@@ -168,6 +173,7 @@ router.get(
       reviewedAt: v.reviewedAt,
       receivedAt: v.receivedAt,
       drafter: v.drafter?.name || null,
+      draftingMine: !!v.drafter && String(v.drafter._id) === String(req.user._id),
       reportedAt: v.reportedAt || null,
       approvedAt: v.approvedAt || null,
       updatedAt: v.updatedAt,
@@ -458,6 +464,30 @@ router.put(
   })
 );
 
+// The field evaluator drafts their own site inspection ("Start drafting"): the sheet is saved and goes straight to
+// drafting with them as the drafter (it skips the drafters' queue). They complete the sheet and the report and
+// generate it; the superadmin still approves it. The activity log records it under their name.
+router.post(
+  '/:id/start-drafting',
+  asyncHandler(async (req, res) => {
+    const v = await load(req);
+    if (isOffice(req.user)) throw new HttpError(400, 'Open the sheet to draft it.');
+    if (!same(v.evaluator, req.user._id)) throw new HttpError(403, 'Only the evaluator of this site inspection can start drafting it.');
+    if (!EVALUATOR_EDITABLE.includes(v.status)) throw new HttpError(409, 'This site inspection is already with a drafter.');
+    if (req.body?.data) v.data = check(sanitize(req.body.data));
+    const at = new Date();
+    Object.assign(v, { status: 'received', drafter: req.user._id, submittedAt: at, receivedAt: at, receivedBy: req.user._id, startedAt: v.startedAt || at, draftUpdatedAt: at });
+    await syncAttachments(v, req.user);
+    v.recompute();
+    await v.save();
+    await logActivity(req, 'valuation.claimed', {
+      entityType: 'valuation', entityId: v._id, meta: { ...valuationMeta(v), evaluatorName: req.user.name, selfDrafted: true },
+      summary: `Started drafting ${label(v)} (their own site inspection)`,
+    });
+    res.json(forUser(await load(req), req.user));
+  })
+);
+
 // The drafter (or the superadmin) sends the site inspection back to the evaluator with a note
 router.patch(
   '/:id/review',
@@ -542,7 +572,6 @@ const OVERRIDE_KEY = /^[A-Za-z0-9_.-]{1,80}$/;
 router.put(
   '/:id/report',
   asyncHandler(async (req, res) => {
-    if (!isOffice(req.user)) throw new HttpError(403, 'Forbidden');
     const input = req.body?.overrides;
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new HttpError(400, 'overrides must be an object');
     const entries = Object.entries(input);
@@ -553,6 +582,8 @@ router.put(
       overrides[k] = val.slice(0, 5000);
     }
     const v = await load(req);
+    // office staff, or the evaluator drafting their own site inspection
+    if (!isOffice(req.user) && !(v.drafter && same(v.drafter, req.user._id))) throw new HttpError(403, 'Forbidden');
     const block = editBlock(v, req.user);
     if (block) throw new HttpError(409, block);
     const before = Object.keys(v.reportOverrides || {}).length;

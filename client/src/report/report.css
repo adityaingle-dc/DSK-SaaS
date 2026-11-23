@@ -205,7 +205,8 @@
 /* a document’s first page, printed as a full page */
 .doc-page-desc { margin: 0 0 6px; text-align: center; font-size: 9pt; color: #374151; }
 .full-page-photo { margin: 0; display: flex; justify-content: center; align-items: flex-start; }
-.full-page-photo img { display: block; max-width: 100%; max-height: 245mm; width: auto; height: auto; object-fit: contain; border: 1px solid #d1d5db; }
+/* fills the page width (small images are scaled up), never taller than the page; proportions kept */
+.full-page-photo img { display: block; width: 100%; height: auto; max-height: 245mm; object-fit: contain; object-position: top center; }
 
 /* bullet / numbered points inside report text, and text added in the report editor */
 .f-list { margin: 2px 0 4px; padding-left: 20px; white-space: normal; }
@@ -227,3 +228,8 @@ ol.f-list { list-style: decimal; }
 .added-add button { padding: 3px 9px; border: 1px solid #c7d2fe; border-radius: 999px; background: #fff; color: #3730a3; font: inherit; cursor: pointer; }
 .added-add button:hover { background: #eef2ff; }
 @media print { .added-tools, .added-add, .added-break-mark { display: none !important; } }
+
+/* Key Plan: zoomed-out location map + close-up, one above the other */
+.keyplan-pair { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.keyplan-pair .keyplan { margin: 0; }
+.keyplan-pair figcaption b { color: #111; }

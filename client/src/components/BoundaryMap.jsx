@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useGoogleMaps } from '../utils/googleMaps.js';
+import GoogleBoundaryMap from './GoogleBoundaryMap.jsx';
 
 export const LAYERS = {
   satellite: () =>
@@ -24,7 +26,14 @@ const INDIA = { center: [20.6, 78.9], zoom: 5 };
 const pinIcon = (n) => L.divIcon({ className: 'bm-pin', html: `<span>${n}</span>`, iconSize: [26, 26], iconAnchor: [13, 13] });
 const centreIcon = L.divIcon({ className: 'bm-centre', html: '<span></span>', iconSize: [18, 18], iconAnchor: [9, 9] });
 
-export default function BoundaryMap({ points, centre, focus, onChange }) {
+// Google Maps when a key is set and Google accepts it; otherwise the free map below
+export default function BoundaryMap(props) {
+  const g = useGoogleMaps();
+  if (g === undefined) return <div className="bm-map bm-loading">Loading map…</div>;
+  return g ? <GoogleBoundaryMap g={g} {...props} /> : <LeafletBoundaryMap {...props} />;
+}
+
+function LeafletBoundaryMap({ points, centre, focus, onChange }) {
   const box = useRef(null);
   const map = useRef(null);
   const layer = useRef(null);

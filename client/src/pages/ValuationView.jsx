@@ -70,14 +70,15 @@ export default function ValuationView() {
   const s = v.results?.summary || {};
   const drafter = v.drafter?.name;
   const mineToDraft = isDrafter && DRAFTING_STATUSES.includes(v.status) && (!v.drafter || String(v.drafter._id) === String(user?._id));
-  const editLabel = isOffice ? (v.status === 'submitted' && isDrafter ? 'Take & draft' : 'Open drafting') : v.status === 'rejected' ? 'Fix & resubmit' : 'Continue site inspection';
+  const selfDrafting = !isOffice && v.drafter && String(v.drafter._id) === String(user?._id);
+  const editLabel = isOffice ? (v.status === 'submitted' && isDrafter ? 'Take & draft' : 'Open drafting') : selfDrafting ? 'Continue drafting' : v.status === 'rejected' ? 'Fix & resubmit' : 'Continue site inspection';
 
   // where the job stands, in words
   const banner = {
     draft: { title: `Site visit by ${v.evaluator?.name || 'the evaluator'}`, text: isOffice ? 'The field evaluator is filling the site inspection. It comes to the drafters when they submit it.' : 'Fill in what you see on site, then submit it to the drafter. Nothing is compulsory.' },
     rejected: { title: `Sent back to ${isOffice ? v.evaluator?.name || 'the evaluator' : 'you'}`, by: v.reviewedBy?.name, at: v.reviewedAt, text: v.reviewNote },
     submitted: { title: isOffice ? 'In the drafters\' queue' : 'Submitted to the drafter', at: v.submittedAt, text: isOffice ? (isDrafter ? 'Open it to take it: it becomes yours to draft.' : 'Waiting for a drafter to take it (or give it to one below).') : 'Waiting for a drafter to take it. You can no longer change it unless they send it back to you.' },
-    received: { title: drafter ? `Drafting by ${drafter}` : 'Being drafted', at: v.receivedAt, text: isOffice ? 'The drafter completes the sheet and the report, then generates it for approval.' : 'The drafter is completing the sheet and preparing the report.' },
+    received: { title: drafter ? `Drafting by ${selfDrafting ? 'you' : drafter}` : 'Being drafted', at: v.receivedAt, text: isOffice ? 'The drafter completes the sheet and the report, then generates it for approval.' : selfDrafting ? 'Complete the sheet and the report, then generate it for the superadmin\'s approval.' : 'The drafter is completing the sheet and preparing the report.' },
     returned: { title: `Report sent back to ${drafter || 'the drafter'}`, by: v.returnedBy?.name, at: v.returnedAt, text: v.returnNote },
     pending: { title: 'Report awaiting approval', at: v.reportedAt, text: isSuperadmin ? 'Open the report to approve it or send it back to the drafter.' : `The report${drafter ? ` by ${drafter}` : ''} is with the superadmin.` },
     approved: { title: 'Approved', by: v.approvedBy?.name, at: v.approvedAt || v.reportedAt, text: 'The report is final, so the sheet can no longer be changed.' },

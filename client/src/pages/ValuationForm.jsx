@@ -99,7 +99,6 @@ export default function ValuationForm() {
   const [searchParams] = useSearchParams();
   const returnTo = (searchParams.get('return') || '').startsWith('/') && !searchParams.get('return').startsWith('//') ? searchParams.get('return') : '';
   const { isSuperadmin, isOffice, user } = useAuth();
-  const workspace = isOffice && !!id;
   const draftKey = `dsk_sheet_draft:${user?._id || 'me'}:${id || 'new'}`;
   // the sheet as last saved on the server: what "unsaved changes" are compared against
   const savedJson = useRef(id ? null : JSON.stringify(emptyValuation()));
@@ -111,6 +110,9 @@ export default function ValuationForm() {
     return d?.data ? hydrate(d.data) : emptyValuation();
   });
   const [meta, setMeta] = useState(null);
+  // the drafting screen (sheet + report): office staff, and a field evaluator drafting their own site inspection
+  const draftingMine = !isOffice && !!meta?.drafter && String(meta.drafter?._id || meta.drafter) === String(user?._id) && DRAFTING_STATUSES.includes(meta?.status);
+  const workspace = !!id && (isOffice || draftingMine);
   const [active, setActive] = useState('general');
   const [serverErrors, setServerErrors] = useState([]);
   const [message, setMessage] = useState('');
@@ -343,8 +345,33 @@ export default function ValuationForm() {
     }
   };
 
+  // field evaluator: draft their own site inspection (skips the drafters' queue; the superadmin still approves)
+  const canStartDrafting = !isOffice && !!id && String(meta?.evaluator?._id || meta?.evaluator) === String(user?._id) && ['draft', 'rejected'].includes(meta?.status);
+  const startDrafting = async () => {
+    if (!(await confirmDialog({
+      title: 'Draft this sheet yourself?',
+      message: 'The sheet is saved and you complete it and the report yourself, instead of sending it to the drafters. When you generate the report it goes to the superadmin for approval. Your name is recorded as the drafter.',
+      confirmLabel: 'Start drafting',
+    }))) return;
+    setBusy(true);
+    setMessage('');
+    try {
+      const v = await api.startDrafting(id, sanitize(data));
+      savedJson.current = JSON.stringify(data);
+      serverData.current = data;
+      writeDraft(draftKey, null);
+      setRestored(null);
+      setMeta(v);
+    } catch (e) {
+      setMessage(e.message);
+      if (e.errors?.length) { setServerErrors(e.errors); goToField(e.errors[0].field); }
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // drafter / superadmin: return the site inspection to the evaluator
-  const canSendBack = workspace && DRAFTING_STATUSES.includes(meta?.status);
+  const canSendBack = workspace && isOffice && DRAFTING_STATUSES.includes(meta?.status);
   const sendBack = async () => {
     const note = await promptDialog({
       title: `Send ${meta.referenceNo} back to the evaluator?`,
@@ -428,10 +455,14 @@ export default function ValuationForm() {
     <div className={`sheet-layout${workspace ? ` workspace${showReport && showSheet ? ' split' : ''}` : ''}`}>
       <PageHeader
         icon={DuoSheet}
-        back={returnTo ? { to: returnTo, label: 'Back', exact: true } : id && !isOffice ? { to: `/valuations/${id}`, label: 'Site inspection' } : { to: '/valuations', label: 'Site Inspections' }}
+        back={returnTo ? { to: returnTo, label: 'Back', exact: true } : id && !isOffice ? { to: `/valuations/${id}`, label: draftingMine ? 'Sheet' : 'Site inspection' } : { to: '/valuations', label: 'Site Inspections' }}
         title={workspace ? (isSuperadmin && meta?.status === 'draft' ? 'Input sheet' : 'Drafting') : 'Site inspection'}
         meta={meta?.referenceNo && <><span className="badge">{meta.referenceNo}</span>{meta?.status && <StatusBadge status={meta.status} />}</>}
-        actions={workspace && (
+        actions={canStartDrafting ? (
+          <div className="actions no-print form-head-actions">
+            <button type="button" className="btn primary" onClick={startDrafting} disabled={busy} title="Complete the sheet and the report yourself">{busy ? 'Working…' : 'Start drafting'}</button>
+          </div>
+        ) : workspace && (
           <div className="actions no-print form-head-actions">
             {notice && <span className="rt-notice">{notice}</span>}
             {canSendBack && <button type="button" className="btn danger-outline" onClick={sendBack} disabled={busy}>Send back to evaluator</button>}

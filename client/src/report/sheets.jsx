@@ -2,7 +2,7 @@ import { catalog, documentDescription, FLOORS, sideRoles, REPORT_TEMPLATES, pers
 
 const floorName = (f) => (FLOORS.includes(f) ? `${f} Floor` : f || '');
 import { F, Words, rs } from './Field.jsx';
-import KeyPlanMap, { SitePlanMap } from './KeyPlanMap.jsx';
+import { LocationMaps, SitePlanMap } from './KeyPlanMap.jsx';
 import PhotoGrid, { FullPagePhoto } from './PhotoGrid.jsx';
 import {
   FIRM, FOOTER_NOTE, OPINION_INTRO, CERTIFICATE_POINTS, ENCLOSURES, SRO_REMARKS, COURT_JUDGEMENTS, APPROACH_NOTE,
@@ -701,7 +701,8 @@ function KeyPlan({ c }) {
     <>
       <h3 className="ctr">Key Plan Showing the Location of the Property (Google Map Extract)</h3>
       <div className="ref-line"><span>Google Coordinates</span><span>Lat: <F k="kp.lat" v={loc?.lat ?? ''} /></span><span>Lon: <F k="kp.lon" v={loc?.lon ?? ''} /></span></div>
-      {loc?.lat !== undefined ? <KeyPlanMap lat={loc.lat} lon={loc.lon} boundary={loc.boundary} /> : <div className="placeholder">GPS location not captured in the input sheet.</div>}
+      {/* a zoomed-out location map and a close-up of the property */}
+      {loc?.lat !== undefined ? <LocationMaps lat={loc.lat} lon={loc.lon} boundary={loc.boundary} /> : <div className="placeholder">GPS location not captured in the input sheet.</div>}
     </>
   );
 }
@@ -740,6 +741,10 @@ function SitePlan({ c }) {
 
 // the page printed for a document: its "first page" image, else (older sheets) its first photo
 export const documentFirstPage = (doc = {}) => (doc.firstPage || []).find(printable) || (doc.files || []).find(printable) || null;
+// Land valuation → "Value details": the image alone, one full page each, at the very end
+function LastPageImage({ file }) {
+  return <FullPagePhoto file={file} />;
+}
 function DocumentPage({ doc, n, file }) {
   const pdfs = (doc.files || []).filter((f) => f.type === 'application/pdf').length;
   return (
@@ -814,6 +819,8 @@ export function sheetsFor(c) {
     const first = documentFirstPage(doc);
     if (first) list.push({ id: `docpage${i}`, el: <DocumentPage doc={doc} n={i + 1} file={first} /> });
   });
+  // last: the value details image(s) attached in Land valuation
+  (c.d.land?.reportImages || []).filter(printable).forEach((file, i) => list.push({ id: `lastpage${i}`, el: <LastPageImage file={file} /> }));
   return list;
 }
 

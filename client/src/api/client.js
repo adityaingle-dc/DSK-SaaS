@@ -125,6 +125,8 @@ export const api = {
   setDrafter: (id, drafter) => request(`/valuations/${id}/drafter`, { method: 'PATCH', body: { drafter } }),
   // a new drafting sheet from this sheet's site inspection, for another report
   reuseValuation: (id) => request(`/valuations/${id}/reuse`, { method: 'POST' }),
+  // the field evaluator drafts their own site inspection (saves the sheet, skips the drafters' queue)
+  startDrafting: (id, data) => request(`/valuations/${id}/start-drafting`, { method: 'POST', body: { data } }),
   stats: (query) => request('/valuations/stats', { query }),
   listValuations: (query) => request('/valuations', { query }),
   valuationBoard: (query) => request('/valuations/board', { query }),
