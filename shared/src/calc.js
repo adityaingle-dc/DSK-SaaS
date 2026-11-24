@@ -130,12 +130,12 @@ function sumTiered(items, selected = {}) {
   for (const item of items) {
     const sel = selected[item.key];
     const tier = num(sel?.tier);
-    if (!tier) continue;
+    // the amount typed for the item; older sheets may only have a picked value (rate × qty)
+    const custom = !!sel && sel.amount !== undefined && sel.amount !== null && sel.amount !== '' && Number.isFinite(Number(sel.amount));
+    if (!tier && !custom) continue;
     const rate = tierRate(item, tier);
     // FIX: per-unit rates (Rs/sq.ft, Rs/rft) are multiplied by quantity instead of being added as lump sums.
     const qty = item.unit ? num(sel.qty) : 1;
-    // an exact amount entered for the item wins over the grade's standard rate
-    const custom = sel.amount !== undefined && sel.amount !== null && sel.amount !== '' && Number.isFinite(Number(sel.amount));
     const amount = custom ? Math.max(0, Number(sel.amount)) : rate * qty;
     total += amount;
     lines.push({ key: item.key, label: item.label, tier, rate, qty: item.unit ? qty : null, unit: item.unit, amount, custom });

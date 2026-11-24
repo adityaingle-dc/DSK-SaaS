@@ -51,6 +51,13 @@ export function buildContext(v) {
 
   return {
     v, d, r, g, a, p, s, kind, tpl, bankRef,
+    // Bank of Baroda: same report, data arranged as in the bank's formats (BCC:BR:114:694) — Annexure II-a for land &
+    // building, II-b for flats
+    bob: /baroda/i.test(g.bankName || ''),
+    // Punjab National Bank: same report, data arranged as in PNB's formats — Appendix I (immovable properties),
+    // II (flats), III (agricultural land). Not Punjab & Sind Bank.
+    pnb: /punjab national/i.test(g.bankName || '') || /^\s*pnb\s*$/i.test(g.bankName || ''),
+    agri: /agri/i.test(g.propertyType || ''),
     place: g.place || FIRM.defaultPlace,
     valuationDate: dmy(g.valuationDate),
     inspectionDate: dmy(g.inspectionDate),
@@ -201,7 +208,7 @@ function Certificate({ c }) {
 function BasicData({ c, part = 1 }) {
   const sides = c.d.boundaries?.sides || {};
   const loc = c.p.location;
-  if (part === 2) return <BasicData2 c={c} sides={sides} loc={loc} />;
+  if (part === 2) return c.bob ? <BobBasicData2 c={c} sides={sides} loc={loc} /> : <BasicData2 c={c} sides={sides} loc={loc} />;
   return (
     <>
       <div className="annex-head">
@@ -226,14 +233,18 @@ function BasicData({ c, part = 1 }) {
             </tr>
           ))}
           <Row n="4" label="Name of the Owner(s) and his/their address with Phone no." k="a.owner" v={lines(c.owner, c.ownerRelation, c.ownerAddress, c.ownerPhones)} />
-          <Row n="5" label="Brief description of the property" k="a.brief" v={`The Property is ${c.p.description || ''} over ${c.p.numberType || ''} ${c.p.number || ''}, ${[c.p.street, c.p.village, c.p.localBodyName, c.p.district, c.p.pincode].filter(Boolean).join(', ')}.${c.p.landmark ? ` Land Mark ${c.p.landmark}` : ''}${c.r.land ? ` with total site area of ${num(c.r.land.siteArea)} Sq.Yds` : ''} Belongs to Applicant : ${c.owner}${c.ownerRelation ? `, ${c.ownerRelation}` : ''}`} />
-          <tr><td className="c-n" rowSpan={7}>6</td><th>Location of property</th><td><F k="a.loc" v={c.p.description} /></td></tr>
-          <tr><th>a) {c.p.numberType || 'Plot No. / H.No.'}</th><td><F k="a.loc.no" v={c.p.number} /></td></tr>
-          <tr><th>b) Name of Nagar / Layout</th><td><F k="a.loc.layout" v="NA" /></td></tr>
-          <tr><th>c) S.F. No / T.S. No. / R.S. No.</th><td><F k="a.loc.sy" v={c.p.surveyNo || 'NA'} /></td></tr>
-          <tr><th>d) Village / Block</th><td><F k="a.loc.village" v={c.p.village} /></td></tr>
-          <tr><th>e) Taluk / Ward</th><td><F k="a.loc.taluk" v={c.p.localBodyName} /></td></tr>
-          <tr><th>f) Mandal / District / Municipality</th><td><F k="a.loc.district" v={[c.p.localBodyType && c.p.localBodyName ? `${c.p.localBodyName} ${c.p.localBodyType}` : '', c.p.district].filter(Boolean).join(', ')} /></td></tr>
+          <Row n="5" label="Brief description of the property" k="a.brief" v={`The Property is ${c.p.description || ''} over ${c.p.numberType || ''} ${c.p.number || ''}, ${[c.p.street, c.p.village, c.p.localBodyName, c.p.district, c.p.pincode].filter(Boolean).join(', ')}.${c.p.landmark ? ` Land Mark ${c.p.landmark}` : ''}${c.r.land ? ` with total site area of ${num(c.r.land.siteArea)} Sq.Yds` : ''} Belongs to Applicant : ${c.owner}${c.ownerRelation ? `, ${c.ownerRelation}` : ''}${c.bob && c.d.site?.landTenure ? `\nTenure: ${c.d.site.landTenure}` : ''}`} />
+          {c.bob ? <BobLocation c={c} /> : (
+            <>
+              <tr><td className="c-n" rowSpan={7}>6</td><th>Location of property</th><td><F k="a.loc" v={c.p.description} /></td></tr>
+              <tr><th>a) {c.p.numberType || 'Plot No. / H.No.'}</th><td><F k="a.loc.no" v={c.p.number} /></td></tr>
+              <tr><th>b) Name of Nagar / Layout</th><td><F k="a.loc.layout" v="NA" /></td></tr>
+              <tr><th>c) S.F. No / T.S. No. / R.S. No.</th><td><F k="a.loc.sy" v={c.p.surveyNo || 'NA'} /></td></tr>
+              <tr><th>d) Village / Block</th><td><F k="a.loc.village" v={c.p.village} /></td></tr>
+              <tr><th>e) Taluk / Ward</th><td><F k="a.loc.taluk" v={c.p.localBodyName} /></td></tr>
+              <tr><th>f) Mandal / District / Municipality</th><td><F k="a.loc.district" v={[c.p.localBodyType && c.p.localBodyName ? `${c.p.localBodyName} ${c.p.localBodyType}` : '', c.p.district].filter(Boolean).join(', ')} /></td></tr>
+            </>
+          )}
           <Row n="7" label="Postal address of the property with pin code" k="a.postal" v={c.propertyAddress} />
           <tr><td className="c-n" rowSpan={3}>8</td><th>Residential Area</th><td><F k="a.resArea" v={c.d.site?.classificationLocality || ''} /></td></tr>
           <tr><th>Commercial Area</th><td><F k="a.comArea" v="" /></td></tr>
@@ -294,6 +305,7 @@ function BasicData2({ c, sides, loc }) {
 }
 
 function SiteCharacteristics({ c }) {
+  if (c.bob) return <BobSiteCharacteristics c={c} />;
   const site = c.d.site || {};
   const rows = catalog.siteCharacteristics.filter((x) => site[x.key]);
   return (
@@ -302,7 +314,7 @@ function SiteCharacteristics({ c }) {
       <table className="t grid two">
         <tbody>
           {rows.map((x, i) => (
-            <tr key={x.key}><th>{i + 1} {x.label}</th><td><F k={`site.${x.key}`} v={site[x.key]} block /></td></tr>
+            <tr key={x.key}><th>{i + 1} {x.label}</th><td><F k={`site.${x.key}`} v={x.key === 'roadWidth' && Number(c.d.boundaries?.roadWidthFt) > 0 ? `${Number(c.d.boundaries.roadWidthFt)} ft wide (${Number(c.d.boundaries.roadWidthFt) < 20 ? 'below' : 'above'} 20 ft)` : site[x.key]} block /></td></tr>
           ))}
           <tr><th>{rows.length + 1} Advantages of the site</th><td><F k="site.advantages" v={(site.advantages || []).map((a, i) => `${i + 1}. ${a}`).join('\n') || 'Nil'} block /></td></tr>
           <tr><th>{rows.length + 2} General remarks</th><td><F k="site.remarks" v={lines(site.specialRemarks, site.disadvantages && site.disadvantages !== 'Nil' ? `Disadvantages: ${site.disadvantages}` : '')} block /></td></tr>
@@ -319,8 +331,8 @@ function LandValuation({ c }) {
   const dim = (s) => sides[s]?.dimActual || sides[s]?.dimDeed || '';
   return (
     <>
-      <h3 className="u ctr">III. VALUATION</h3>
-      <h3 className="ctr">PART A - Valuation of Land</h3>
+      {c.pnb && c.agri ? <h3 className="u ctr">III. VALUATION OF AGRICULTURAL LAND</h3> : c.pnb ? <h3 className="u ctr">XIV. VALUATION</h3> : <h3 className="u ctr">III. VALUATION</h3>}
+      {!(c.pnb && c.agri) && <h3 className="ctr">PART A - Valuation of Land</h3>}
       <table className="t grid">
         <tbody>
           <Row n="1" label="Size of plot – North & South" k="l.ns" v={`N : ${dim('north')} , S : ${dim('south')}`} />
@@ -334,7 +346,7 @@ function LandValuation({ c }) {
           <Row n="(ii)" label="Unit rate adopted in this valuation after considering the characteristics of the subject plot" k="l.pmr" v={`Rs. ${num(land.marketRate, 0)} /Sq. Yd`} />
           <tr><td className="c-n">(iii)</td><th>Value of Land by adopting PMR &nbsp; {num(L.siteArea)} Sq.Yds x {num(land.marketRate, 0)} Rs/Sq.Yd</th><td className="r b"><F k="l.pmrValue" v={rs(L.pmrValue)} /></td></tr>
           <tr className="sec"><td colSpan={3}>C – Extra items</td></tr>
-          {(L.extraItems || []).map((x, i) => (
+          {(L.extraItems || []).filter((x) => !(bobWallInServices(c) && x.key === 'compoundWall')).map((x, i) => (
             <Row key={x.key} n={`(${['i', 'ii', 'iii'][i]})`} label={x.key === 'compoundWall' ? 'Compound wall/fencing' : x.key === 'gate' ? 'Gate' : 'Power supply'} k={`l.${{ compoundWall: 'cw', gate: 'gate', powerSupply: 'power' }[x.key]}`}
               v={x.amount ? (x.qty != null ? `${num(x.qty)} ${x.unit} x Rs. ${num(x.rate, 0)} /${x.unit === 'No.' ? 'No.' : x.unit} = ${rs(x.amount)}` : rs(x.amount)) : ''} />
           ))}
@@ -351,6 +363,16 @@ function BuildingTech({ c }) {
   const B = c.r.building;
   const floorNames = (b.floors || []).map((f) => f.floor).filter(Boolean);
   const floorsLabel = floorNames.every((f) => FLOORS.includes(f)) ? floorNames.join(' and ') : floorNames.map(floorName).join(' and ');
+  // our extra details (not in the Bank of Baroda list): between a)–d) normally; after j) for Bank of Baroda
+  const techExtras = [
+    <Row key="q" label="Quality of construction" k="bt.quality" v={b.constructionQuality} />,
+    <Row key="ap" label="Appearance of Building" k="bt.appearance" v={b.appearance} />,
+  ];
+  const lifeRows = [
+    <Row key="age" label="Age of Building" k="bt.age" v={B.age} />,
+    <Row key="fl" label="Expected future life of building" k="bt.future" v={B.age == null ? '' : Math.max(B.life - B.age, 0)} />,
+    <Row key="tl" label="Total life of Building" k="bt.life" v={B.life} />,
+  ];
   return (
     <>
       <h3 className="ctr">PART B - Valuation of Building</h3>
@@ -359,12 +381,9 @@ function BuildingTech({ c }) {
         <tbody>
           <Row label="a) Type of Building" k="bt.type" v={b.buildingType} />
           <Row label="b) Type of construction" k="bt.construction" v={b.constructionType} />
-          <Row label="Quality of construction" k="bt.quality" v={b.constructionQuality} />
-          <Row label="Appearance of Building" k="bt.appearance" v={b.appearance} />
+          {!c.bob && techExtras}
           <Row label="c) Year of Construction" k="bt.year" v={b.yearOfConstruction} />
-          <Row label="Age of Building" k="bt.age" v={B.age} />
-          <Row label="Expected future life of building" k="bt.future" v={B.age == null ? '' : Math.max(B.life - B.age, 0)} />
-          <Row label="Total life of Building" k="bt.life" v={B.life} />
+          {!c.bob && lifeRows}
           <Row label="d) Number of floors and height of each floor including basement, if any" k="bt.floors" v={`${floorsLabel ? `${floorsLabel}${floorNames.every((f) => FLOORS.includes(f)) ? ' Floor' : ''} Building` : ''}, Roof Height = 11' each floor`} />
         </tbody>
       </table>
@@ -395,6 +414,11 @@ function BuildingTech({ c }) {
           <tr><th>j) Any other comments by our empanelled valuer on authentic of approved plan?</th><td colSpan={2}><F k="bt.appComments" v={lines(b.approvalComments, b.approvalDeviations)} block /></td></tr>
         </tbody>
       </table>
+      {c.bob && (
+        <table className="t grid two">
+          <tbody>{techExtras}{lifeRows}</tbody>
+        </table>
+      )}
       <div className="note"><F k="bt.method" v="Value of building is estimated by adopting suitable unit plinth area rate depending upon the specifications. Depreciation is calculated by straight-line method assuming a salvage value of 10%" block /></div>
     </>
   );
@@ -414,8 +438,10 @@ function BuildingSpecs({ c }) {
     ['Flooring, Skirting, Dadoing', 'spec.floor', b.floorFinish],
     ['Special finish as marble, granite, wooden paneling, grills, etc.', 'spec.special', ''],
     ['Roofing including weather proof course', 'spec.roof', lines(b.roof, b.weatheringCourse)],
-    ['Drainage', 'spec.drain', 'NA'],
+    ['Drainage', 'spec.drain', c.bob ? (bobLines(c, BOB_DRAINAGE).map((x) => x.label).join(', ') || 'NA') : 'NA'],
   ];
+  // Bank of Baroda numbers compound wall, electrical and plumbing on after the 10 specification rows
+  const n = c.bob ? { cw: 11, el: 12 } : { cw: 2, el: 3 };
   const elec = [['a) Type of wiring', 'wiring'], ['b) Class of fittings', 'fittingsClass'], ['c) Number of light points', 'lightPoints'], ['d) Fan points', 'fanPoints'], ['e) Spare plug points', 'sparePlugPoints'], ['f) Any other item', 'otherProvisions']];
   const ePct = Number(b.electricalLumpsumPct || 5);
   return (
@@ -429,7 +455,7 @@ function BuildingSpecs({ c }) {
       </table>
       <table className="t grid">
         <tbody>
-          <tr><td className="c-n" rowSpan={4}>2</td><th>Compound Wall (R.ft)</th><td><F k="cw.amount" v={cwItem?.amount ? rs(cwItem.amount) : ''} /></td></tr>
+          <tr><td className="c-n" rowSpan={4}>{n.cw}</td><th>Compound Wall (R.ft)</th><td><F k="cw.amount" v={cwItem?.amount ? rs(cwItem.amount) : ''} /></td></tr>
           <tr><th>Height</th><td><F k="cw.height" v={c.d.land?.compoundWallHeight ? `${c.d.land.compoundWallHeight}${/['"]|ft/.test(c.d.land.compoundWallHeight) ? '' : ' ft'}` : "4'6\""} /></td></tr>
           <tr><th>Length</th><td><F k="cw.length" v={cwItem?.qty ? `${num(cwItem.qty)} Rft` : ''} /></td></tr>
           <tr><th>Type of construction</th><td><F k="cw.type" v="Brick Masonary with Cement Motor plaster" /></td></tr>
@@ -437,8 +463,8 @@ function BuildingSpecs({ c }) {
       </table>
       <table className="t grid">
         <tbody>
-          <tr><td className="c-n" rowSpan={8}>3</td><th>Electrical Installation</th><td /></tr>
-          {elec.map(([label, key]) => <tr key={key}><th>{label}</th><td><F k={`el.${key}`} v={b[key]} block /></td></tr>)}
+          <tr><td className="c-n" rowSpan={8}>{n.el}</td><th>Electrical Installation</th><td /></tr>
+          {elec.map(([label, key]) => <tr key={key}><th>{label}</th><td><F k={`el.${key}`} v={b[key] || catalog.electrical.find((e) => e.key === key)?.options[0] || ''} block /></td></tr>)}
           <tr><th>Total Lumsum @ {ePct}% of Civil Works (Part C)</th><td className="r b"><F k="el.total" v={rs(B.services.electricalLumpsum)} /></td></tr>
         </tbody>
       </table>
@@ -446,15 +472,16 @@ function BuildingSpecs({ c }) {
   );
 }
 
-function BuildingValuationTable({ c }) {
+// part: 'plumbing' or 'details' prints only that half (PNB puts plumbing under Engineering, details under Valuation)
+function BuildingValuationTable({ c, part }) {
   const b = c.d.building || {};
   const B = c.r.building;
   const pPct = Number(b.plumbingLumpsumPct || 5);
   return (
     <>
-      <table className="t grid">
+      {part !== 'details' && <table className="t grid">
         <tbody>
-          <tr><td className="c-n" rowSpan={8}>4</td><th>Plumbing Installation</th><td /></tr>
+          <tr><td className="c-n" rowSpan={8}>{c.bob ? 13 : 4}</td><th>Plumbing Installation</th><td /></tr>
           <tr><th>a) No. of water closets and their type</th><td><F k="pb.closets" v={[b.closets, b.closetType].filter(Boolean).join(' – ') || 'Attached full bathroom & toilets'} /></td></tr>
           <tr><th>b) No. of wash basins</th><td><F k="pb.basins" v={b.washBasins ?? 'Available'} /></td></tr>
           <tr><th>c) No. of urinals</th><td><F k="pb.urinals" v="NA" /></td></tr>
@@ -463,9 +490,9 @@ function BuildingValuationTable({ c }) {
           <tr><th>f) Any other fixtures</th><td><F k="pb.other" v={b.otherFixtures} /></td></tr>
           <tr><th>Total Lumsum @ {pPct}% of Civil Works (Part C)</th><td className="r b"><F k="pb.total" v={rs(B.services.plumbingLumpsum)} /></td></tr>
         </tbody>
-      </table>
-      <h4 className="ctr">Details of Valuation</h4>
-      <table className="t list">
+      </table>}
+      {part !== 'plumbing' && <h4 className="ctr">{c.pnb ? 'PART B - Valuation of Building: Details of Valuation' : 'Details of Valuation'}</h4>}
+      {part !== 'plumbing' && <table className="t list">
         <thead><tr><th>Particulars of item</th><th>Plinth Area</th><th>Estimated replacement rate of construction Rs./Sq.ft</th><th>Age of Building</th><th>Replacement cost Rs.</th><th>Net Value after depreciations Rs.</th></tr></thead>
         <tbody>
           {B.floors.map((f, i) => [
@@ -485,7 +512,7 @@ function BuildingValuationTable({ c }) {
           ])}
           <tr className="total"><td colSpan={5}>Total</td><td><F k="dv.total" v={rs(B.netTotal)} /></td></tr>
         </tbody>
-      </table>
+      </table>}
     </>
   );
 }
@@ -504,7 +531,7 @@ function TierTable({ c, title, sub, keys, prefix, startNo = 1 }) {
             return (
               <tr key={x.key}>
                 <td className="c-n">{startNo + i}</td><th>{x.label}</th>
-                <td className="r"><F k={`${prefix}.${x.key}`} v={l ? `${l.qty && !l.custom ? `${num(l.qty)}  Rs.${num(l.rate, 0)} /${l.unit}  ` : ''}${rs(l.amount)}` : ''} /></td>
+                <td className="r"><F k={`${prefix}.${x.key}`} v={l ? `${l.qty && !l.custom ? `${num(l.qty)}  Rs.${num(l.rate, 0)} /${l.unit}  ` : l.qty && l.unit ? `${num(l.qty)} ${l.unit}  ` : ''}${rs(l.amount)}` : ''} /></td>
               </tr>
             );
           })}
@@ -536,11 +563,214 @@ function Services({ c }) {
   );
 }
 
+// ---------- Bank of Baroda arrangement (our report, data placed as in the bank's Annexure II-a) ----------
+const BOB_C = ['portico', 'poojaDoor', 'sitOut', 'w:overheadTank', 'collapsibleGates'];
+const BOB_D = AMENITY_KEYS;
+const BOB_E = ['toiletRoom', 'lumberRoom', 'waterTankSump', 'gardening', 'openStaircase', 'other'];
+const BOB_WATER = ['openWell', 'deepBore', 'handPump', 'motor', 'corporationTap', 'sump'];
+const BOB_DRAINAGE = ['drainage', 'septicTank', 'undergroundSewerage'];
+// the compound wall moves from Land to F Services only when there is a Part F (building)
+const bobWallInServices = (c) => c.bob && c.kind === 'building';
+// keys → [{ key, label, amount }] with an amount: amenities, or water services when prefixed "w:"
+function bobLines(c, keys) {
+  const water = Object.fromEntries((c.r.building?.services?.water?.lines || []).map((l) => [l.key, l]));
+  return keys.map((k) => {
+    const isWater = k.startsWith('w:') || BOB_WATER.includes(k) || BOB_DRAINAGE.includes(k);
+    const key = k.replace(/^w:/, '');
+    const item = (isWater ? catalog.waterServices : catalog.amenities).find((x) => x.key === key);
+    const l = isWater ? water[key] : c.amenityLines[key];
+    return item && l ? { key, label: item.label, amount: l.amount || 0, line: l } : null;
+  }).filter(Boolean);
+}
+function bobParts(c) {
+  const sum = (xs) => xs.reduce((t, x) => t + (x.amount || 0), 0);
+  const S = c.r.building?.services || {};
+  const wallItem = bobWallInServices(c) ? (c.r.land?.extraItems || []).find((x) => x.key === 'compoundWall') : null;
+  const wall = wallItem?.amount || 0;
+  const C = bobLines(c, BOB_C), D = bobLines(c, BOB_D), E = bobLines(c, BOB_E);
+  const water = bobLines(c, BOB_WATER), drainage = bobLines(c, BOB_DRAINAGE);
+  const F = {
+    water, drainage, wall, wallItem,
+    plumbing: S.plumbingLumpsum || 0, electrical: S.electricalLumpsum || 0,
+  };
+  F.total = sum(water) + F.plumbing + sum(drainage) + wall + F.electrical;
+  return { wall, C: { items: C, total: sum(C) }, D: { items: D, total: sum(D) }, E: { items: E, total: sum(E) }, F };
+}
+
+function BobLocation({ c }) {
+  const p = c.p;
+  const isPlot = !p.numberType || /plot/i.test(p.numberType);
+  const rows = [
+    ['Plot No. / Survey No.', 'a.loc.no', [isPlot && p.number, p.surveyNo && `Sy.No. ${p.surveyNo}`].filter(Boolean).join(', ')],
+    ['Door No.', 'a.loc.door', !isPlot && p.number ? `${p.numberType} ${p.number}` : ''],
+    ['T. S. No. / Village', 'a.loc.village', p.village],
+    ['Ward / Taluka', 'a.loc.taluk', p.localBodyName],
+    ['Mandal / District', 'a.loc.district', [p.localBodyType && p.localBodyName ? `${p.localBodyName} ${p.localBodyType}` : '', p.district].filter(Boolean).join(', ')],
+  ].filter((x) => x[2]);
+  return (
+    <>
+      <tr><td className="c-n" rowSpan={rows.length + 1}>6</td><th>Location of property</th><td><F k="a.loc" v={p.description} /></td></tr>
+      {rows.map(([label, k, v], i) => <tr key={k}><th>{'abcde'[i]}) {label}</th><td><F k={k} v={v} /></td></tr>)}
+    </>
+  );
+}
+
+function BobBasicData2({ c, sides, loc }) {
+  const b = c.d.boundaries || {};
+  const roles = sideRoles(b.facing);
+  const roads = Array.isArray(b.roadSides) ? b.roadSides : [];
+  const tag = (side) => {
+    const d = side[0].toUpperCase() + side.slice(1);
+    const t = [roles[d], roads.includes(d) && 'Road'].filter(Boolean).join(', ');
+    return t ? <small className="side-role"> ({t})</small> : null;
+  };
+  // boundary and its dimension together, as per the deed and as per actuals
+  const cell = (s, actual) => {
+    const x = sides[s] || {};
+    const bound = actual ? x.actual || x.deed : x.deed;
+    const dim = actual ? x.dimActual || x.dimDeed : x.dimDeed;
+    return lines(bound, dim && `Dimension: ${dim}`);
+  };
+  return (
+    <table className="t grid">
+      <tbody>
+        <Row n="11" label="Whether covered under any State / Central Govt. enactment's (e.g., Urban Land Ceiling Act) or notified under agency area / scheduled area / cantonment area." k="a.enactment" v="No" />
+        <Row n="12" label="In case it is an agricultural land, any conversion to house site plots is contemplated" k="a.agri" v="No" />
+        <tr className="sub-head"><td className="c-n">13</td><th>Dimensions / Boundaries of the property</th><th className="split"><span>A – As per the Deed</span><span className="sp-r">B – Actuals</span></th></tr>
+        {['north', 'south', 'east', 'west'].map((side) => (
+          <tr key={side}>
+            <td className="c-n" />
+            <th className="cap">{side}{tag(side)}</th>
+            <td className="split"><F k={`b.${side}.deed`} v={cell(side, false)} block /><span className="sp-r"><F k={`b.${side}.actual`} v={cell(side, true)} block /></span></td>
+          </tr>
+        ))}
+        <tr><td className="c-n">13.2</td><th>Latitude, Longitude and Coordinates of the site</th><td className="split"><F k="a.lat" v={loc ? `Latitude: ${loc.lat}` : ''} /><span className="sp-r"><F k="a.lon" v={loc ? `Longitude: ${loc.lon}` : ''} /></span></td></tr>
+        {c.r.land && (
+          <>
+            <tr><td className="c-n">14</td><th>Extent of the site</th><td className="split"><F k="a.extentDoc" v={num(c.d.land?.siteAreaDocument)} /><span className="sp-r"><F k="a.extentAct" v={c.d.land?.siteAreaActual ? `${num(c.d.land.siteAreaActual)} Sq. Yds` : ''} /></span></td></tr>
+            <Row n="15" label="Extent of the site considered for valuation (least of 13A & 13B)" k="a.extentConsidered" v={`${num(c.r.land.siteArea)} Sq. Yds`} />
+          </>
+        )}
+        {c.kind === 'flat' && (
+          <>
+            {c.d.flat?.apartmentSiteArea ? <Row n="14" label="Extent of the site (apartment)" k="a.extentDoc" v={`${num(c.d.flat.apartmentSiteArea)} Sq. Yds`} /> : null}
+            {c.d.flat?.uds ? <Row n="15" label="Extent of the site considered for valuation (undivided share of land)" k="a.extentConsidered" v={`${num(c.d.flat.uds)} Sq. Yds`} /> : null}
+          </>
+        )}
+        <Row n="16" label="Whether occupied by the owner / tenant? If occupied by tenant, since how long? Rent received per month." k="a.occupancy"
+          v={c.kind === 'flat' ? lines(c.d.flat?.occupancy || 'Owner occupied', c.d.flat?.monthlyRent && `Rent Rs.${num(c.d.flat.monthlyRent, 0)} per month`) : c.d.land?.rentalValue || 'Owner occupied'} />
+      </tbody>
+    </table>
+  );
+}
+
+function BobSiteCharacteristics({ c }) {
+  const site = c.d.site || {};
+  const b = c.d.boundaries || {};
+  const label = (k) => catalog.siteCharacteristics.find((x) => x.key === k)?.label || k;
+  const roads = Array.isArray(b.roadSides) ? b.roadSides : [];
+  const facing = b.facing ? `${b.facing} facing${roads.length ? ` · Road on ${roads.join(' & ')}` : ''}` : '';
+  const width = Number(b.roadWidthFt) > 0 ? `${Number(b.roadWidthFt)} ft wide (${Number(b.roadWidthFt) < 20 ? 'below' : 'above'} 20 ft)` : site.roadWidth;
+  // the bank's order; our extra answers folded into the nearest item
+  const rows = [
+    ['classificationLocality', label('classificationLocality'), lines(site.classificationLocality, site.characterLocality)],
+    ['surroundingDevelopment', label('surroundingDevelopment'), site.surroundingDevelopment],
+    ['flooding', label('flooding'), site.flooding],
+    ['civicAmenities', label('civicAmenities'), site.civicAmenities],
+    ['landLevel', label('landLevel'), site.landLevel],
+    ['landShape', label('landShape'), site.landShape],
+    ['permittedUse', label('permittedUse'), site.permittedUse],
+    ['usageRestriction', label('usageRestriction'), site.usageRestriction],
+    ['approvedLayout', label('approvedLayout'), site.approvedLayout],
+    ['plotPosition', label('plotPosition'), site.plotPosition],
+    ['roadFacilities', label('roadFacilities'), lines(site.roadFacilities, facing)],
+    ['roadType', label('roadType'), site.roadType],
+    ['roadWidth', label('roadWidth'), width],
+    ['landLocked', label('landLocked'), site.landLocked],
+    ['waterPotentiality', label('waterPotentiality'), site.waterPotentiality],
+    ['sewerage', label('sewerage'), site.sewerage],
+    ['powerSupply', label('powerSupply'), site.powerSupply],
+  ].filter((x) => x[2]);
+  const remarks = lines(site.specialRemarks, site.drawingApprovalIssue && `Drawing approval: ${site.drawingApprovalIssue}`, site.disadvantages && site.disadvantages !== 'Nil' ? `Disadvantages: ${site.disadvantages}` : '');
+  return (
+    <>
+      <h4>II. CHARACTERSTICS OF THE SITE</h4>
+      <table className="t grid two">
+        <tbody>
+          {rows.map(([k, l, v], i) => <tr key={k}><th>{i + 1} {l}</th><td><F k={`site.${k}`} v={v} block /></td></tr>)}
+          <tr><th>{rows.length + 1} Advantages of the site</th><td><F k="site.advantages" v={(site.advantages || []).map((a, i) => `${i + 1}. ${a}`).join('\n') || 'Nil'} block /></td></tr>
+          <tr><th>{rows.length + 2} Special remarks, if any, like threat of acquisition of land for public service purposes, road widening or applicability of CRZ provisions etc.</th><td><F k="site.remarks" v={remarks || 'Nil'} block /></td></tr>
+        </tbody>
+      </table>
+    </>
+  );
+}
+
+function BobPartTable({ title, sub, part, prefix }) {
+  return (
+    <>
+      <h3 className="ctr">{title}</h3>
+      {sub && <div className="ctr muted-s">{sub}</div>}
+      <table className="t grid amounts">
+        <tbody>
+          {part.items.map((x, i) => (
+            <tr key={x.key}><td className="c-n">{i + 1}</td><th>{x.label}</th><td className="r"><F k={`${prefix}.${x.key}`} v={rs(x.amount)} /></td></tr>
+          ))}
+          {!part.items.length && <tr><td className="c-n" /><th>Nil</th><td /></tr>}
+          <tr className="total"><th colSpan={2}>Total</th><td className="r"><F k={`${prefix}.total`} v={rs(part.total)} /></td></tr>
+        </tbody>
+      </table>
+    </>
+  );
+}
+
+function BobServices({ part: F_ }) {
+  const sub = (xs, prefix) => xs.map((x) => <tr key={x.key}><th className="indent">{x.label}</th><td className="r"><F k={`sv.${x.key}`} v={rs(x.amount)} /></td></tr>);
+  const rows = [];
+  let n = 0;
+  if (F_.water.length || F_.plumbing) {
+    n += 1;
+    rows.push(<tr key="w"><td className="c-n" rowSpan={F_.water.length + 2}>{n}</td><th>Water supply arrangements</th><td /></tr>, ...sub(F_.water), <tr key="pl"><th className="indent">Plumbing installation lumpsum</th><td className="r"><F k="sv.plumb" v={rs(F_.plumbing)} /></td></tr>);
+  }
+  if (F_.drainage.length) {
+    n += 1;
+    rows.push(<tr key="d"><td className="c-n" rowSpan={F_.drainage.length + 1}>{n}</td><th>Drainage arrangements</th><td /></tr>, ...sub(F_.drainage));
+  }
+  if (F_.wall) {
+    n += 1;
+    rows.push(<tr key="cw"><td className="c-n">{n}</td><th>Compound wall{F_.wallItem?.qty ? ` (${num(F_.wallItem.qty)} ${F_.wallItem.unit || 'Rft'})` : ''}</th><td className="r"><F k="sv.wall" v={rs(F_.wall)} /></td></tr>);
+  }
+  if (F_.electrical) {
+    n += 1;
+    rows.push(<tr key="el"><td className="c-n">{n}</td><th>C. B. deposits, fittings etc. (Electrical installation lumpsum)</th><td className="r"><F k="sv.elec" v={rs(F_.electrical)} /></td></tr>);
+  }
+  return (
+    <>
+      <h3 className="ctr">PART F – SERVICES (Value after depreciation)</h3>
+      <table className="t grid amounts">
+        <tbody>
+          {rows}
+          <tr className="total"><th colSpan={2}>Total</th><td className="r"><F k="sv.total" v={rs(F_.total)} /></td></tr>
+        </tbody>
+      </table>
+    </>
+  );
+}
+
 function Abstract({ c }) {
   const { r, s } = c;
   const group = (keys) => keys.reduce((sum, k) => sum + (c.amenityLines[k]?.amount || 0), 0);
   const rows = [['A', 'Land', r.land?.glrValue, r.land?.fairMarketValue]];
-  if (c.kind === 'building') {
+  if (c.kind === 'building' && c.bob) {
+    // Bank of Baroda parts: compound wall under F Services (out of Land), overhead tank under C Extra items (out of F)
+    const P = bobParts(c);
+    rows[0] = ['A', 'Land', r.land?.glrValue, (r.land?.fairMarketValue || 0) - P.wall];
+    rows.push(['B', 'Building', r.building.bookValue, r.building.netTotal]);
+    rows.push(['C', 'Extra Items', null, P.C.total]);
+    rows.push(['D', 'Amenities', null, P.D.total]);
+    rows.push(['E', 'Miscellaneous', null, P.E.total]);
+    rows.push(['F', 'Services', null, P.F.total]);
+  } else if (c.kind === 'building') {
     rows.push(['B', 'Building', r.building.bookValue, r.building.netTotal]);
     rows.push(['C', 'Extra Items', null, group(EXTRA_KEYS)]);
     rows.push(['D', 'Amenities', null, group(AMENITY_KEYS)]);
@@ -557,7 +787,7 @@ function Abstract({ c }) {
   const pmrTotal = rows.reduce((t, x) => t + (x[3] || 0), 0);
   return (
     <>
-      <h3 className="ctr">PART F - ABSTRACT VALUE</h3>
+      <h3 className="ctr">{c.bob ? 'ABSTRACT VALUE' : 'PART F - ABSTRACT VALUE'}</h3>
       <h4>Total abstract of the entire property</h4>
       <table className="t list abstract">
         <thead>
@@ -570,13 +800,14 @@ function Abstract({ c }) {
           ))}
           <tr className="total"><td colSpan={2}>Total</td><td className="r"><F k="ab.glrTotal" v={rs(glrTotal)} /></td><td className="r"><F k="ab.pmrTotal" v={rs(pmrTotal)} /></td></tr>
           <tr className="total"><td colSpan={2}>Say</td><td className="r"><F k="ab.glrSay" v={rs(s.bookValue)} /></td><td className="r"><F k="ab.pmrSay" v={rs(s.fairMarketValue)} /></td></tr>
-          <tr className="total"><td colSpan={3}>Present market value (F)</td><td className="r"><F k="ab.pmv" v={rs(s.fairMarketValue)} /></td></tr>
+          <tr className="total"><td colSpan={3}>{c.bob ? 'Present market value' : 'Present market value (F)'}</td><td className="r"><F k="ab.pmv" v={rs(s.fairMarketValue)} /></td></tr>
         </tbody>
       </table>
       <h4>ANY OTHER DETAILS:</h4>
       <div className="note"><F k="ab.otherDetails" v={lines('(Valuation: Here the approved valuer should discuss in detail his approach to valuation of property and Indicate how the value has been arrived at, supported by necessary calculations. Also such aspects as i) Saleability ii) likely rental values in future and iii) any likely income it may generate may be discussed).', c.d.land?.saleability && `Saleability: ${c.d.land.saleability}`, c.d.land?.rentalValue && `Likely rental value: ${c.d.land.rentalValue}`)} block /></div>
       <p>As a result of my appraisal and analysis it is my considered opinion that the present fair market value of the above property in the prevailing condition with aforesaid specifications as of {c.valuationDate} is</p>
       <ValueLines c={c} prefix="ab.final" />
+      {c.pnb && <PnbOtherDetails c={c} />}
       <Signature c={c} label="Name and official seal of the Approved Valuer" />
       <div className="encl">Encl: 1 Declaration from the valuer in Format (Annexure - 6)<br />2 Model Code of conduct for valuer (Annexure - 7)</div>
     </>
@@ -785,20 +1016,37 @@ function Photos({ c, page = 0, pages = 1 }) {
 
 // Ordered list of sheets for this valuation (mirrors the 17–19 page bank format)
 export function sheetsFor(c) {
+  if (c.pnb) return pnbSheets(c);
   const list = [
     { id: 'cert', letterhead: true, el: <Certificate c={c} /> },
     { id: 'basic1', el: <BasicData c={c} part={1} /> },
     { id: 'basic2', el: <><BasicData c={c} part={2} />{c.kind !== 'flat' && <SiteCharacteristics c={c} />}</> },
   ];
   if (c.kind !== 'flat') list.push({ id: 'land', el: <LandValuation c={c} /> });
-  if (c.kind === 'building') {
+  if (c.kind === 'building' && c.bob) {
+    const P = bobParts(c);
+    list.push({ id: 'bld1', el: <BuildingTech c={c} /> });
+    list.push({ id: 'bld2', el: <BuildingSpecs c={c} /> });
+    list.push({ id: 'bld3', el: <><BuildingValuationTable c={c} /><BobPartTable title="PART C – EXTRA ITEMS" sub="(Value after Depreciation)" part={P.C} prefix="ex" /></> });
+    list.push({ id: 'amen', el: <><BobPartTable title="PART D – AMENITIES" part={P.D} prefix="am" /><BobPartTable title="PART E – MISCELLANEOUS" part={P.E} prefix="mi" /></> });
+    list.push({ id: 'services', el: <BobServices c={c} part={P.F} /> });
+  } else if (c.kind === 'building') {
     list.push({ id: 'bld1', el: <BuildingTech c={c} /> });
     list.push({ id: 'bld2', el: <BuildingSpecs c={c} /> });
     list.push({ id: 'bld3', el: <><BuildingValuationTable c={c} /><TierTable c={c} title="PART C – EXTRA ITEMS" sub="(Value after Depreciation)" keys={EXTRA_KEYS} prefix="ex" /></> });
     list.push({ id: 'amen', el: <><TierTable c={c} title="PART D – AMENITIES" keys={AMENITY_KEYS} prefix="am" /><TierTable c={c} title="PART E – MISCELLANEOUS" keys={MISC_KEYS} prefix="mi" /></> });
     list.push({ id: 'services', el: <Services c={c} /> });
   }
-  if (c.kind === 'flat') list.push({ id: 'flat', el: <FlatValuation c={c} /> });
+  if (c.kind === 'flat' && c.bob) {
+    list.push({ id: 'flat', el: <BobFlatBuilding c={c} /> });
+    list.push({ id: 'flat2', el: <BobFlatValuation c={c} /> });
+  } else if (c.kind === 'flat') list.push({ id: 'flat', el: <FlatValuation c={c} /> });
+  return [...list, ...tailSheets(c)];
+}
+
+// the pages every report ends with: abstract, certificate, bank use, declarations, maps, photos, documents
+function tailSheets(c) {
+  const list = [];
   list.push(
     { id: 'abstract', el: <Abstract c={c} /> },
     { id: 'partg', el: <PartG c={c} /> },
@@ -822,6 +1070,521 @@ export function sheetsFor(c) {
   // last: the value details image(s) attached in Land valuation
   (c.d.land?.reportImages || []).filter(printable).forEach((file, i) => list.push({ id: `lastpage${i}`, el: <LastPageImage file={file} /> }));
   return list;
+}
+
+// ---------- Punjab National Bank: our report, data arranged as in PNB's Appendix I / II / III ----------
+const hasV = (v) => v !== undefined && v !== null && v !== false && String(v).trim() !== '';
+const SIDES = ['north', 'south', 'east', 'west'];
+
+// numbered rows from parts: { label, k, v } · { label, subs: [[label, k, v]] } · { label, sides: (side, actual) => text }
+// rows without data are left out and the numbering runs on over what is shown
+function pnbRows(parts, prefix) {
+  let n = 0;
+  const out = [];
+  parts.filter(Boolean).forEach((it, idx) => {
+    const key = `${prefix}${idx}`;
+    if (it.sides) {
+      n += 1;
+      out.push(<tr key={key} className="sub-head"><td className="c-n">{n}</td><th>{it.label}</th><th className="split"><span>A – As per the Deed</span><span className="sp-r">B – Actuals</span></th></tr>);
+      SIDES.forEach((s) => out.push(
+        <tr key={`${key}${s}`}><td className="c-n" /><th className="cap">{s}</th><td className="split"><F k={`${prefix}.${idx}.${s}.d`} v={it.sides(s, false)} block /><span className="sp-r"><F k={`${prefix}.${idx}.${s}.a`} v={it.sides(s, true)} block /></span></td></tr>,
+      ));
+      return;
+    }
+    if (it.subs) {
+      const subs = it.subs.filter((s) => hasV(s[2]));
+      if (!subs.length) return;
+      n += 1;
+      out.push(<tr key={key}><td className="c-n" rowSpan={subs.length + 1}>{n}</td><th colSpan={2}>{it.label}</th></tr>);
+      subs.forEach(([label, k, v]) => out.push(<tr key={k}><th className="indent">{label}</th><td><F k={k} v={String(v)} block /></td></tr>));
+      return;
+    }
+    if (!hasV(it.v)) return;
+    n += 1;
+    out.push(<tr key={key}><td className="c-n">{n}</td><th>{it.label}</th><td className={it.bold ? 'b' : ''}><F k={it.k} v={String(it.v)} block /></td></tr>);
+  });
+  return out;
+}
+// a section: its rows, or "NA" when the sheet has nothing for it
+function PnbSection({ title, parts, prefix, children }) {
+  const rows = pnbRows(parts || [], prefix);
+  return (
+    <>
+      <h4>{title}</h4>
+      <table className="t grid">
+        <tbody>
+          {rows.length ? rows : <tr><td className="c-n">–</td><th>—</th><td><F k={`${prefix}.na`} v="NA" /></td></tr>}
+        </tbody>
+      </table>
+      {children}
+    </>
+  );
+}
+
+function pnbLocation(c, prefix) {
+  const p = c.p;
+  const isPlot = !p.numberType || /plot/i.test(p.numberType);
+  return [
+    ['Plot No. / Survey No.', `${prefix}.plot`, [isPlot && p.number, p.surveyNo && `Sy.No. ${p.surveyNo}`].filter(Boolean).join(', ')],
+    ['Door No.', `${prefix}.door`, !isPlot && p.number ? `${p.numberType} ${p.number}` : ''],
+    ['T. S. No. / Village', `${prefix}.village`, p.village],
+    ['Ward / Taluka', `${prefix}.ward`, p.localBodyName],
+    ['Mandal / District', `${prefix}.district`, [p.localBodyType && p.localBodyName ? `${p.localBodyName} ${p.localBodyType}` : '', p.district].filter(Boolean).join(', ')],
+  ];
+}
+const pnbDocs = (c, prefix) => c.docs.map((doc, i) => [documentDescription(doc), `${prefix}.doc${i}`, [doc.number || 'NA', dmy(doc.date), doc.copy || 'Copy'].filter(Boolean).join(' · ')]);
+const pnbSide = (c) => (s, actual) => {
+  const x = (c.d.boundaries?.sides || {})[s] || {};
+  return actual ? x.actual || x.deed : x.deed;
+};
+const pnbDim = (c) => (s, actual) => {
+  const x = (c.d.boundaries?.sides || {})[s] || {};
+  return actual ? x.dimActual || x.dimDeed : x.dimDeed;
+};
+const pnbBoundDim = (c) => (s, actual) => lines(pnbSide(c)(s, actual), pnbDim(c)(s, actual) && `Dimension: ${pnbDim(c)(s, actual)}`);
+const pnbLatLon = (c) => (c.p.location?.lat ? `Latitude: ${c.p.location.lat}, Longitude: ${c.p.location.lon}` : '');
+const pnbRoads = (c) => {
+  const b = c.d.boundaries || {};
+  const site = c.d.site || {};
+  const roads = Array.isArray(b.roadSides) ? b.roadSides : [];
+  return lines(
+    b.facing && `${b.facing} facing${roads.length ? ` · Road on ${roads.join(' & ')}` : ''}`,
+    Number(b.roadWidthFt) > 0 && `${Number(b.roadWidthFt)} ft wide (${Number(b.roadWidthFt) < 20 ? 'below' : 'above'} 20 ft)`,
+    site.roadType, site.roadFacilities,
+  );
+};
+const pnbBrief = (c) => `The Property is ${c.p.description || ''} over ${c.p.numberType || ''} ${c.p.number || ''}, ${[c.p.street, c.p.village, c.p.localBodyName, c.p.district, c.p.pincode].filter(Boolean).join(', ')}.${c.p.landmark ? ` Land Mark ${c.p.landmark}` : ''}`;
+
+// Appendix I — immovable properties (land, buildings)
+function PnbIntroPhysical({ c }) {
+  const site = c.d.site || {};
+  const b = c.d.building || {};
+  const B = c.r.building;
+  const floorsText = c.kind === 'building' ? lines(
+    ...(b.floors || []).map((f, i) => `${floorName(f.floor)}: plinth area ${num(B?.floors?.[i]?.plinthArea)} Sq.ft`),
+    b.yearOfConstruction && `Year of construction: ${b.yearOfConstruction}`,
+    (b.floors || []).length && "Roof height 11' each floor",
+  ) : '';
+  return (
+    <>
+      <PnbSection title="I. INTRODUCTION" prefix="pi" parts={[
+        { label: 'Name of Valuer', k: 'pi.valuer', v: FIRM.name },
+        { label: 'Dates and title deed', subs: [
+          ['Date of inspection', 'pi.insp', c.inspectionDate],
+          ['Title Deed Number and Date', 'pi.deed', c.titleDeed !== '—' ? c.titleDeed : ''],
+          ['Date of Valuation', 'pi.val', c.valuationDate],
+        ] },
+        { label: 'Purpose of Valuation', k: 'pi.purpose', v: c.purpose },
+        { label: 'Name of Property Owner/s', k: 'pi.owner', v: lines(c.owner, c.ownerRelation, c.ownerAddress, c.ownerPhones) },
+        { label: 'Name of Bank/FI as applicable', k: 'pi.bank', v: [c.g.bankName, c.g.branch && `${c.g.branch} Branch`].filter(Boolean).join(', ') },
+        { label: 'Whether occupied by the owner / tenant? If occupied by tenant, since how long?', k: 'pi.occ', v: c.d.land?.rentalValue || 'Owner occupied' },
+      ]} />
+      <PnbSection title="II. PHYSICAL CHARACTERISTICS OF THE ASSET" prefix="pp" parts={[
+        { label: 'Location of the property in the city', subs: pnbLocation(c, 'pp.loc') },
+        { label: 'City / Town and area', subs: [
+          ['City / Town', 'pp.city', c.p.village],
+          ['Residential Area / Commercial Area / Industrial Area', 'pp.area', site.classificationLocality],
+        ] },
+        { label: 'Classification of the area', subs: [
+          ['High / Middle / Poor', 'pp.hmp', 'Middle'],
+          ['Metro / Urban / Semi Urban / Rural', 'pp.usr', 'Semi Urban'],
+        ] },
+        { label: 'Coming under Corporation limit / Village Panchayat / Municipality', k: 'pp.localBody', v: c.p.localBodyType },
+        { label: 'Postal address of the property', k: 'pp.postal', v: c.propertyAddress },
+        { label: 'Latitude, Longitude and Coordinates of the site', k: 'pp.latlon', v: pnbLatLon(c) },
+        { label: 'Area of the plot / land', k: 'pp.area2', v: c.r.land ? `${num(c.r.land.siteArea)} Sq. Yds` : '' },
+        { label: 'Layout plan of the area in which the property is located', k: 'pp.layout', v: site.approvedLayout },
+        { label: 'Development of surrounding areas', k: 'pp.dev', v: site.surroundingDevelopment },
+        { label: 'Details of Roads abutting the property', k: 'pp.roads', v: pnbRoads(c) },
+        { label: 'Whether covered under any State / Central Govt. enactments (e.g. Urban Land Ceiling Act) or notified under agency area / scheduled area / cantonment area', k: 'pp.enact', v: 'No' },
+        { label: 'In case it is an agricultural land, any conversion to house site plots is contemplated', k: 'pp.agri', v: 'No' },
+        { label: 'Boundaries of the property', sides: pnbBoundDim(c) },
+        { label: 'Extent of the site considered for valuation (least of A & B)', k: 'pp.extent', v: c.r.land ? `${num(c.r.land.siteArea)} Sq. Yds` : '' },
+        { label: 'Description of Adjoining properties', subs: SIDES.map((s) => [s[0].toUpperCase() + s.slice(1), `pp.adj.${s}`, pnbSide(c)(s, true)]) },
+        { label: 'Survey no. if any', k: 'pp.survey', v: c.p.surveyNo },
+        { label: 'Type of Building (Residential / Commercial / Industrial)', k: 'pp.btype', v: c.kind === 'building' ? b.buildingType : '' },
+        { label: 'Details of the building / buildings and other improvements (area, height, no. of floors, plinth area floor wise, year of construction)', k: 'pp.bdetails', v: floorsText },
+        { label: 'Plinth area, Carpet area and Saleable area', k: 'pp.plinth', v: c.kind === 'building' && B?.plinthTotal ? `Plinth area: ${num(B.plinthTotal, 3)} Sq.ft` : '' },
+      ]} />
+    </>
+  );
+}
+
+function PnbAspects({ c }) {
+  const site = c.d.site || {};
+  const b = c.kind === 'building' ? c.d.building || {} : {};
+  const land = c.d.land || {};
+  const L = c.r.land;
+  const water = bobLines(c, BOB_WATER).map((x) => x.label);
+  const drain = bobLines(c, BOB_DRAINAGE).map((x) => x.label);
+  return (
+    <>
+      <PnbSection title="III. TOWN PLANNING PARAMETERS" prefix="pt" parts={[
+        { label: 'Master plan provisions related to the property in terms of land use', k: 'pt.master', v: site.permittedUse },
+        { label: 'Date of issue and validity of layout of approved map / plan', k: 'pt.date', v: b.layoutApprovalDate },
+        { label: 'Approved map / plan issuing authority', k: 'pt.auth', v: b.approvalAuthority },
+        { label: 'Whether genuineness or authenticity of approved map / plan is verified', k: 'pt.verified', v: b.approvalVerified },
+        { label: 'Any other comments by our empanelled valuers on authenticity of approved plan', k: 'pt.comments', v: b.approvalComments },
+        { label: 'Planning area / zone', k: 'pt.zone', v: site.classificationLocality },
+        { label: 'Comment on unauthorized constructions if any', k: 'pt.unauth', v: b.approvalDeviations },
+      ]} />
+      <PnbSection title="IV. LEGAL ASPECTS" prefix="pl" parts={[
+        { label: 'Ownership documents', subs: pnbDocs(c, 'pl') },
+        { label: 'Names of Owner/s', k: 'pl.owner', v: lines(c.owner, c.ownerRelation) },
+        { label: 'Comment on whether the IP is independently accessible?', k: 'pl.access', v: site.landLocked },
+        { label: 'Ordinary status of freehold or leasehold including restriction on transfer', k: 'pl.tenure', v: site.landTenure },
+        { label: 'Possibility of frequent flooding / sub-merging', k: 'pl.flood', v: site.flooding },
+        { label: 'Special remarks, if any, like threat of acquisition of land for public service purposes, road widening or applicability of CRZ provisions etc.', k: 'pl.remarks', v: site.specialRemarks },
+        { label: 'Building plan sanction, illegal constructions if any done without plan sanction / violations', k: 'pl.sanction', v: site.drawingApprovalIssue },
+      ]} />
+      <PnbSection title="V. ECONOMIC ASPECTS" prefix="pe" parts={[
+        { label: 'Details of monthly rents being received if any', k: 'pe.rent', v: land.rentalValue },
+      ]} />
+      <PnbSection title="VI. SOCIO-CULTURAL ASPECTS" prefix="ps" parts={[
+        { label: 'Description of the location of property in terms of the social structure of the area', k: 'ps.social', v: site.characterLocality },
+      ]} />
+      <PnbSection title="VII. FUNCTIONAL AND UTILITARIAN ASPECTS" prefix="pf" parts={[]} />
+      <PnbSection title="VIII. INFRASTRUCTURE AVAILABILITY" prefix="pa" parts={[
+        { label: 'Aqua infrastructure', subs: [
+          ['Water supply', 'pa.water', lines(site.waterPotentiality, water.join(', '))],
+          ['Sewerage / sanitation', 'pa.sewer', lines(site.sewerage, drain.join(', '))],
+        ] },
+        { label: 'Other physical infrastructure', subs: [
+          ['Electricity', 'pa.elec', site.powerSupply],
+          ['Roads & Public transportation connectivity', 'pa.roads', lines(site.roadType, site.roadFacilities)],
+          ['Availability of other public utilities nearby', 'pa.civic', site.civicAmenities],
+        ] },
+      ]} />
+      <PnbSection title="IX. MARKETABILITY" prefix="pm" parts={[
+        { label: 'Locational attributes', k: 'pm.loc', v: lines(site.plotPosition, (site.advantages || []).join('; ')) },
+        { label: 'Demand and supply of the kind of subject property', k: 'pm.demand', v: land.saleability },
+        { label: 'Comparable sale prices in the locality', k: 'pm.sales', v: lines(L?.marketRateRange && `Rs.${num(L.marketRateRange[0], 0)} to Rs.${num(L.marketRateRange[1], 0)} /Sq. Yd`, land.marketReference) },
+      ]} />
+    </>
+  );
+}
+
+function PnbEngineering({ c }) {
+  const isB = c.kind === 'building';
+  const b = isB ? c.d.building || {} : {};
+  const B = c.r.building;
+  return (
+    <>
+      <PnbSection title="X. ENGINEERING AND TECHNOLOGY ASPECTS" prefix="px" parts={isB ? [
+        { label: 'Type of construction', k: 'px.type', v: b.constructionType },
+        { label: 'Materials and technology used', k: 'px.materials', v: b.superStructure },
+        { label: 'Specifications', k: 'px.spec', v: 'As per the specifications of construction below' },
+        { label: 'Maintenance issues', k: 'px.maint', v: lines(b.maintenanceExterior && `Exterior: ${b.maintenanceExterior}`, b.maintenanceInterior && `Interior: ${b.maintenanceInterior}`) },
+        { label: 'Age of the building', k: 'px.age', v: B?.age != null ? `${B.age} years` : '' },
+        { label: 'Total life of the building', k: 'px.life', v: B?.life ? `${B.life} years` : '' },
+      ] : []}>
+        {isB && <BuildingSpecs c={c} />}
+        {isB && <BuildingValuationTable c={c} part="plumbing" />}
+      </PnbSection>
+      <PnbSection title="XI. ENVIRONMENTAL FACTORS" prefix="pn" parts={[]} />
+      <PnbSection title="XII. ARCHITECTURAL AND AESTHETIC QUALITY" prefix="pq" parts={isB ? [
+        { label: 'Descriptive account of the building (modern / old fashioned, plain / decorative)', k: 'pq.arch', v: lines(b.appearance, b.constructionQuality) },
+      ] : []} />
+      {/industrial/i.test(c.g.propertyType || '') && <PnbSection title="XIII. IN CASE OF VALUATION OF INDUSTRIAL PROPERTY" prefix="pi2" parts={[]} />}
+    </>
+  );
+}
+
+// Appendix II — flats: General (then our II–VI flat sections, as for Bank of Baroda)
+function PnbFlatGeneral({ c }) {
+  const f = c.d.flat || {};
+  return (
+    <PnbSection title="I. GENERAL" prefix="pg" parts={[
+      { label: 'Name & address of the Valuer', k: 'pg.valuer', v: lines(FIRM.name, FIRM.address.join(', ')) },
+      { label: 'Purpose for which the valuation is made', k: 'pg.purpose', v: c.purpose },
+      { label: 'Dates and title deed', subs: [
+        ['a) Date of inspection', 'pg.insp', c.inspectionDate],
+        ['b) Title Deed Number and Date', 'pg.deed', c.titleDeed !== '—' ? c.titleDeed : ''],
+        ['c) Date on which the valuation is made', 'pg.val', c.valuationDate],
+      ] },
+      { label: 'List of documents produced for perusal', subs: pnbDocs(c, 'pg') },
+      { label: 'Name of the owner(s) and his / their address (es) with Phone no.', k: 'pg.owner', v: lines(c.owner, c.ownerRelation, c.ownerAddress, c.ownerPhones) },
+      { label: 'Brief description of the property', k: 'pg.brief', v: pnbBrief(c) },
+      { label: 'Location of property', subs: pnbLocation(c, 'pg.loc') },
+      { label: 'Postal address of the property', k: 'pg.postal', v: c.propertyAddress },
+      { label: 'City / Town and area', subs: [['City / Town', 'pg.city', c.p.village], ['Residential / Commercial / Industrial Area', 'pg.area', f.usage]] },
+      { label: 'Classification of the area', subs: [['i) High / Middle / Poor', 'pg.hmp', 'Middle'], ['ii) Urban / Semi Urban / Rural', 'pg.usr', 'Semi Urban']] },
+      { label: 'Coming under Corporation limit / Village Panchayat / Municipality', k: 'pg.localBody', v: c.p.localBodyType },
+      { label: 'Whether covered under any State / Central Govt. enactments (e.g. Urban Land Ceiling Act) or notified under agency area / scheduled area / cantonment area', k: 'pg.enact', v: 'No' },
+      { label: 'Boundaries of the property', sides: pnbSide(c) },
+      { label: 'Dimensions of the site / flat', sides: pnbDim(c) },
+      { label: 'Extent of the site', k: 'pg.extent', v: f.apartmentSiteArea ? `${num(f.apartmentSiteArea)} Sq. Yds` : '' },
+      { label: 'Latitude, Longitude & Co-ordinates of flat', k: 'pg.latlon', v: pnbLatLon(c) },
+      { label: 'Extent of the site considered for valuation (undivided share of land)', k: 'pg.uds', v: f.uds ? `${num(f.uds)} Sq. Yds` : '' },
+      { label: 'Whether occupied by the owner / tenant? If occupied by tenant, since how long?', k: 'pg.occ', v: lines(f.occupancy || 'Owner occupied', f.monthlyRent && `Rent Rs.${num(f.monthlyRent, 0)} per month`) },
+    ]} />
+  );
+}
+
+// Appendix III — agricultural land
+function PnbAgri({ c, part }) {
+  const site = c.d.site || {};
+  const land = c.d.land || {};
+  if (part === 1) {
+    return (
+      <PnbSection title="I. GENERAL" prefix="pg" parts={[
+        { label: 'Purpose for which the valuation is made', k: 'pg.purpose', v: c.purpose },
+        { label: 'Dates and ownership document', subs: [
+          ['a) Date of inspection', 'pg.insp', c.inspectionDate],
+          ['b) Number and Date of ownership document', 'pg.deed', c.titleDeed !== '—' ? c.titleDeed : ''],
+          ['c) Date on which the valuation is made', 'pg.val', c.valuationDate],
+        ] },
+        { label: 'List of documents produced for perusal', subs: pnbDocs(c, 'pg') },
+        { label: 'Name of the owner(s) and his / their address (es) with Phone no.', k: 'pg.owner', v: lines(c.owner, c.ownerRelation, c.ownerAddress, c.ownerPhones) },
+        { label: 'Brief description of the property', k: 'pg.brief', v: pnbBrief(c) },
+        { label: 'Location of property', subs: pnbLocation(c, 'pg.loc') },
+        { label: 'Postal address of the property', k: 'pg.postal', v: c.propertyAddress },
+        { label: 'Coming under Corporation limit / Village Panchayat / Municipality', k: 'pg.localBody', v: c.p.localBodyType },
+        { label: 'Whether covered under any State / Central Govt. enactments (e.g. Urban Land Ceiling Act) or notified under agency area / scheduled area / cantonment area', k: 'pg.enact', v: 'No' },
+        { label: 'Is any conversion to house site plots contemplated?', k: 'pg.conv', v: 'No' },
+        { label: 'Boundaries of the property', sides: pnbSide(c) },
+        { label: 'Dimensions of the site', sides: pnbDim(c) },
+        { label: 'Extent of the site', k: 'pg.extent', v: lines(land.siteAreaDocument && `As per document: ${num(land.siteAreaDocument)} Sq. Yds`, land.siteAreaActual && `As per actual: ${num(land.siteAreaActual)} Sq. Yds`) },
+        { label: 'Latitude, Longitude and Coordinates of the site', k: 'pg.latlon', v: pnbLatLon(c) },
+        { label: 'Extent of the site considered for valuation (least of A & B)', k: 'pg.considered', v: c.r.land ? `${num(c.r.land.siteArea)} Sq. Yds` : '' },
+        { label: 'Whether occupied by the owner / lessee? If cultivated by lessee, since how long and type of tenancy agreement?', k: 'pg.occ', v: land.rentalValue || 'Owner occupied' },
+      ]} />
+    );
+  }
+  return (
+    <PnbSection title="II. CHARACTERISTICS OF THE SITE" prefix="pc" parts={[
+      { label: 'Whether the land under consideration is suitable for cultivation', k: 'pc.cult', v: site.permittedUse },
+      { label: 'Irrigation facilities – canal / well / bore / rain-fed', k: 'pc.irr', v: site.waterPotentiality },
+      { label: 'Possibility of frequent flooding / sub-merging', k: 'pc.flood', v: site.flooding },
+      { label: 'Level of land with topographical conditions', k: 'pc.level', v: site.landLevel },
+      { label: 'Shape of land', k: 'pc.shape', v: site.landShape },
+      { label: 'Is it a Land – locked land?', k: 'pc.locked', v: site.landLocked },
+      { label: 'Whether the land is situated on a Main / National Highway Road? If not, distance from the Main / Highway Road', k: 'pc.road', v: pnbRoads(c) },
+      { label: 'Water supply & electricity facilities', k: 'pc.power', v: site.powerSupply },
+      { label: 'Advantage of the site', k: 'pc.adv', v: (site.advantages || []).map((a, i) => `${i + 1}. ${a}`).join('\n') },
+      { label: 'Disadvantages of the land', k: 'pc.dis', v: site.disadvantages && site.disadvantages !== 'Nil' ? site.disadvantages : '' },
+      { label: 'Special remarks, if any, like threat of acquisition of land for public service purposes, road widening or applicability of CRZ provisions etc.', k: 'pc.remarks', v: lines(site.specialRemarks, site.drawingApprovalIssue) },
+      { label: 'Comment on whether the IP is independently accessible?', k: 'pc.access', v: site.roadFacilities },
+    ]} />
+  );
+}
+
+// "The other details are as under" — PNB's value list, from our figures (purchase details are not in the sheet)
+function PnbOtherDetails({ c }) {
+  const s = c.s;
+  const f = c.d.flat || {};
+  const guideline = c.kind === 'flat' ? (Number(f.glrRate) && Number(f.uds) ? Number(f.glrRate) * Number(f.uds) : null) : c.r.land?.glrValue;
+  const rows = [
+    ['Book value of immovable property', 'pnb.book', s.bookValue],
+    ['Realizable Value of immovable property', 'pnb.realizable', s.realizableValue],
+    ['Distress Sale Value of immovable property', 'pnb.distress', s.distressValue],
+    ['Guideline Value (value as per Circle Rates) in the area where the property is situated', 'pnb.guideline', guideline],
+  ].filter((x) => Number(x[2]) > 0);
+  return (
+    <>
+      <p>The other details are as under:</p>
+      <table className="t grid">
+        <tbody>
+          {rows.map(([label, k, v], i) => <tr key={k}><td className="c-n">{['i', 'ii', 'iii', 'iv'][i]}.</td><th>{label}</th><td className="r"><F k={k} v={rs(v)} /></td></tr>)}
+        </tbody>
+      </table>
+    </>
+  );
+}
+
+function pnbSheets(c) {
+  const list = [{ id: 'cert', letterhead: true, el: <Certificate c={c} /> }];
+  if (c.kind === 'flat') {
+    list.push({ id: 'pnbflat1', el: <PnbFlatGeneral c={c} /> });
+    list.push({ id: 'flat', el: <BobFlatBuilding c={c} /> });
+    list.push({ id: 'flat2', el: <BobFlatValuation c={c} /> });
+  } else if (c.agri) {
+    list.push({ id: 'pnbagri1', el: <PnbAgri c={c} part={1} /> });
+    list.push({ id: 'pnbagri2', el: <PnbAgri c={c} part={2} /> });
+    list.push({ id: 'land', el: <LandValuation c={c} /> });
+  } else {
+    list.push({ id: 'pnb1', el: <PnbIntroPhysical c={c} /> });
+    list.push({ id: 'pnb2', el: <PnbAspects c={c} /> });
+    list.push({ id: 'pnb3', el: <PnbEngineering c={c} /> });
+    list.push({ id: 'land', el: <LandValuation c={c} /> });
+    if (c.kind === 'building') {
+      list.push({ id: 'bld3', el: <><BuildingValuationTable c={c} part="details" /><TierTable c={c} title="PART C – EXTRA ITEMS" sub="(Value after Depreciation)" keys={EXTRA_KEYS} prefix="ex" /></> });
+      list.push({ id: 'amen', el: <><TierTable c={c} title="PART D – AMENITIES" keys={AMENITY_KEYS} prefix="am" /><TierTable c={c} title="PART E – MISCELLANEOUS" keys={MISC_KEYS} prefix="mi" /></> });
+      list.push({ id: 'services', el: <Services c={c} /> });
+    }
+  }
+  return [...list, ...tailSheets(c)];
+}
+
+// ---------- Bank of Baroda flat (Annexure II-b), from the flat sheet only; rows without data are left out ----------
+// a numbered item: [label, key, value] or, with `subs`, a heading followed by its sub-rows
+function BobItems({ items, prefix }) {
+  const shown = items
+    .filter(Boolean)
+    .map((it) => (it.subs ? { ...it, subs: it.subs.filter((s) => s[2] !== undefined && s[2] !== null && String(s[2]).trim() !== '') } : it))
+    .filter((it) => (it.subs ? it.subs.length : it.v !== undefined && it.v !== null && String(it.v).trim() !== ''));
+  return shown.flatMap((it, i) => (it.subs
+    ? [
+        <tr key={`${prefix}${i}`}><td className="c-n" rowSpan={it.subs.length + 1}>{i + 1}</td><th colSpan={2}>{it.label}</th></tr>,
+        ...it.subs.map(([label, k, v]) => <tr key={k}><th className="indent">{label}</th><td><F k={k} v={String(v)} block /></td></tr>),
+      ]
+    : [<tr key={`${prefix}${i}`}><td className="c-n">{i + 1}</td><th>{it.label}</th><td className={it.bold ? 'b' : ''}><F k={it.k} v={String(it.v)} block /></td></tr>]));
+}
+
+function BobFlatBuilding({ c }) {
+  const f = c.d.flat || {};
+  const p = c.p;
+  const yn = (v) => v || '';
+  return (
+    <>
+      <h4>II. APARTMENT BUILDING</h4>
+      <table className="t grid">
+        <tbody>
+          <BobItems prefix="ab" items={[
+            c.pnb
+              ? { label: 'Name of the Apartment', k: 'fb.nature', v: f.apartmentName || p.description }
+              : { label: 'Nature of the Apartment', k: 'fb.nature', v: lines(f.apartmentName, p.description) },
+            !c.pnb && { label: 'Location', subs: [
+              ['T. S. No.', 'fb.ts', p.surveyNo],
+              ['Ward No.', 'fb.ward', p.localBodyName],
+              ['Village / Municipality / Corporation', 'fb.village', [p.village, p.localBodyType].filter(Boolean).join(', ')],
+              ['Door No., Street or Road (Pin Code)', 'fb.door', [p.number && `${p.numberType || ''} ${p.number}`.trim(), p.street, p.pincode].filter(Boolean).join(', ')],
+            ] },
+            { label: 'Description of the locality Residential / Commercial / Mixed', k: 'fb.locality', v: f.usage },
+            { label: 'Year of Construction', k: 'fb.year', v: f.yearOfConstruction },
+            { label: 'Number of Floors', k: 'fb.floors', v: f.totalFloors },
+            { label: 'Type of Structure', k: 'fb.structure', v: f.structureType },
+            { label: 'Number of Dwelling units in the building', k: 'fb.units', v: f.dwellingUnits },
+            { label: 'Quality of Construction', k: 'fb.quality', v: f.constructionQuality },
+            { label: 'Appearance of the Building', k: 'fb.appearance', v: f.appearance },
+            { label: 'Maintenance of the Building', k: 'fb.maint', v: f.buildingMaintenance },
+            { label: 'Facilities Available', subs: [
+              ['Lift', 'fb.lift', yn(f.lift)],
+              ['Protected Water Supply', 'fb.water', yn(f.protectedWaterSupply)],
+              ['Underground Sewerage', 'fb.sewer', yn(f.undergroundSewerage)],
+              ['Car Parking - Open / Covered', 'fb.parking', yn(f.carParking)],
+              ['Is Compound wall existing?', 'fb.wall', yn(f.compoundWall)],
+              ['Is pavement laid around the Building', 'fb.pavement', yn(f.pavement)],
+              ['Any other facility', 'fb.other', yn(f.otherFacility)],
+            ] },
+          ]} />
+        </tbody>
+      </table>
+      <h4>III. FLAT</h4>
+      <table className="t grid">
+        <tbody>
+          <BobItems prefix="fl" items={[
+            { label: 'The floor on which the flat is situated', k: 'ff.floor', v: f.floorOfFlat },
+            { label: 'Door No. of the flat', k: 'ff.door', v: f.flatNo },
+            { label: 'Specifications of the flat', subs: [
+              ['Flooring', 'ff.flooring', f.flooring],
+              ['Doors', 'ff.doors', f.doors],
+              ['Windows', 'ff.windows', f.windows],
+              ['Fittings', 'ff.fittings', f.fittings],
+              ['Finishing', 'ff.finishing', f.finishing],
+            ] },
+            { label: 'House Tax', subs: [
+              ['Assessment No.', 'ff.taxNo', f.houseTaxAssessmentNo],
+              ['Tax paid in the name of', 'ff.taxName', f.taxPaidBy],
+              ['Tax amount', 'ff.taxAmt', f.taxAmount ? `Rs.${num(f.taxAmount, 0)}` : ''],
+            ] },
+            { label: 'Electricity Service Connection no.', subs: [
+              ['Service connection no.', 'ff.elecNo', f.electricityServiceNo],
+              ['Meter Card is in the name of', 'ff.meter', f.meterCardName],
+            ] },
+            { label: 'How is the maintenance of the flat?', k: 'ff.maint', v: f.flatMaintenance },
+            { label: 'Sale Deed executed in the name of', k: 'ff.deed', v: f.saleDeedName },
+            { label: 'What is the undivided area of land as per Sale Deed?', k: 'ff.uds', v: f.uds ? `${num(f.uds)} Sq. Yds` : '' },
+            { label: 'What is the plinth area of the flat?', k: 'ff.plinth', v: f.plinthArea ? `${num(f.plinthArea)} Sq. ft` : '' },
+            { label: 'What is the Carpet Area of the flat?', k: 'ff.carpet', v: f.carpetArea ? `${num(f.carpetArea)} Sq. ft` : '' },
+            { label: 'Is it being used for Residential or Commercial purpose?', k: 'ff.use', v: f.usage },
+            { label: 'Is it Owner-occupied or let out?', k: 'ff.occ', v: f.occupancy },
+            { label: 'If rented, what is the monthly rent?', k: 'ff.rent', v: f.monthlyRent ? `Rs.${num(f.monthlyRent, 0)}` : '' },
+          ]} />
+        </tbody>
+      </table>
+    </>
+  );
+}
+
+function BobFlatValuation({ c }) {
+  const f = c.d.flat || {};
+  const R = c.r.flat || {};
+  const plinth = Number(f.plinthArea) || 0;
+  const landPerSqft = plinth ? (R.landCost || 0) / plinth : 0;
+  const extras = (f.extras || []).filter((e) => e.description || Number(e.amount));
+  const flatValue = R.underConstruction ? R.stageValue : (R.buildingCost || 0) + (R.landCost || 0);
+  return (
+    <>
+      {f.marketability && (
+        <>
+          <h4>IV. MARKETABILITY</h4>
+          <table className="t grid"><tbody><BobItems prefix="mk" items={[{ label: 'How is the marketability?', k: 'fm.market', v: f.marketability }]} /></tbody></table>
+        </>
+      )}
+      <h4>V. RATE</h4>
+      <table className="t grid">
+        <tbody>
+          <BobItems prefix="rt" items={[
+            { label: 'Break - up for the rate', subs: [
+              ['i) Building + Services', 'fr.bld', f.buildingRate ? `Rs. ${num(f.buildingRate, 0)} /Sq.ft` : ''],
+              ['ii) Land + Others', 'fr.land', f.landRate ? `Rs. ${num(f.landRate, 0)} /Sq.Yd of UDS (Rs. ${num(landPerSqft, 0)} /Sq.ft of plinth area)` : ''],
+            ] },
+            { label: "Guideline rate obtained from the Registrar's office", k: 'fr.glr', v: f.glrRate ? `Rs. ${num(f.glrRate, 0)} /Sq.Yd` : '' },
+          ]} />
+        </tbody>
+      </table>
+      {R.underConstruction ? (
+        <>
+          <h4>VI. VALUE OF THE FLAT UNDER CONSTRUCTION</h4>
+          <table className="t grid">
+            <tbody>
+              <BobItems prefix="uc" items={[
+                { label: 'After 100% completion, final value of the flat', k: 'fu.completion', v: rs(R.completionValue) },
+                { label: 'Works completed', k: 'fu.pct', v: f.completionPct ? `${num(f.completionPct)}%` : '' },
+                { label: 'As per current stage of work completion, the value of the flat', k: 'fu.stage', v: rs(R.stageValue), bold: true },
+              ]} />
+            </tbody>
+          </table>
+        </>
+      ) : (
+        <>
+          <h4>VI. COMPOSITE RATE ADOPTED AFTER DEPRECIATION</h4>
+          <table className="t grid">
+            <tbody>
+              <tr><td className="c-n" rowSpan={6}>a.</td><th colSpan={2}>Depreciated building rate</th></tr>
+              <tr><th className="indent">Replacement cost of flat with Services (V (3) i)</th><td><F k="fc.repl" v={`Rs. ${num(f.buildingRate, 0)} /Sq.ft`} /></td></tr>
+              <tr><th className="indent">Age of the building</th><td><F k="fc.age" v={R.age != null ? `${R.age} years` : ''} /></td></tr>
+              <tr><th className="indent">Life of the building estimated</th><td><F k="fc.life" v={R.life ? `${R.life} years` : ''} /></td></tr>
+              <tr><th className="indent">Depreciation percentage assuming the salvage value as 10%</th><td><F k="fc.dep" v={`${num(R.depreciationPct)}%`} /></td></tr>
+              <tr><th className="indent">Depreciated rate of the building</th><td><F k="fc.drate" v={`Rs. ${num(R.depreciatedRate, 0)} /Sq.ft`} /></td></tr>
+              <tr><td className="c-n" rowSpan={4}>b.</td><th colSpan={2}>Total composite rate arrived for valuation</th></tr>
+              <tr><th className="indent">Depreciated building rate VI (a)</th><td><F k="fc.drate2" v={`Rs. ${num(R.depreciatedRate, 0)} /Sq.ft`} /></td></tr>
+              <tr><th className="indent">Rate for Land & other V (3) ii</th><td><F k="fc.land" v={`Rs. ${num(landPerSqft, 0)} /Sq.ft`} /></td></tr>
+              <tr><th className="indent">Total Composite Rate</th><td className="b"><F k="fc.total" v={`Rs. ${num(R.compositeRate, 0)} /Sq.ft`} /></td></tr>
+            </tbody>
+          </table>
+        </>
+      )}
+      <h4 className="ctr">Details of Valuation</h4>
+      <table className="t list">
+        <thead><tr><th>Sr. No.</th><th>Description</th><th>Qty.</th><th>Rate per unit Rs.</th><th>Estimated Value Rs.</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td><F k="fd.flat" v={R.underConstruction ? 'As per current stage of work completion the value of the flat' : 'Present value of the flat (incl. car parking, if provided)'} /></td>
+            <td><F k="fd.qty" v={plinth ? `${num(plinth)} Sq.ft` : ''} /></td>
+            <td><F k="fd.rate" v={R.underConstruction ? '' : num(R.compositeRate, 0)} /></td>
+            <td className="r"><F k="fd.value" v={rs(flatValue)} /></td>
+          </tr>
+          {extras.map((e, i) => (
+            <tr key={i}><td>{i + 2}</td><td><F k={`fd.x${i}`} v={e.description || 'Extra item'} /></td><td /><td /><td className="r"><F k={`fd.x${i}.amt`} v={rs(Number(e.amount) || 0)} /></td></tr>
+          ))}
+          <tr className="total"><td colSpan={4}>Total</td><td className="r"><F k="fd.total" v={rs(flatValue + (R.extras || 0))} /></td></tr>
+        </tbody>
+      </table>
+    </>
+  );
 }
 
 function FlatValuation({ c }) {

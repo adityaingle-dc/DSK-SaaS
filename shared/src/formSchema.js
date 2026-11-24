@@ -12,7 +12,7 @@ import { catalog } from './catalog.generated.js';
 import { DEFAULTS } from './constants.js';
 import { LIST_LABELS, PURPOSE_GROUP_SHORT, PURPOSE_SHORT, SHORT_OPTIONS, SHORT_QUESTIONS } from './choiceShort.js';
 import { isFirm, linkPerson, relationOptions, relativeLabel } from './person.js';
-import { linkBoundaries } from './plot.js';
+import { linkBoundaries, linkBuildingDims } from './plot.js';
 
 const L = catalog.lists;
 const purposeOptions = catalog.valuationPurposes.flatMap((g) => g.items.map((i) => i.label));
@@ -50,8 +50,8 @@ const personFields = (required, who) => [
 
 const openingColumns = (withCounts) => [
   { key: 'code', label: 'Code', type: 'text' },
-  { key: 'length', label: 'L (ft)', type: 'number', min: 0 },
-  { key: 'height', label: 'H (ft)', type: 'number', min: 0 },
+  { key: 'length', label: 'L (ft)', type: 'number', min: 0, measure: 'len' },
+  { key: 'height', label: 'H (ft)', type: 'number', min: 0, measure: 'len' },
   ...(withCounts === 'door'
     ? [
         { key: 'external', label: 'External nos', type: 'number', min: 0 },
@@ -85,9 +85,10 @@ export const SECTIONS = [
       { key: 'includeEstimate', label: 'Include proposed building estimate', type: 'checkbox', hint: 'Defaults on for Under Construction / Semi Finished / Improvement Works', defaultFrom: (ctx) => ctx.needsEstimate },
       { key: 'realizablePct', label: 'Realizable value', type: 'number', unit: '%', min: 0, max: 100, default: DEFAULTS.realizablePct * 100 },
       { key: 'distressPct', label: 'Distress value', type: 'number', unit: '%', min: 0, max: 100, default: DEFAULTS.distressPct * 100 },
-      { key: 'place', label: 'Place (for signature)', type: 'text' },
-      { key: 'feeTravel', label: 'Fee – travel charges', type: 'number', unit: '₹', min: 0 },
-      { key: 'feeDiscount', label: 'Fee – discount', type: 'number', unit: '₹', min: 0 },
+      // the units measurements are typed in on this sheet (Ft | Mts switch); values are always stored in feet / sq.ft
+      { key: 'measureUnit', label: 'Measurements in', type: 'select', options: ['ft', 'm'], default: 'ft', hidden: true },
+      // place printed with the signature; a place typed on older sheets stays valid (keepOther)
+      { key: 'place', label: 'Place (for signature)', type: 'select', options: ['Armoor', 'Hyderabad', 'Nizamabad'], default: 'Armoor', keepOther: true, wide: true },
     ],
   },
   { key: 'applicant', title: 'Applicant / owner', intro: 'The salutation sets the relation (Smt. → W/o, M/s. → Rep. by) and only matching relations are shown.', link: linkPerson, fields: personFields(true, 'applicant') },
@@ -130,18 +131,17 @@ export const SECTIONS = [
         columns: [
           { key: 'deed', label: 'Boundary (document)' },
           { key: 'actual', label: 'Boundary (actual)' },
-          { key: 'dimDeed', label: 'Dimension (document)' },
-          { key: 'dimActual', label: 'Dimension (actual)' },
+          { key: 'dimDeed', label: 'Dimension (document)', measure: 'len' },
+          { key: 'dimActual', label: 'Dimension (actual)', measure: 'len' },
         ],
         // shown as two tables: boundary columns on top, dimension columns below
         splitColumns: 2,
         wide: true,
         sideRoles: true,
-        sidePhotos: 'photos', // a Photos column on each side's row (stored in the `photos` field below, tagged with the side)
-        hint: 'Dimensions in feet: 40, 40.5 or 40\' 6" (metres: 12.2 m). Add photos of each side in its row; "GPS camera" (on a phone) stamps the location, date and time on the photo.',
+        hint: 'Enter the document values: "Actual" fills in the same, so change it only where the site differs. Dimensions in feet: 40, 40.5 or 40\' 6" (or metres with the Mts switch).',
       },
-      // photos of each side, tagged north / south / east / west; shown in the rows of the table above
-      { key: 'photos', label: 'Boundary photos', type: 'files', accept: 'image/*', imagesOnly: true, maxFiles: 24, gpsCamera: true, inGrid: true },
+      // photos of each side taken earlier (no longer asked here: site photos are taken in Property location); kept and printed
+      { key: 'photos', label: 'Boundary photos', type: 'files', accept: 'image/*', imagesOnly: true, maxFiles: 24, hidden: true },
       {
         key: 'diagonal', label: 'Diagonal – North-East corner to South-West corner', type: 'text', unit: 'ft',
         hint: 'For a plot that is not a rectangle: one corner-to-corner measurement makes the area exact.',
@@ -214,7 +214,7 @@ export const SECTIONS = [
     title: 'Site characteristics', intro: 'Tap to choose, tap again to clear. The full sentence prints in the report.',
     when: (ctx) => ctx.kind !== 'flat',
     fields: [
-      ...choiceFields(catalog.siteCharacteristics),
+      ...choiceFields(catalog.siteCharacteristics).map((f) => (f.key === 'roadWidth' ? { ...f, widget: 'roadFromWidth', measure: 'len' } : f)),
       { key: 'advantages', label: 'Advantages of the site', type: 'multiselect', options: catalog.siteAdvantageOptions.filter((o) => o !== 'Nil'), wide: true },
       { key: 'disadvantages', label: 'Disadvantages of the site', type: 'textarea', wide: true, default: 'Nil' },
       { key: 'specialRemarks', label: 'Special remarks (threat of acquisition, road widening, etc.)', type: 'textarea', wide: true },
@@ -224,10 +224,21 @@ export const SECTIONS = [
     key: 'building',
     title: 'Building valuation',
     when: (ctx) => ctx.kind === 'building',
+    link: linkBuildingDims,
     fields: [
       { key: 'yearOfConstruction', label: 'Year of construction', type: 'number', min: 1900, max: 2100, required: true },
       { key: 'lifeYears', label: 'Total life of building', type: 'number', unit: 'years', min: 1, default: DEFAULTS.buildingLifeYears },
       { key: 'rccGlrRate', label: 'RCC GLR rate (for book value)', type: 'number', unit: '₹/sq.ft', min: 0, default: DEFAULTS.rccGlrRate },
+      // building dimensions: as per permission and as per actual → built-up area; slab extensions → slab area
+      { key: 'dimLengthPermission', label: 'North – South (road front) / length – as per permission', type: 'number', unit: 'ft', min: 0, row: 'bd-len', heading: 'Building dimensions' },
+      { key: 'dimLengthActual', label: 'North – South (road front) / length – as per actual', type: 'number', unit: 'ft', min: 0, row: 'bd-len' },
+      { key: 'dimBreadthPermission', label: 'East – West (depth) / breadth – as per permission', type: 'number', unit: 'ft', min: 0, row: 'bd-bre' },
+      { key: 'dimBreadthActual', label: 'East – West (depth) / breadth – as per actual', type: 'number', unit: 'ft', min: 0, row: 'bd-bre' },
+      { key: 'slabExtNorth', label: 'Slab extension – North', type: 'number', unit: 'ft', min: 0, row: 'bd-ext' },
+      { key: 'slabExtSouth', label: 'South', type: 'number', unit: 'ft', min: 0, row: 'bd-ext' },
+      { key: 'slabExtEast', label: 'East', type: 'number', unit: 'ft', min: 0, row: 'bd-ext' },
+      { key: 'slabExtWest', label: 'West', type: 'number', unit: 'ft', min: 0, row: 'bd-ext' },
+      { key: 'dimsCalc', label: 'Built-up area and slab area', type: 'buildingDims', wide: true },
       {
         key: 'floors',
         label: 'Floor-wise plinth area & replacement rate',
@@ -237,8 +248,8 @@ export const SECTIONS = [
         defaultRows: [{ floor: 'Ground' }],
         columns: [
           { key: 'floor', label: 'Floor', type: 'select', options: FLOORS, unique: true, allowOther: true }, // each floor once; Other… for a typed name
-          { key: 'mainArea', label: 'Main portion (sq.ft)', type: 'number', min: 0 },
-          { key: 'cantileverArea', label: 'Cantilevered (sq.ft)', type: 'number', min: 0 },
+          { key: 'mainArea', label: 'Main portion (sq.ft)', type: 'number', min: 0, measure: 'area' },
+          { key: 'cantileverArea', label: 'Cantilevered (sq.ft)', type: 'number', min: 0, measure: 'area' },
           { key: 'rate', label: 'Replacement rate (₹/sq.ft)', type: 'number', min: 0 },
         ],
       },
@@ -254,12 +265,13 @@ export const SECTIONS = [
   {
     key: 'amenities',
     path: 'building',
-    title: 'Amenities, extra items & services', intro: 'For items that are present, pick the amount range; the amount fills in (you can change it). Leave the rest.',
+    title: 'Amenities, extra items & services', intro: 'For items that are present, type the amount. Leave the rest blank.',
     when: (ctx) => ctx.kind === 'building',
     fields: [
       { key: 'amenities', label: 'Amenities & extra items (value after depreciation)', type: 'tiers', items: catalog.amenities, tiers: catalog.amenityTiers, wide: true },
       { key: 'water', label: 'Water supply & sanitation', type: 'tiers', items: catalog.waterServices, tiers: catalog.amenityTiers, wide: true },
-      ...choiceFields(catalog.electrical),
+      // electrical details are not asked: the usual answers (each question's first option) are filled in and print in the report
+      ...choiceFields(catalog.electrical).map((f) => ({ ...f, hidden: true, default: f.options[0] })),
       { key: 'electricalLumpsumPct', label: 'Electrical lumpsum', type: 'select', options: ['5', '7.5'], unit: '% of civil works', default: '5' },
       { key: 'closetType', label: 'Water closets – type', type: 'select', options: ['Indian Closet', 'Western Closet', 'Both'] },
       { key: 'closets', label: 'No. of water closets', type: 'number', min: 0 },
@@ -353,7 +365,7 @@ export const SECTIONS = [
       },
       {
         key: 'rooms', label: 'Rooms', type: 'table', wide: true,
-        columns: [{ key: 'name', label: 'Room', type: 'text' }, { key: 'length', label: 'Length (ft)', type: 'number', min: 0 }, { key: 'width', label: 'Width (ft)', type: 'number', min: 0 }],
+        columns: [{ key: 'name', label: 'Room', type: 'text' }, { key: 'length', label: 'Length (ft)', type: 'number', min: 0, measure: 'len' }, { key: 'width', label: 'Width (ft)', type: 'number', min: 0, measure: 'len' }],
         defaultRows: [
           { name: 'Living Room', length: 12, width: 15 }, { name: 'Bedroom 1', length: 10, width: 12 }, { name: 'Bedroom 2', length: 14, width: 12 },
           { name: 'Kitchen', length: 8, width: 6 }, { name: 'Toilet 1', length: 4, width: 6 }, { name: 'Toilet 2', length: 5, width: 6 },

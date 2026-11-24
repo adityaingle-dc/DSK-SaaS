@@ -350,7 +350,7 @@ router.get(
       res.json({ result: await forwardGeocode(q) });
     } catch (e) {
       console.warn('[geocode] search unavailable:', e.message);
-      throw new HttpError(503, 'The map search is unavailable right now. Tap the site on the map instead.');
+      throw new HttpError(503, e.userMessage || 'The map search is unavailable right now. Tap the site on the map instead.');
     }
   })
 );
@@ -365,7 +365,7 @@ router.get(
       res.json(await reverseGeocode(lat, lon));
     } catch (e) {
       console.warn('[geocode] unavailable:', e.message);
-      throw new HttpError(503, 'Address lookup is unavailable right now. Fill the address manually.');
+      throw new HttpError(503, e.userMessage || 'Address lookup is unavailable right now. Fill the address manually.');
     }
   })
 );
@@ -497,6 +497,7 @@ router.patch(
     if (!isOffice(req.user)) throw new HttpError(403, 'Forbidden');
     const v = await load(req);
     if (!DRAFTING_STATUSES.includes(v.status)) throw new HttpError(409, 'Only a sheet with the drafters can be sent back to the evaluator');
+    if (same(v.evaluator, req.user._id)) throw new HttpError(409, 'This is your own site inspection, so there is no evaluator to send it back to. Correct it yourself and generate the report.');
     if (isDrafter(req.user) && v.drafter && !same(v.drafter, req.user._id)) throw new HttpError(409, `${v.drafter?.name || 'Another drafter'} is drafting this sheet.`);
     if (!String(note || '').trim()) throw new HttpError(422, 'Say what the evaluator should fix');
     Object.assign(v, { status: 'rejected', reviewNote: String(note).trim().slice(0, 2000), reviewedBy: req.user._id, reviewedAt: new Date() });

@@ -19,9 +19,28 @@ export function sideRoles(facing) {
 const roadText = (w) => (Number(w) > 0 ? `Road (${Number(w)} ft wide)` : 'Road');
 const isAutoRoad = (t) => /^Road( \(\d+(\.\d+)? ft wide\))?$/.test(String(t || '').trim());
 
-// Boundaries section: keeps facing → road sides → boundary text (and the corner / intermittent answer) in step.
-// Returns the changes to make; a key "site.plotPosition" belongs to another section.
+// "Actual" follows "Document" (boundary and dimension of each side): typing the document value fills the actual one
+// the same, as long as the actual one is empty or still the same as the document was; a value changed by hand stays.
+const ACTUAL_OF = { deed: 'actual', dimDeed: 'dimActual' };
+function mirrorActual(before = {}, after = {}) {
+  const out = { ...after };
+  for (const side of Object.keys(after)) {
+    const b = before[side] || {};
+    const a = { ...(after[side] || {}) };
+    for (const [doc, act] of Object.entries(ACTUAL_OF)) {
+      if ((a[doc] ?? '') === (b[doc] ?? '')) continue; // this document value didn't change
+      const followed = !b[act] || String(b[act]) === String(b[doc] ?? '');
+      if (followed && (a[act] ?? '') === (b[act] ?? '')) a[act] = a[doc] ?? '';
+    }
+    out[side] = a;
+  }
+  return out;
+}
+
+// Boundaries section: keeps facing → road sides → boundary text (and the corner / intermittent answer) in step, and
+// "Actual" following "Document". Returns the changes to make; a key "site.plotPosition" belongs to another section.
 export function linkBoundaries(values = {}, key, value, data = {}) {
+  if (key === 'sides') return { sides: mirrorActual(values.sides, value) };
   const patch = { [key]: value };
   if (!['facing', 'roadSides', 'roadWidthFt'].includes(key)) return patch;
   let roads = Array.isArray(values.roadSides) ? values.roadSides : [];
@@ -114,6 +133,48 @@ export function plotPerimeter(boundaries = {}) {
   const all = ['north', 'south', 'east', 'west'].map(len);
   if (!all.every((x) => Number.isFinite(x) && x > 0)) return null;
   return round2(all.reduce((s, x) => s + x, 0));
+}
+
+// Building dimensions (Building valuation): length (North–South, road front) × breadth (East–West, depth) as per
+// permission and as per actual → built-up area of each; slab = (length + North + South extensions) ×
+// (breadth + East + West extensions), on the actual dimensions (else the permission ones). Feet / sq.ft.
+export function buildingDims(b = {}) {
+  const n = (v) => { const x = Number(v); return Number.isFinite(x) && x > 0 ? x : 0; };
+  const pair = (l, br) => ({ length: n(l), breadth: n(br), area: n(l) && n(br) ? round2(n(l) * n(br)) : null });
+  const permission = pair(b.dimLengthPermission, b.dimBreadthPermission);
+  const actual = pair(b.dimLengthActual, b.dimBreadthActual);
+  const base = actual.area ? actual : permission;
+  const ext = { north: n(b.slabExtNorth), south: n(b.slabExtSouth), east: n(b.slabExtEast), west: n(b.slabExtWest) };
+  const slabLength = base.length ? base.length + ext.north + ext.south : 0;
+  const slabBreadth = base.breadth ? base.breadth + ext.east + ext.west : 0;
+  return {
+    permission, actual, ext,
+    slab: { length: round2(slabLength), breadth: round2(slabBreadth), area: slabLength && slabBreadth ? round2(slabLength * slabBreadth) : null, from: actual.area ? 'actual' : 'permission' },
+  };
+}
+
+// Building section: "as per actual" follows "as per permission" (typing the permission value fills the actual one the
+// same while it is empty or still equal to the permission value; a value changed by hand stays)
+const ACTUAL_OF_PERMISSION = { dimLengthPermission: 'dimLengthActual', dimBreadthPermission: 'dimBreadthActual' };
+export function linkBuildingDims(values = {}, key, value) {
+  const patch = { [key]: value };
+  const act = ACTUAL_OF_PERMISSION[key];
+  if (act) {
+    const before = values[key];
+    const cur = values[act];
+    if (cur === undefined || cur === null || cur === '' || String(cur) === String(before ?? '')) patch[act] = value;
+  }
+  return patch;
+}
+
+// Site characteristics → "Road width", answered from the road width typed in Boundaries & dimensions (feet):
+// under 20 ft → below 20 ft, else above. → the option, or '' when no width is given
+export const ROAD_ABOVE_20 = "Above 20' Wide";
+export const ROAD_BELOW_20 = 'Below 20 Ft Wide';
+export function roadWidthChoice(widthFt) {
+  const w = Number(widthFt);
+  if (!Number.isFinite(w) || w <= 0) return '';
+  return w < 20 ? ROAD_BELOW_20 : ROAD_ABOVE_20;
 }
 
 // one area in the units used for plots in India (from sq.ft)

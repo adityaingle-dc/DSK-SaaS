@@ -262,6 +262,12 @@ router.patch(
       if (dupe) throw dupeError(req, dupe, `${dupe.name} is already a customer with this phone number`);
     }
     const before = c.toObject();
+    // the IFSC belongs to one branch: a new bank or branch with the same old IFSC means the code is out of date
+    // (a branch typed by hand), so it is cleared rather than kept — picking the branch or entering the IFSC sets it
+    const norm = (x) => String(x ?? '').trim().toLowerCase();
+    const bankMoved = ('bankName' in fields && norm(fields.bankName) !== norm(before.bankName)) || ('branch' in fields && norm(fields.branch) !== norm(before.branch));
+    if (bankMoved && norm(fields.ifsc ?? before.ifsc) === norm(before.ifsc)) fields.ifsc = '';
+    if (fields.ifsc) fields.ifsc = String(fields.ifsc).toUpperCase();
     Object.assign(c, fields);
     await c.save();
     // the same details on their open input sheets follow the change
@@ -331,6 +337,9 @@ async function createJob(req, c, { assignee, siteFields, general, previous, serv
   const prefill = sheetPrefillFromCustomer(c);
   data.applicant = { ...(data.applicant || {}), ...prefill.applicant };
   data.general = { ...(data.general || {}), ...prefill.general, ...general };
+  // a job for another bank / branch than the customer's: the customer's IFSC does not belong to it
+  const normB = (x) => String(x ?? '').trim().toLowerCase();
+  if ((!general.ifsc || normB(general.ifsc) === normB(c.ifsc)) && ((general.bankName && normB(general.bankName) !== normB(c.bankName)) || (general.branch && normB(general.branch) !== normB(c.branch)))) delete data.general.ifsc;
   if (!previous && siteFields) data.property = { ...(data.property || {}), ...siteFields };
   if (previous) {
     // the property's location and boundaries carry over; the old visit's photos don't (they belong to that sheet,

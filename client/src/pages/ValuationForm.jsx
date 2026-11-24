@@ -1,9 +1,9 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { computeValuation, DRAFTING_STATUSES, emptyValuation, getContext, plotArea, plotPerimeter, sanitize, sectionPath, validate, visibleSections } from '@dsk/shared';
+import { computeValuation, DRAFTING_STATUSES, emptyValuation, getContext, plotArea, plotPerimeter, roadWidthChoice, sanitize, sectionPath, validate, visibleSections } from '@dsk/shared';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import SchemaSection from '../components/SchemaForm.jsx';
+import SchemaSection, { hasMeasurements, MeasureContext } from '../components/SchemaForm.jsx';
 import { LivePanel, LiveSheet, LiveSummaryButton, useLiveValuation } from '../components/LiveValuation.jsx';
 import SectionIcon from '../components/SectionIcons.jsx';
 import PageHeader from '../components/PageHeader.jsx';
@@ -187,6 +187,13 @@ export default function ValuationForm() {
   }, [areaSqyd, loads]); // eslint-disable-line react-hooks/exhaustive-deps
   // the same for the compound wall: its length follows the plot's perimeter (sum of the four sides) until a
   // different length is typed in
+  // Site characteristics → Road width is worked out from the road width typed in Boundaries & dimensions
+  // (below / above 20 ft); it is shown, not picked
+  const roadChoice = data ? roadWidthChoice(data.boundaries?.roadWidthFt) : '';
+  useEffect(() => {
+    if (!data || ctx?.kind === 'flat') return;
+    if ((data.site?.roadWidth || '') !== roadChoice) setField2('site', 'roadWidth', roadChoice);
+  }, [roadChoice, loads]); // eslint-disable-line react-hooks/exhaustive-deps
   const perimeterFt = data ? plotPerimeter(data.boundaries) : null;
   const lastPerimeter = useRef(undefined);
   useEffect(() => {
@@ -311,7 +318,9 @@ export default function ValuationForm() {
   };
 
   // drafter / superadmin: generate the report (saves the sheet first) → it goes to the superadmin for approval
-  const canGenerate = workspace && DRAFTING_STATUSES.includes(meta?.status);
+  // the superadmin doing the site inspection themselves goes straight to the report (no submitting, no queue)
+  const ownInspection = isSuperadmin && !!id && String(meta?.evaluator?._id || meta?.evaluator) === String(user?._id) && ['draft', 'rejected'].includes(meta?.status);
+  const canGenerate = workspace && (DRAFTING_STATUSES.includes(meta?.status) || ownInspection);
   const generate = async () => {
     if (!canGenerate) {
       alertDialog({ title: 'Not ready for a report', message: meta?.status === 'draft' || meta?.status === 'rejected' ? 'The field evaluator has not submitted the site inspection yet.' : 'A report can be generated once the sheet is with the drafter.' });
@@ -328,9 +337,10 @@ export default function ValuationForm() {
       alertDialog({ title: 'Save the report edits first', message: 'You have changed the report wording. Save those edits (on the report) before generating it.' });
       return;
     }
-    if (!(await confirmDialog({
+    // the superadmin generates straight away (their report is approved at once); others confirm first
+    if (!isSuperadmin && !(await confirmDialog({
       title: 'Generate the report?',
-      message: `A numbered copy is kept and sent to the superadmin for approval. The sheet is locked until they approve it or send it back to you.`,
+      message: 'A numbered copy is kept and sent to the superadmin for approval. The sheet is locked until they approve it or send it back to you.',
       confirmLabel: 'Generate report',
     }))) return;
     if (unsaved() && !(await persist())) return;
@@ -370,8 +380,10 @@ export default function ValuationForm() {
     }
   };
 
-  // drafter / superadmin: return the site inspection to the evaluator
-  const canSendBack = workspace && isOffice && DRAFTING_STATUSES.includes(meta?.status);
+  // drafter / superadmin: return the site inspection to the evaluator — not on your own inspection (there is no one
+  // else to send it to: you fix it yourself and generate)
+  const ownInspector = String(meta?.evaluator?._id || meta?.evaluator || '') === String(user?._id || '-');
+  const canSendBack = workspace && isOffice && DRAFTING_STATUSES.includes(meta?.status) && !ownInspector;
   const sendBack = async () => {
     const note = await promptDialog({
       title: `Send ${meta.referenceNo} back to the evaluator?`,
@@ -456,7 +468,7 @@ export default function ValuationForm() {
       <PageHeader
         icon={DuoSheet}
         back={returnTo ? { to: returnTo, label: 'Back', exact: true } : id && !isOffice ? { to: `/valuations/${id}`, label: draftingMine ? 'Sheet' : 'Site inspection' } : { to: '/valuations', label: 'Site Inspections' }}
-        title={workspace ? (isSuperadmin && meta?.status === 'draft' ? 'Input sheet' : 'Drafting') : 'Site inspection'}
+        title={workspace ? (ownInspection ? 'Site inspection & report' : isSuperadmin && meta?.status === 'draft' ? 'Input sheet' : 'Drafting') : 'Site inspection'}
         meta={meta?.referenceNo && <><span className="badge">{meta.referenceNo}</span>{meta?.status && <StatusBadge status={meta.status} />}</>}
         actions={canStartDrafting ? (
           <div className="actions no-print form-head-actions">
@@ -525,7 +537,21 @@ export default function ValuationForm() {
               <span className="section-count">Step {idx + 1} of {sections.length}</span>
             </div>
             {current.intro && <p className="section-intro">{current.intro}</p>}
-            <SchemaSection section={current} path={path} values={data[path]} onChange={setField} onChangeAt={setField2} errors={errorMap} ctx={ctx} data={data} locked={meta?.lockedFields || []} />
+            {/* measurements typed in feet or metres (saved with the sheet; values are kept in feet) */}
+            {hasMeasurements(current) && (
+              <div className="measure-switch">
+                <span>Measurements in</span>
+                <Segmented
+                  label="Measurements in"
+                  options={[{ value: 'ft', label: 'Fts' }, { value: 'm', label: 'Mts' }]}
+                  value={data.general?.measureUnit === 'm' ? 'm' : 'ft'}
+                  onChange={(v) => setField2('general', 'measureUnit', v)}
+                />
+              </div>
+            )}
+            <MeasureContext.Provider value={data.general?.measureUnit === 'm' ? 'm' : 'ft'}>
+              <SchemaSection section={current} path={path} values={data[path]} onChange={setField} onChangeAt={setField2} errors={errorMap} ctx={ctx} data={data} locked={meta?.lockedFields || []} />
+            </MeasureContext.Provider>
           </div>
           <div className="actions sticky">
             <LiveSummaryButton live={live} onOpen={() => live.setOpen(true)} />
@@ -573,7 +599,7 @@ export default function ValuationForm() {
         </aside>
       )}
       <LiveSheet results={results} live={live} />
-      {workspace && meta?.status === 'draft' && (
+      {workspace && meta?.status === 'draft' && !ownInspection && (
         <p className="hint ws-wait">The field evaluator has not submitted the site inspection yet. <Link to={`/valuations/${id}`}>Open the sheet page</Link>.</p>
       )}
     </div>

@@ -1,11 +1,76 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { boundaryArea, boundaryCentre, boundaryPerimeter, documentDetails, landExtras, MIN_BOUNDARY_POINTS, parseLatLon, plotArea, sideRoles, SQFT_PER_SQM, SQYD_PER_SQM } from '@dsk/shared';
+import { Suspense, createContext, lazy, useContext, useEffect, useRef, useState } from 'react';
+import { boundaryArea, boundaryCentre, boundaryPerimeter, buildingDims, documentDetails, landExtras, MIN_BOUNDARY_POINTS, parseLatLon, plotArea, sideRoles, SQFT_PER_SQM, SQYD_PER_SQM } from '@dsk/shared';
 import { inr } from './StatusBadge.jsx';
 import FilesInput from './FilesInput.jsx';
 import DateInput from './DateInput.jsx';
 import { BankInput, BranchInput, IfscInput } from './BankFields.jsx';
 import { confirmDialog } from './ConfirmDialog.jsx';
 import { api } from '../api/client.js';
+
+
+// ---------- measurements in feet or metres ----------
+// The sheet's switch (general.measureUnit: 'ft' | 'm'). Values are always stored in feet / sq.ft, so the working,
+// rates and report don't change; in metres the inputs show and take metres (or sq.m) and convert.
+export const MeasureContext = createContext('ft');
+const M_PER_FT = 0.3048;
+const SQM_PER_SQFT = 0.09290304;
+const LEN_UNITS = ['ft', 'rft'];
+// a field's measurement kind ('len' | 'area' | null), from its unit or its `measure` flag
+export const measureKind = (f) => f?.measure || (LEN_UNITS.includes(f?.unit) ? 'len' : f?.unit === 'sq.ft' ? 'area' : null);
+// the field as shown in the chosen units (its unit label swapped)
+export function inUnits(f, mode) {
+  const kind = measureKind(f);
+  if (!kind) return f;
+  const out = { ...f, measure: kind };
+  if (mode === 'm') {
+    if (f.unit) out.unit = kind === 'area' ? 'sq.m' : f.unit === 'rft' ? 'rmt' : 'm';
+    if (f.label) out.label = f.label.replace(/\(sq\.ft\)/i, '(sq.m)').replace(/\(ft\)/i, '(m)');
+  }
+  return out;
+}
+// does this section have anything measured? (shows the Ft | Mts switch)
+export const hasMeasurements = (section) => section.fields.some((f) => !f.hidden && (measureKind(f) || (f.columns || []).some(measureKind)));
+
+const toShown = (v, factor, dp) => (v === '' || v === undefined || v === null || Number.isNaN(Number(v)) ? '' : String(+(Number(v) * factor).toFixed(dp)));
+// a number stored in feet / sq.ft, typed and shown in metres / sq.m
+function MeasureInput({ value, onChange, kind, min, ...rest }) {
+  const factor = kind === 'area' ? SQM_PER_SQFT : M_PER_FT;
+  const dp = kind === 'area' ? 2 : 3;
+  const [text, setText] = useState(() => toShown(value, factor, dp));
+  const typing = useRef(false);
+  useEffect(() => { if (!typing.current) setText(toShown(value, factor, dp)); }, [value, factor, dp]);
+  return (
+    <input
+      type="number" step="any" min={min} value={text} {...rest}
+      onFocus={() => { typing.current = true; }}
+      onBlur={() => { typing.current = false; setText(toShown(value, factor, dp)); }}
+      onChange={(e) => { const t = e.target.value; setText(t); onChange(t === '' ? '' : String(+(Number(t) / factor).toFixed(4))); }}
+    />
+  );
+}
+// a dimension typed as text ("40", "40' 6\"", "12.2 m"): in metres, a plain number means metres and is kept as "12.2 m"
+// (the working reads both); a plain number saved earlier is in feet and is shown converted
+const PLAIN = /^\s*\d+(\.\d+)?\s*$/;
+function DimensionText({ value, onChange, mode, ...rest }) {
+  const shown = (v) => {
+    const t = String(v ?? '');
+    if (mode !== 'm') return t;
+    if (PLAIN.test(t)) return String(+(Number(t) * M_PER_FT).toFixed(3));
+    return t.replace(/\s*(m|mt|mtr|mtrs|metres?|meters?)\s*$/i, '');
+  };
+  const [text, setText] = useState(() => shown(value));
+  const typing = useRef(false);
+  useEffect(() => { if (!typing.current) setText(shown(value)); }, [value, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+  const save = (t) => (mode === 'm' && PLAIN.test(t) ? `${t.trim()} m` : t);
+  return (
+    <input
+      value={text} {...rest}
+      onFocus={() => { typing.current = true; }}
+      onBlur={() => { typing.current = false; setText(shown(value)); }}
+      onChange={(e) => { setText(e.target.value); onChange(save(e.target.value)); }}
+    />
+  );
+}
 
 const BoundaryMap = lazy(() => import('./BoundaryMap.jsx'));
 
@@ -15,7 +80,8 @@ const BoundaryMap = lazy(() => import('./BoundaryMap.jsx'));
 // locked: sheet fields filled from the customer that can't be changed here (e.g. ['general.bankName']); shown read-only
 export default function SchemaSection({ section, values = {}, onChange, onChangeAt, errors = {}, ctx, data, path, locked = [] }) {
   // optionsFrom: the options depend on other answers (e.g. relations that fit the salutation)
-  const visible = section.fields.filter((f) => (!f.when || f.when(ctx, data)) && !f.inGrid && !f.hidden).map((f) => (f.optionsFrom ? { ...f, options: f.optionsFrom(values) } : f));
+  const mode = useContext(MeasureContext);
+  const visible = section.fields.filter((f) => (!f.when || f.when(ctx, data)) && !f.inGrid && !f.hidden).map((f) => inUnits(f.optionsFrom ? { ...f, options: f.optionsFrom(values) } : f, mode));
   const paired = pairShortFields(visible.filter((f) => !f.row));
   // a section can keep fields in step (salutation ↔ relation ↔ name): one change may set a few fields
   const change = (key, v) => {
@@ -106,16 +172,19 @@ function FieldRow({ field, label = field.label, error, children, pair = false })
 const str = (v) => (v === undefined || v === null ? '' : String(v));
 
 export function FieldInput({ field, value, onChange, errors = {}, name, setField, values, data, inTable = false }) {
+  const mode = useContext(MeasureContext);
   // special inputs for plain-text fields (stored as text, so validation / reports are unchanged)
   if (field.widget === 'bank') return <BankInput value={value} onChange={onChange} />;
   if (field.widget === 'ifsc' && setField) return <IfscInput value={value} onChange={onChange} setField={setField} values={values} />;
   if (field.widget === 'branch' && setField) return <BranchInput value={value} onChange={onChange} setField={setField} values={values} />;
+  if (field.widget === 'roadFromWidth') return <RoadFromWidth widthFt={data?.boundaries?.roadWidthFt} />;
   // every choice is one tap: buttons (compact inside table rows)
   if (asButtons(field)) return <ChoiceButtons field={field} value={value} onChange={onChange} name={name} compact={inTable} />;
   switch (field.type) {
     case 'textarea':
       return <textarea rows={3} value={str(value)} onChange={(e) => onChange(e.target.value)} />;
     case 'number':
+      if (field.measure && mode === 'm') return <MeasureInput kind={field.measure} min={field.min} value={value} onChange={onChange} />;
       return <input type="number" step="any" min={field.min} max={field.max} value={str(value)} onChange={(e) => onChange(e.target.value)} />;
     case 'date':
       return <DateInput value={value} onChange={onChange} label={field.label} />;
@@ -142,6 +211,8 @@ export function FieldInput({ field, value, onChange, errors = {}, name, setField
       return <LatLonInput field={field} value={value} onChange={onChange} setField={setField} values={values} />;
     case 'files':
       return <FilesInput value={value || []} onChange={onChange} accept={field.accept} max={field.maxFiles} noun={field.imagesOnly ? 'photos' : undefined} gpsCamera={!!field.gpsCamera} compact={!!field.compact} addLabel={field.compact ? '+ Upload' : undefined} />;
+    case 'buildingDims':
+      return <BuildingDimsPanel values={values} />;
     case 'grid':
       return <GridInput field={field} value={value || {}} onChange={onChange} values={values} setField={setField} />;
     case 'areaCalc':
@@ -156,6 +227,7 @@ export function FieldInput({ field, value, onChange, errors = {}, name, setField
     case 'stages':
       return <StagesInput field={field} value={value || {}} onChange={onChange} />;
     default: {
+      if (field.measure && !field.suggestions) return <DimensionText mode={mode} value={value} onChange={onChange} />;
       const listId = field.suggestions ? `dl-${field.key}` : undefined;
       return (
         <>
@@ -477,6 +549,42 @@ function PillRow({ options, value, onChange, label, clearTo }) {
   );
 }
 
+// Site characteristics → Road width: the width typed in Boundaries & dimensions (in Fts / Mts) and whether it is
+// below or above 20 ft; nothing to pick here
+function RoadFromWidth({ widthFt }) {
+  const mode = useContext(MeasureContext);
+  const w = Number(widthFt);
+  if (!Number.isFinite(w) || w <= 0) return <div className="derived-value muted">Enter the road width in Boundaries &amp; dimensions.</div>;
+  const shown = mode === 'm' ? `${(w * M_PER_FT).toLocaleString('en-IN', { maximumFractionDigits: 2 })} m` : `${w.toLocaleString('en-IN', { maximumFractionDigits: 2 })} ft`;
+  return (
+    <div className="derived-value">
+      <strong>{shown} wide</strong> <span className="muted">· {w < 20 ? 'below 20 ft' : 'above 20 ft'} (from Boundaries &amp; dimensions)</span>
+    </div>
+  );
+}
+
+// Building dimensions: built-up area (length × breadth) as per permission and as per actual, and the slab area
+function BuildingDimsPanel({ values = {} }) {
+  const mode = useContext(MeasureContext);
+  const r = buildingDims(values);
+  const len = (ft) => (ft ? (mode === 'm' ? `${(ft * M_PER_FT).toLocaleString('en-IN', { maximumFractionDigits: 2 })} m` : `${ft.toLocaleString('en-IN', { maximumFractionDigits: 2 })} ft`) : '—');
+  const area = (sqft) => (sqft
+    ? (mode === 'm' ? `${(sqft * SQM_PER_SQFT).toLocaleString('en-IN', { maximumFractionDigits: 2 })} sq.m` : `${sqft.toLocaleString('en-IN', { maximumFractionDigits: 2 })} sq.ft`)
+    : '—');
+  const lxb = (p) => (p.length && p.breadth ? `${len(p.length)} × ${len(p.breadth)}` : 'Enter length and breadth');
+  return (
+    <div className="extras-calc bd-calc">
+      <table className="table">
+        <thead><tr><th /><th>As per permission</th><th>As per actual</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Built-up area (L × B)</th><td><strong>{area(r.permission.area)}</strong><small className="muted block">{lxb(r.permission)}</small></td><td><strong>{area(r.actual.area)}</strong><small className="muted block">{lxb(r.actual)}</small></td></tr>
+          <tr className="bd-slab"><th scope="row">Slab area</th><td colSpan={2}><strong>{area(r.slab.area)}</strong><small className="muted block">{r.slab.area ? `(${len(r.slab.length)}) × (${len(r.slab.breadth)}): ${r.slab.from === 'actual' ? 'actual' : 'permission'} dimensions + slab extensions` : 'Enter the dimensions (and any slab extensions)'}</small></td></tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // Land valuation: each extra item's amount = quantity × rate, and the total
 function LandExtrasPanel({ values }) {
   const items = landExtras(values);
@@ -541,6 +649,7 @@ function PlotAreaPanel({ data }) {
 }
 
 function GridInput({ field, value, onChange, values = {}, setField }) {
+  const mode = useContext(MeasureContext);
   // side photos: a Photos column on the first table, each side's photos tagged with the side
   const photoKey = field.sidePhotos && setField ? field.sidePhotos : null;
   const photos = photoKey && Array.isArray(values[photoKey]) ? values[photoKey] : [];
@@ -559,7 +668,7 @@ function GridInput({ field, value, onChange, values = {}, setField }) {
         <div className="table-wrap" key={cols[0].key}>
           <table className={`table input-table${photoKey && gi === 0 ? ' with-photos' : ''}`}>
             <thead>
-              <tr><th />{cols.map((c) => <th key={c.key}>{c.label}</th>)}{photoKey && gi === 0 && <th className="side-photos-head">Photos</th>}</tr>
+              <tr><th />{cols.map((c) => <th key={c.key}>{c.label}{c.measure ? <span className="unit"> ({mode === 'm' ? 'm' : 'ft'})</span> : null}</th>)}{photoKey && gi === 0 && <th className="side-photos-head">Photos</th>}</tr>
             </thead>
             <tbody>
               {field.rows.map((r) => {
@@ -576,7 +685,9 @@ function GridInput({ field, value, onChange, values = {}, setField }) {
                       )}
                     </th>
                     {cols.map((c) => (
-                      <td key={c.key} data-label={c.label}><input aria-label={`${r} – ${c.label}`} value={str(value[k]?.[c.key])} onChange={(e) => set(k, c.key, e.target.value)} /></td>
+                      <td key={c.key} data-label={c.label}>{c.measure
+                        ? <DimensionText mode={mode} aria-label={`${r} – ${c.label}`} value={value[k]?.[c.key]} onChange={(v) => set(k, c.key, v)} />
+                        : <input aria-label={`${r} – ${c.label}`} value={str(value[k]?.[c.key])} onChange={(e) => set(k, c.key, e.target.value)} />}</td>
                     ))}
                     {photoKey && gi === 0 && (
                       <td className="side-photos" data-label={`${r} side photos`}>
@@ -662,6 +773,7 @@ function DocumentsInput({ field, value, onChange, errors, name }) {
 
 function TableInput({ field, value, onChange, errors, name }) {
   const { columns } = field;
+  const mode = useContext(MeasureContext);
   const setCell = (i, key, v) => onChange(value.map((row, j) => (j === i ? { ...row, [key]: v } : row)));
   // unique columns (e.g. Floor): a value picked in one row is not offered again in the other rows
   const uniqueCols = field.columns.filter((c) => c.unique && c.options);
@@ -681,7 +793,7 @@ function TableInput({ field, value, onChange, errors, name }) {
     <div className="table-wrap">
       <table className="table input-table">
         <thead>
-          <tr>{columns.map((c) => <th key={c.key}>{c.label}</th>)}<th /></tr>
+          <tr>{columns.map((c) => <th key={c.key}>{inUnits(c, mode).label}</th>)}<th /></tr>
         </thead>
         <tbody>
           {value.length === 0 && (
@@ -693,7 +805,7 @@ function TableInput({ field, value, onChange, errors, name }) {
                 const err = errors[`${name}.${i}.${c.key}`];
                 return (
                   <td key={c.key} data-label={c.label} className={err ? 'has-error' : ''} title={err || ''}>
-                    <FieldInput field={columnFor(c, i)} value={row[c.key]} onChange={(v) => setCell(i, c.key, v)} inTable />
+                    <FieldInput field={inUnits(columnFor(c, i), mode)} value={row[c.key]} onChange={(v) => setCell(i, c.key, v)} inTable />
                   </td>
                 );
               })}
@@ -711,62 +823,44 @@ function TableInput({ field, value, onChange, errors, name }) {
   );
 }
 
+// Amenities / services: type the amount for each item that is present (blank = not there)
 function TiersInput({ field, value, onChange }) {
   const set = (key, patch) => {
-    const next = { ...value, [key]: { ...(value[key] || {}), ...patch } };
-    if (!Number(next[key].tier)) delete next[key];
+    // typing an amount replaces any older picked value
+    const next = { ...value, [key]: { ...(value[key] || {}), ...patch, tier: undefined } };
+    const e = next[key];
+    if (e.amount === undefined || e.amount === '') delete next[key];
+    else { delete e.tier; delete e.qty; }
     onChange(next);
   };
-  // a new grade means a new price: drop the exact amount typed for the old one
-  const setTier = (key, tier) => set(key, { tier, amount: undefined });
   return (
     <div className="table-wrap">
-      <table className="table input-table">
+      <table className="table input-table amount-table">
         <thead>
-          <tr><th>Item</th><th>Amount range (₹)</th><th className="num">Qty</th><th className="num">Amount</th></tr>
+          <tr><th>Item</th><th className="num">Amount (₹)</th></tr>
         </thead>
         <tbody>
           {field.items.map((item) => {
             const sel = value[item.key] || {};
             const tier = Number(sel.tier) || 0;
-            const rate = tier ? item.rates[tier - 1] : 0;
-            const standard = rate * (item.unit ? Number(sel.qty) || 0 : 1);
-            // editing: amount is defined (may be '' while retyping); '' falls back to the standard figure
-            const editing = sel.amount !== undefined && sel.amount !== null;
-            const custom = editing && sel.amount !== '';
+            // older sheets: a picked value and no amount → show what it came to
+            const fromTier = tier ? Math.round(item.rates[tier - 1] * (item.unit ? Number(sel.qty) || 0 : 1)) : null;
+            const shown = sel.amount !== undefined && sel.amount !== null ? str(sel.amount) : fromTier !== null ? String(fromTier) : '';
             return (
-              <tr key={item.key} className={tier ? 'selected' : ''}>
+              <tr key={item.key} className={shown ? 'selected' : ''}>
                 <th scope="row" className="cell-title">{item.label}</th>
-                <td data-label="Amount range (₹)" className="tier-ranges">
-                  <PillRow
-                    label={`${item.label} – amount range`}
-                    value={tier}
-                    clearTo={0}
-                    onChange={(t) => setTier(item.key, t)}
-                    // the four price ranges of this item (the amount starts at the range's lower figure)
-                    options={field.tiers.slice(1).map((t, i) => ({ value: i + 1, label: item.ranges[i] || inr(item.rates[i]), title: `₹ ${item.ranges[i] || inr(item.rates[i])}${tier === i + 1 ? ' · tap again to clear' : ''}` }))}
-                  />
-                </td>
-                <td className="num" data-label="Qty">
-                  {item.unit ? (
-                    <input type="number" min="0" step="any" placeholder={item.unit} value={str(sel.qty)} disabled={!tier} onChange={(e) => set(item.key, { qty: e.target.value })} />
-                  ) : '—'}
-                </td>
-                <td className="num cell-amount" data-label="Amount">
-                  {tier ? (
-                    <div className="tier-amount">
-                      <span className="tier-rs" aria-hidden="true">₹</span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        aria-label={`${item.label} – amount`}
-                        placeholder={String(Math.round(standard))}
-                        value={editing ? str(sel.amount) : String(Math.round(standard))}
-                        onChange={(e) => set(item.key, { amount: e.target.value.replace(/\D/g, '') })}
-                        className={custom ? 'is-custom' : ''}
-                      />
-                    </div>
-                  ) : '—'}
+                <td className="num cell-amount" data-label="Amount (₹)">
+                  <div className="tier-amount">
+                    <span className="tier-rs" aria-hidden="true">₹</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      aria-label={`${item.label} – amount`}
+                      placeholder="—"
+                      value={shown}
+                      onChange={(e) => set(item.key, { amount: e.target.value.replace(/\D/g, '') })}
+                    />
+                  </div>
                 </td>
               </tr>
             );

@@ -1877,21 +1877,17 @@ body.gen-full-open { overflow: hidden; }
 .bm { position: relative; }
 .bm-map { height: 420px; border-radius: 12px; border: 1px solid var(--border); overflow: hidden; background: #e5e7eb; z-index: 0; }
 .bm-loading { display: grid; place-items: center; color: var(--muted); font-size: 0.85rem; }
-.bm-map .leaflet-container, .bm-map.leaflet-container { cursor: crosshair; font: inherit; }
 .bm-tools { position: absolute; top: 10px; right: 10px; z-index: 500; display: flex; gap: 6px; }
 .bm-seg { display: inline-flex; background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.25); overflow: hidden; }
 .bm-seg button, .bm-btn { border: 0; background: #fff; padding: 6px 10px; font: inherit; font-size: 0.78rem; font-weight: 600; color: var(--ink-2); cursor: pointer; }
 .bm-seg button.on { background: var(--blue-600); color: #fff; }
 .bm-btn { border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
-.bm-pin span { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #facc15; color: #111; border: 2px solid #fff; font-size: 11px; font-weight: 800; box-shadow: 0 1px 4px rgba(0,0,0,.5); cursor: grab; }
-.bm-centre span { display: block; width: 18px; height: 18px; border-radius: 50%; background: #dc2626; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
 .latlon > .hint { margin: 0; }
 .keyplan-outline { position: absolute; left: 0; top: 0; pointer-events: none; }
 @media (max-width: 900px) {
   .bm-map { height: 340px; }
   .bm-area { order: 3; width: 100%; }
 }
-.bm-map .leaflet-control-attribution { font-size: 9px; line-height: 1.3; max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .grid-tables { display: grid; gap: 14px; }
 
@@ -2242,28 +2238,51 @@ body.drafting-full .sheet-layout.workspace.split { grid-template-columns: minmax
 body.drafting-full .sheet-layout.workspace.split > .ws-report { top: 12px; max-height: calc(100vh - 24px); }
 @media (max-width: 640px) { body.drafting-full .content { padding: 10px 10px 24px; } }
 
-/* ---------- Add customer: one page, everything visible ---------- */
-.cf-modal { width: min(720px, 100%); }
-.cf-form { display: flex; flex-direction: column; gap: 18px; }
-.cf-section { display: flex; flex-direction: column; gap: 12px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
-.cf-section:last-of-type { border-bottom: 0; padding-bottom: 0; }
-.cf-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 0.98rem; }
-.cf-title > span:first-child { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--blue-50); color: var(--blue-800); font-size: 0.76rem; font-weight: 700; }
-.cf-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
-.cf-grid > label, .cf-name > label { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+/* ---------- Add customer: everything visible; two columns on wide screens, one on tablets, a full sheet on phones ---------- */
+.modal.cf-modal { max-width: 1080px; }
+.modal.cf-modal.cf-edit { max-width: 720px; }
+.cf-modal .modal-body { padding: 18px 22px 0; background: var(--surface-2); }
+.cf-form { display: flex; flex-direction: column; gap: 16px; }
+.cf-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.cf-edit .cf-cols { grid-template-columns: minmax(0, 1fr); }
+.cf-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.cf-section { display: flex; flex-direction: column; gap: 14px; padding: 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.cf-title { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 1rem; }
+.cf-title > span:first-child { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--blue-50); color: var(--blue-800); font-size: 0.8rem; font-weight: 700; flex: none; }
+.cf-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+.cf-grid > label, .cf-name > label { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-weight: 600; font-size: 0.88rem; }
+.cf-grid input, .cf-name input, .cf-name select { min-height: 44px; font-size: 0.95rem; }
 .cf-grid .wide { grid-column: 1 / -1; }
-.cf-name { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; }
+.cf-name { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 12px; }
 .cf-type { display: inline-flex; gap: 6px; padding: 4px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; align-self: flex-start; }
-.cf-type-opt { border: 0; background: transparent; padding: 7px 16px; border-radius: 999px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
+.cf-type-opt { border: 0; background: transparent; padding: 9px 18px; border-radius: 999px; font-weight: 600; color: var(--ink-2); cursor: pointer; font-size: 0.92rem; }
 .cf-type-opt.on { background: var(--surface); color: var(--blue-800); box-shadow: var(--shadow-sm); }
 .cf-hints { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.cf-hints .chip { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 4px 10px; font-size: 0.8rem; cursor: pointer; }
-.cf-people { display: flex; flex-wrap: wrap; gap: 8px; }
-.cf-person { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-weight: 600; color: var(--ink-2); cursor: pointer; }
+.cf-hints .chip { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 5px 12px; font-size: 0.82rem; cursor: pointer; }
+.cf-people { display: flex; flex-wrap: wrap; gap: 10px; }
+.cf-person { display: inline-flex; align-items: center; gap: 10px; padding: 7px 16px 7px 7px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-weight: 600; color: var(--ink-2); cursor: pointer; min-height: 44px; }
 .cf-person.on { border-color: var(--blue-600); background: var(--blue-50); color: var(--blue-800); }
-.cf-foot { position: sticky; bottom: -1px; display: flex; justify-content: flex-end; gap: 10px; padding: 12px 0 2px; background: var(--surface); border-top: 1px solid var(--border); }
-.cf-foot .btn { margin: 0; }
-@media (max-width: 560px) { .cf-grid { grid-template-columns: minmax(0, 1fr); } .cf-name { grid-template-columns: 84px minmax(0, 1fr); } .cf-foot .btn { flex: 1; } }
+.cf-foot { position: sticky; bottom: 0; z-index: 2; display: flex; justify-content: flex-end; gap: 10px; margin: 0 -22px; padding: 14px 22px; background: var(--surface); border-top: 1px solid var(--border); }
+.cf-foot .btn { margin: 0; min-height: 44px; padding: 0 20px; }
+.cf-modal .bm-map.sp-map { height: 320px; }
+/* tablets: one roomy column */
+@media (max-width: 1100px) {
+  .modal.cf-modal { max-width: 760px; }
+  .cf-cols { grid-template-columns: minmax(0, 1fr); }
+}
+/* phones: a full-height sheet, one field per row */
+@media (max-width: 640px) {
+  .modal.cf-modal { max-height: 100dvh; height: 100dvh; border-radius: 0; }
+  .cf-modal .modal-body { padding: 12px 12px 0; }
+  .cf-section { padding: 14px; gap: 12px; }
+  .cf-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .cf-name { grid-template-columns: 92px minmax(0, 1fr); }
+  .cf-type { align-self: stretch; }
+  .cf-type-opt { flex: 1; padding: 9px 10px; }
+  .cf-foot { margin: 0 -12px; padding: 12px; }
+  .cf-foot .btn { flex: 1; padding: 0 10px; }
+  .cf-modal .bm-map.sp-map { height: 260px; }
+}
 
 /* sheet: what Add customer filled in */
 .from-cust { border: 1px solid var(--blue-200); background: var(--blue-50); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
@@ -2298,6 +2317,25 @@ body.drafting-full .sheet-layout.workspace.split > .ws-report { top: 12px; max-h
 .bm-map.sp-map { height: 280px; cursor: pointer; }
 .site-map-note { font-size: 0.78rem; }
 .site-map-ll { font-variant-numeric: tabular-nums; }
-.sp-pin { background: none; border: 0; }
-.sp-pin span { display: block; width: 28px; height: 28px; margin: 0 auto; border-radius: 50% 50% 50% 0; background: var(--blue-600, #2563eb); border: 3px solid #fff; transform: rotate(-45deg); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); }
 @media (max-width: 560px) { .bm-map.sp-map { height: 240px; } }
+
+/* a map that could not load (Google Maps key missing or refused) */
+.map-unavailable { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 18px; text-align: center; background: var(--surface-2); color: var(--ink-2); border: 1px dashed var(--border-strong); }
+.map-unavailable strong { color: var(--ink); }
+.map-unavailable span { max-width: 460px; font-size: 0.85rem; line-height: 1.45; }
+
+/* sheet: Fts | Mts switch for measurements */
+.measure-switch { display: flex; align-items: center; gap: 10px; justify-content: flex-end; margin: -4px 0 4px; font-size: 0.84rem; font-weight: 600; color: var(--ink-2); }
+.measure-switch .segmented { width: auto; }
+
+/* Building valuation: building dimensions (permission | actual) and slab extensions */
+.field-row-group.row-bd-len, .field-row-group.row-bd-bre { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.field-row-group.row-bd-ext { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.bd-calc table { width: 100%; }
+.bd-calc th[scope="row"] { text-align: left; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.bd-calc td strong { font-variant-numeric: tabular-nums; }
+.bd-calc .bd-slab td strong { color: var(--blue-800); }
+@media (max-width: 640px) { .field-row-group.row-bd-ext { grid-template-columns: repeat(2, minmax(0, 1fr)); } .field-row-group.row-bd-len, .field-row-group.row-bd-bre { grid-template-columns: minmax(0, 1fr); } }
+
+/* a value worked out from an earlier entry (shown, not entered) */
+.derived-value { padding: 9px 12px; border: 1px dashed var(--border-strong); border-radius: 8px; background: var(--surface-2); }

@@ -352,7 +352,7 @@ export default function GenerateReport() {
                 : reportsPerSheet[sheet._id] > 0 ? <span className="muted">Creates version {reportsPerSheet[sheet._id] + 1} · earlier versions are kept</span>
                 : null}
             </span>
-            <button type="button" className="btn primary" disabled={!type || busy || reportDirty || (editingSheet && sheetDirty) || !full} onClick={generate}>{busy ? 'Generating…' : 'Generate'}</button>
+            <button type="button" className="btn primary" disabled={!type || busy || reportDirty || (editingSheet && sheetDirty) || !full} onClick={generate}>{busy ? 'Generating…' : 'Generate & approve'}</button>
           </header>
           <div className="gen-tabs" role="tablist" aria-label="Review">
             <button type="button" role="tab" aria-selected={pane === 'report'} className={pane === 'report' ? 'on' : ''} onClick={() => setPane('report')}>

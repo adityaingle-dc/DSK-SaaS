@@ -25,6 +25,8 @@ const JOB_SECTION = {
     { ...generalField('propertyType'), required: true },
     { ...generalField('bankName'), label: 'Bank', required: false },
     { ...generalField('branch'), required: false },
+    // shown so a code that no longer matches the branch can be seen and corrected (entering it fills bank & branch)
+    { ...generalField('ifsc'), required: false, hint: 'Filled in when you pick the branch, or enter it to fill the bank and branch' },
   ],
 };
 
@@ -251,7 +253,7 @@ export function CustomerFormModal({ customer, onClose, onSaved }) {
   let n = 0;
 
   return (
-    <Modal title={editing ? 'Edit customer' : 'Add customer'} onClose={requestClose} closeOnBackdrop={false} className="cf-modal">
+    <Modal title={editing ? 'Edit customer' : 'Add customer'} onClose={requestClose} closeOnBackdrop={false} className={`cf-modal${editing ? ' cf-edit' : ''}`}>
       <form className="cf-form" onSubmit={submit} noValidate>
         {restored && (
           <div className="draft-note" role="status">
@@ -266,6 +268,8 @@ export function CustomerFormModal({ customer, onClose, onSaved }) {
           </div>
         )}
 
+        <div className="cf-cols">
+        <div className="cf-col">
         <section className="cf-section">
           <h3 className="cf-title"><span>{++n}</span> Customer</h3>
           <div className="cf-type" role="radiogroup" aria-label="New customer or POC">
@@ -313,8 +317,10 @@ export function CustomerFormModal({ customer, onClose, onSaved }) {
             data={{}}
           />
         </section>
+        </div>
 
         {!editing && (
+        <div className="cf-col">
           <section className="cf-section">
             <h3 className="cf-title"><span>{++n}</span> Site address{mine && <span className="muted small"> (optional when you inspect it yourself)</span>}</h3>
             <div className="cf-grid">
@@ -328,9 +334,8 @@ export function CustomerFormModal({ customer, onClose, onSaved }) {
             {show('site') && <span className="error-text">{errors.site}</span>}
             <SiteMap site={form.site} pin={form.siteLocation} onPin={(p) => setF('siteLocation', p)} />
           </section>
-        )}
 
-        {!editing && isSuperadmin && (
+        {isSuperadmin && (
           <section className="cf-section">
             <h3 className="cf-title"><span>{++n}</span> Site inspection by</h3>
             {!people ? <div className="skeleton" style={{ height: 48 }} /> : (
@@ -346,6 +351,9 @@ export function CustomerFormModal({ customer, onClose, onSaved }) {
             {show('evaluator') && <span className="error-text">{errors.evaluator}</span>}
           </section>
         )}
+        </div>
+        )}
+        </div>
 
         <div className="cf-foot">
           <button type="button" className="btn" onClick={requestClose} disabled={busy}>Cancel</button>
@@ -370,7 +378,7 @@ function AssignForm({ customer, properties = [], initialFrom = '', onAssigned, o
   // the request itself (bank and branch start from the customer's)
   const [job, setJob] = useState(() => ({
     service: SERVICES.includes(customer.serviceRequest) ? customer.serviceRequest : '',
-    propertyType: '', bankName: customer.bankName || '', branch: customer.branch || '', ifsc: '',
+    propertyType: '', bankName: customer.bankName || '', branch: customer.branch || '', ifsc: customer.ifsc || '',
   }));
   const jobErrors = { 'job.service': !job.service ? 'Choose the service requested' : null, 'job.propertyType': !job.propertyType ? 'Choose the type of property' : null };
   const [pick, setPick] = useState(self ? myId || 'me' : '');

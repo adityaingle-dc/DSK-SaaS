@@ -64,13 +64,15 @@ function cleanField(field, v) {
       for (const item of field.items) {
         const sel = v?.[item.key];
         const tier = Math.trunc(Number(sel?.tier));
-        if (tier >= 1 && tier <= 4) {
-          // amount: the exact figure typed by the evaluator (overrides grade rate × qty)
-          const amount = isBlank(sel.amount) ? NaN : Number(sel.amount);
+        const hasTier = tier >= 1 && tier <= 4;
+        // amount: the figure typed for the item (older sheets may only have a picked value: tier → rate × qty)
+        const amount = isBlank(sel?.amount) ? NaN : Number(sel.amount);
+        const hasAmount = Number.isFinite(amount) && amount >= 0;
+        if (hasTier || hasAmount) {
           out[item.key] = {
-            tier,
+            ...(hasTier ? { tier } : {}),
             ...(item.unit && !isBlank(sel.qty) ? { qty: Math.max(0, Number(sel.qty) || 0) } : {}),
-            ...(Number.isFinite(amount) && amount >= 0 ? { amount: Math.round(amount) } : {}),
+            ...(hasAmount ? { amount: Math.round(amount) } : {}),
           };
         }
       }
@@ -136,7 +138,7 @@ function checkScalar(field, v, name, errors) {
   if (field.type === 'date' && Number.isNaN(new Date(v).getTime())) errors.push({ field: name, message: `${field.label}: invalid date` });
   if (field.type === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) errors.push({ field: name, message: `${field.label}: invalid email` });
   // allowOther: a typed value (e.g. "Penthouse") is accepted besides the listed ones
-  if ((field.type === 'select' || field.type === 'choice') && field.options && !field.allowOther && !field.options.includes(String(v))) {
+  if ((field.type === 'select' || field.type === 'choice') && field.options && !field.allowOther && !field.keepOther && !field.options.includes(String(v))) {
     errors.push({ field: name, message: `${field.label}: "${v}" is not an allowed option` });
   }
   if (field.pattern && !new RegExp(field.pattern).test(String(v))) errors.push({ field: name, message: field.patternMessage || `${field.label}: invalid format` });

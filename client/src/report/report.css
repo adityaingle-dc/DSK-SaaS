@@ -88,9 +88,10 @@
 .t.values td { border-left: 0; border-right: 0; }
 .t.values td.r { white-space: nowrap; width: 30%; }
 /* two values in one cell (deed vs actual): side-by-side halves */
-.t td.split, .t th.split { padding: 0; }
+.t td.split, .t th.split { padding: 0; position: relative; }
 .t .split > * { display: inline-block; width: 50%; padding: 2.5px 5px; vertical-align: top; box-sizing: border-box; }
-.t .split > .sp-r { border-left: 1px solid #9ca3af; min-height: 100%; }
+/* the middle line belongs to the cell, so it runs the full row height whichever half (or the row label) is taller */
+.t td.split::after, .t th.split::after { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; border-left: 1px solid #9ca3af; pointer-events: none; }
 .t th.split > span { font-weight: 700; }
 .words-row { font-style: italic; font-weight: 700; padding-left: 24px !important; }
 .words-i { font-style: italic; font-weight: 700; }
@@ -233,3 +234,4 @@ ol.f-list { list-style: decimal; }
 .keyplan-pair { display: flex; flex-direction: column; gap: 10px; align-items: center; }
 .keyplan-pair .keyplan { margin: 0; }
 .keyplan-pair figcaption b { color: #111; }
+.keyplan-missing { display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 10pt; color: #6b7280; background: #f9fafb; border: 1px dashed #d1d5db; }
