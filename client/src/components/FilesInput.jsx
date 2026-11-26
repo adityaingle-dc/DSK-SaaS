@@ -118,7 +118,8 @@ const IN_APP = typeof navigator !== 'undefined' && /DSKRISHNA-App/.test(navigato
 const sizeText = (b) => (b > 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 
 // a photo on the whole screen: after taking a GPS photo (Use photo / Retake) and when a thumbnail is tapped
-export function PhotoPreview({ url, title, info, actions = [], onClose }) {
+// loading: a status line ("Getting the location…") shown over the dimmed photo while the stamp is being prepared
+export function PhotoPreview({ url, title, info, actions = [], onClose, loading = null }) {
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose?.();
     document.addEventListener('keydown', onKey);
@@ -132,7 +133,15 @@ export function PhotoPreview({ url, title, info, actions = [], onClose }) {
         <span className="pp-title">{title}</span>
         <button type="button" className="pp-close" aria-label="Close" onClick={onClose}>✕</button>
       </div>
-      <div className="pp-image">{url ? <img src={url} alt={title || 'Photo'} /> : <span className="pp-loading">Loading…</span>}</div>
+      <div className={`pp-image${loading ? ' is-loading' : ''}`}>
+        {url ? <img src={url} alt={title || 'Photo'} /> : !loading && <span className="pp-loading">Loading…</span>}
+        {loading && (
+          <div className="pp-wait" role="status" aria-live="polite">
+            <span className="pp-spinner" aria-hidden="true" />
+            <span>{loading}</span>
+          </div>
+        )}
+      </div>
       {info && <div className="pp-info">{info}</div>}
       {actions.length > 0 && (
         <div className="pp-actions">
@@ -203,7 +212,8 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
   latest.current = value;
   const locating = useRef(null);
   const [status, setStatus] = useState('');
-  const [preview, setPreview] = useState(null); // a GPS photo just taken: { file, gps, url }
+  const [preview, setPreview] = useState(null); // a GPS photo just taken: { loading, status, url } then { file, gps, url }
+  const shotRef = useRef(0); // the photo being prepared (a newer one, or ✕, makes an older one stale)
 
   // which photo the camera is taking: 'gps' (stamped) or 'plain' (a normal photo, when location is not available)
   const mode = useRef('gps');
@@ -259,34 +269,37 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
     const loc = locating.current;
     if (!original || !loc) return;
     if (latest.current.length >= max) { loc.stop(); return setError(`Up to ${max} ${noun}.`); }
-    setUploading((n) => n + 1);
-    setStatus('Getting the location…');
+    // straight away: the photo just taken, with a loader, until the stamped one is ready
+    const shot = ++shotRef.current;
+    const replace = (next) => setPreview((p) => { if (p?.url && p.url !== next?.url) URL.revokeObjectURL(p.url); return next; });
+    const stale = () => shot !== shotRef.current; // closed (✕) while it was being prepared
+    replace({ loading: true, status: 'Getting the location…', url: URL.createObjectURL(original) });
     let pos = null; let why = null;
     try { pos = await loc.get(); } catch (e) { why = e; } finally { loc.stop(); }
+    if (stale()) return;
     if (!pos) {
       // no location (GPS off, no signal, not allowed): keep the photo as a normal one if wanted
-      setStatus('');
-      setUploading((n) => n - 1);
+      replace(null);
       const keep = await confirmDialog({ title: 'No location for this photo', message: `${why?.message || 'Could not get the location.'} Add it as a normal photo, without the location stamp?`, confirmLabel: 'Add as normal photo', cancelLabel: 'Discard' });
       if (keep) addFiles([original]);
       return;
     }
     markGeoWorked();
     try {
-      setStatus('Stamping the location on the photo…');
+      setPreview((p) => (p ? { ...p, status: 'Adding the location stamp…' } : p));
       const address = await loc.addressFor(pos); // looked up while the camera was open
       const file = await stampPhoto(original, pos, address);
+      if (stale()) return;
       const gps = { lat: +pos.coords.latitude.toFixed(7), lon: +pos.coords.longitude.toFixed(7), accuracy: Math.round(pos.coords.accuracy), takenAt: new Date(pos.timestamp || Date.now()).toISOString() };
-      // show the stamped photo first: it is added only on "Use photo"
-      setPreview({ file, gps, url: URL.createObjectURL(file) });
+      // the stamped photo: it is added only on "Use photo"
+      replace({ file, gps, url: URL.createObjectURL(file) });
     } catch (e) {
+      if (stale()) return;
+      replace(null);
       setError(`${e.message} The photo was not added.`);
-    } finally {
-      setStatus('');
-      setUploading((n) => n - 1);
     }
   };
-  const closePreview = () => setPreview((p) => { if (p?.url) URL.revokeObjectURL(p.url); return null; });
+  const closePreview = () => { shotRef.current += 1; setPreview((p) => { if (p?.url) URL.revokeObjectURL(p.url); return null; }); };
   const usePreviewPhoto = async () => {
     const p = preview;
     if (!p) return;
@@ -364,9 +377,10 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
         <PhotoPreview
           url={preview.url}
           title="GPS photo"
-          info={`Location, date and time are stamped on the photo · ±${preview.gps.accuracy} m`}
+          loading={preview.loading ? preview.status : null}
+          info={preview.loading ? null : `Location, date and time are stamped on the photo · ±${preview.gps.accuracy} m`}
           onClose={closePreview}
-          actions={[
+          actions={preview.loading ? [] : [
             { label: 'Retake', onClick: retake },
             { label: 'Use photo', onClick: usePreviewPhoto, primary: true },
           ]}

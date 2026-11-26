@@ -11,10 +11,16 @@ function Photo({ file }) {
       live = false;
     };
   }, [file.id]);
+  // GPS photos are shown whole (not cropped to the box), so the stamp along the bottom always prints
+  const gps = file.gps && Number.isFinite(+file.gps.lat) ? file.gps : null;
+  const when = gps?.takenAt ? new Date(gps.takenAt) : null;
+  const caption = file.caption || (gps
+    ? `GPS ${(+gps.lat).toFixed(6)}, ${(+gps.lon).toFixed(6)}${when && !Number.isNaN(when.getTime()) ? ` · ${when.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}`
+    : file.name);
   return (
-    <figure className="photo">
+    <figure className={`photo${gps ? ' is-gps' : ''}`}>
       {url ? <img src={url} alt={file.name} /> : <div className="photo-loading">Loading…</div>}
-      <figcaption>{file.caption || file.name}</figcaption>
+      <figcaption>{caption}</figcaption>
     </figure>
   );
 }

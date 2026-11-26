@@ -124,6 +124,8 @@
 .photo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .photo { margin: 0; border: 1px solid #d1d5db; padding: 4px; display: flex; flex-direction: column; gap: 3px; }
 .photo img { width: 100%; height: 300px; object-fit: cover; }
+/* GPS-stamped photos: the whole photo, so the location / date / time band at the bottom is printed */
+.photo.is-gps img { object-fit: contain; background: #f3f4f6; }
 .photo-loading { height: 300px; display: grid; place-items: center; color: #9ca3af; }
 .photo figcaption { font-size: 8pt; color: #6b7280; }
 
