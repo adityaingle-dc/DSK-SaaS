@@ -25,21 +25,51 @@ async function compressImage(file) {
 }
 
 // ---------- GPS camera: the location, date and time are stamped on the photo (like a GPS camera app) ----------
-const LOCATION_WAIT_MS = 25000;
-// watch the position from the moment the camera button is tapped, so it is ready when the photo comes back
+// After the photo comes back: a location found while the camera was open is used at once if it is within
+// GOOD_ENOUGH_M (like a GPS camera app); otherwise the best one is waited for, up to LOCATION_WAIT_MS.
+const LOCATION_WAIT_MS = 15000;
+const GOOD_ENOUGH_M = 100;
+const metres = (a, b) => {
+  const r = Math.PI / 180;
+  const x = (b.longitude - a.longitude) * r * Math.cos(((a.latitude + b.latitude) / 2) * r);
+  const y = (b.latitude - a.latitude) * r;
+  return Math.sqrt(x * x + y * y) * 6371000;
+};
+// watch the position from the moment the camera button is tapped (and look up the address of the first fix in the
+// background), so both are ready when the photo comes back
 function startLocating() {
-  if (!navigator.geolocation) return { promise: Promise.reject(new Error('This phone or browser cannot share its location.')), stop: () => {} };
-  let best = null; let id = null; let settle;
-  const promise = new Promise((resolve, reject) => {
-    settle = { resolve, reject };
-    id = navigator.geolocation.watchPosition(
-      (p) => { if (!best || p.coords.accuracy < best.coords.accuracy) best = p; if (best.coords.accuracy <= 30) resolve(best); },
-      (e) => reject(new Error(e.code === 1 ? 'Location is blocked. Allow location for this site (and turn on GPS) to take GPS photos.' : 'Could not get the location. Turn on GPS and try again.')),
-      { enableHighAccuracy: true, maximumAge: 10000, timeout: LOCATION_WAIT_MS },
-    );
+  if (!navigator.geolocation) {
+    const no = new Error('This phone or browser cannot share its location.');
+    return { get: () => Promise.reject(no), addressFor: () => Promise.resolve(''), stop: () => {} };
+  }
+  let best = null; let blocked = null; let lookup = null;
+  const waiters = new Set();
+  const id = navigator.geolocation.watchPosition(
+    (p) => {
+      if (!best || p.coords.accuracy < best.coords.accuracy) best = p;
+      if (!lookup) lookup = { at: p.coords, address: shortAddress(p.coords.latitude, p.coords.longitude) };
+      waiters.forEach((w) => w());
+    },
+    (e) => {
+      // blocked: give up now; no signal / timed out: keep watching until the wait runs out
+      if (e.code === 1) { blocked = new Error('Location is blocked. Allow location for this site (and turn on GPS) to take GPS photos.'); waiters.forEach((w) => w()); }
+    },
+    { enableHighAccuracy: true, maximumAge: 10000 },
+  );
+  const get = () => new Promise((resolve, reject) => {
+    let timer;
+    const finish = (fn) => { clearTimeout(timer); waiters.delete(check); fn(); };
+    function check() {
+      if (best && best.coords.accuracy <= GOOD_ENOUGH_M) finish(() => resolve(best));
+      else if (blocked) finish(() => reject(blocked));
+    }
+    waiters.add(check);
+    timer = setTimeout(() => finish(() => (best ? resolve(best) : reject(new Error('Could not get the location in time. Turn on GPS, step outside if needed, and try again.')))), LOCATION_WAIT_MS);
+    check();
   });
-  const timer = setTimeout(() => (best ? settle.resolve(best) : settle.reject(new Error('Could not get the location in time. Turn on GPS, step outside if needed, and try again.'))), LOCATION_WAIT_MS);
-  return { promise, stop: () => { clearTimeout(timer); if (id != null) navigator.geolocation.clearWatch(id); } };
+  // the address looked up already, when the photo's position is near it; else a fresh (quick) lookup
+  const addressFor = (pos) => (lookup && metres(lookup.at, pos.coords) < 250 ? lookup.address : shortAddress(pos.coords.latitude, pos.coords.longitude));
+  return { get, addressFor, stop: () => navigator.geolocation.clearWatch(id) };
 }
 
 async function stampPhoto(file, pos, address) {
@@ -76,7 +106,7 @@ async function stampPhoto(file, pos, address) {
 // "Village, Mandal, District 503224" for the stamp (skipped quickly if the lookup is slow or offline)
 async function shortAddress(lat, lon) {
   try {
-    const r = await Promise.race([api.reverseGeocode(lat, lon), new Promise((res) => setTimeout(() => res(null), 4000))]);
+    const r = await Promise.race([api.reverseGeocode(lat, lon), new Promise((res) => setTimeout(() => res(null), 3000))]);
     const f = r?.fields || {};
     return [f.street, f.village, f.localBodyName !== f.village ? f.localBodyName : '', [f.district, f.pincode].filter(Boolean).join(' ')].filter(Boolean).join(', ');
   } catch { return ''; }
@@ -182,7 +212,6 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
     mode.current = 'gps';
     locating.current?.stop();
     locating.current = startLocating();
-    locating.current.promise.catch(() => {}); // handled when the photo comes back
     cameraRef.current?.click();
   };
   // location not available: offer a normal photo instead (the camera opens from the button tap in the dialog)
@@ -233,7 +262,7 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
     setUploading((n) => n + 1);
     setStatus('Getting the location…');
     let pos = null; let why = null;
-    try { pos = await loc.promise; } catch (e) { why = e; } finally { loc.stop(); }
+    try { pos = await loc.get(); } catch (e) { why = e; } finally { loc.stop(); }
     if (!pos) {
       // no location (GPS off, no signal, not allowed): keep the photo as a normal one if wanted
       setStatus('');
@@ -245,7 +274,7 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
     markGeoWorked();
     try {
       setStatus('Stamping the location on the photo…');
-      const address = await shortAddress(pos.coords.latitude, pos.coords.longitude);
+      const address = await loc.addressFor(pos); // looked up while the camera was open
       const file = await stampPhoto(original, pos, address);
       const gps = { lat: +pos.coords.latitude.toFixed(7), lon: +pos.coords.longitude.toFixed(7), accuracy: Math.round(pos.coords.accuracy), takenAt: new Date(pos.timestamp || Date.now()).toISOString() };
       // show the stamped photo first: it is added only on "Use photo"
