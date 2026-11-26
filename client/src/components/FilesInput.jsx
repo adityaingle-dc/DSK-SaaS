@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ALLOWED_FILE_TYPES, MAX_FILE_BYTES, MAX_FILES } from '@dsk/shared';
 import { api } from '../api/client.js';
 import { alertDialog, confirmDialog } from './ConfirmDialog.jsx';
@@ -81,11 +82,42 @@ async function shortAddress(lat, lon) {
   } catch { return ''; }
 }
 
+// running inside the DSKRISHNA Android app (its WebView adds this to the user agent)
+const IN_APP = typeof navigator !== 'undefined' && /DSKRISHNA-App/.test(navigator.userAgent || '');
+
 const sizeText = (b) => (b > 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
+
+// a photo on the whole screen: after taking a GPS photo (Use photo / Retake) and when a thumbnail is tapped
+export function PhotoPreview({ url, title, info, actions = [], onClose }) {
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onClose?.();
+    document.addEventListener('keydown', onKey);
+    const before = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = before; };
+  }, [onClose]);
+  return createPortal(
+    <div className="photo-preview" role="dialog" aria-modal="true" aria-label={title || 'Photo'}>
+      <div className="pp-top">
+        <span className="pp-title">{title}</span>
+        <button type="button" className="pp-close" aria-label="Close" onClick={onClose}>✕</button>
+      </div>
+      <div className="pp-image">{url ? <img src={url} alt={title || 'Photo'} /> : <span className="pp-loading">Loading…</span>}</div>
+      {info && <div className="pp-info">{info}</div>}
+      {actions.length > 0 && (
+        <div className="pp-actions">
+          {actions.map((a) => <button key={a.label} type="button" className={`btn${a.primary ? ' primary' : ''}`} onClick={a.onClick} disabled={a.disabled}>{a.label}</button>)}
+        </div>
+      )}
+    </div>,
+    document.body,
+  );
+}
 
 export function FileThumb({ file, onRemove }) {
   const [url, setUrl] = useState(null);
   const [failed, setFailed] = useState(false);
+  const [viewing, setViewing] = useState(false);
   const isImage = file.type?.startsWith('image/') && !/hei[cf]/.test(file.type);
 
   useEffect(() => {
@@ -97,6 +129,8 @@ export function FileThumb({ file, onRemove }) {
   }, [file.id, isImage]);
 
   const open = async () => {
+    // photos open on the whole screen here (with their stamp); PDFs and others in their own viewer
+    if (isImage) { setViewing(true); return; }
     const w = window.open('', '_blank');
     try {
       w.location.href = await api.fileUrl(file.id);
@@ -115,6 +149,14 @@ export function FileThumb({ file, onRemove }) {
       {onRemove && (
         <button type="button" className="thumb-remove" aria-label={`Remove ${file.name}`} onClick={onRemove}>✕</button>
       )}
+      {viewing && (
+        <PhotoPreview
+          url={url}
+          title={file.name}
+          info={file.gps ? `GPS ${file.gps.lat}, ${file.gps.lon}${file.gps.takenAt ? ` · ${new Date(file.gps.takenAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}` : null}
+          onClose={() => setViewing(false)}
+        />
+      )}
     </div>
   );
 }
@@ -131,6 +173,7 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
   latest.current = value;
   const locating = useRef(null);
   const [status, setStatus] = useState('');
+  const [preview, setPreview] = useState(null); // a GPS photo just taken: { file, gps, url }
 
   // which photo the camera is taking: 'gps' (stamped) or 'plain' (a normal photo, when location is not available)
   const mode = useRef('gps');
@@ -146,8 +189,15 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
   const offerPlain = async (why) => {
     if (await confirmDialog({ title: 'Take a normal photo?', message: `${why} You can take a normal photo instead, without the location stamp.`, confirmLabel: 'Take normal photo', cancelLabel: 'Cancel' })) openPlainCamera();
   };
+  // inside the Android app the WebView may answer "prompt" every time even after location was allowed: once location
+  // has worked on this phone it is treated as allowed (if it fails later, the photo is offered as a normal one)
+  const GEO_OK = 'dsk_geo_ok';
+  const geoWorked = () => { try { return localStorage.getItem(GEO_OK) === '1'; } catch { return false; } };
+  const markGeoWorked = () => { try { localStorage.setItem(GEO_OK, '1'); } catch { /* storage off: just ask again */ } };
   const locationPermission = async () => {
-    try { return navigator.permissions?.query ? (await navigator.permissions.query({ name: 'geolocation' })).state : 'unknown'; } catch { return 'unknown'; }
+    let state = 'unknown';
+    try { if (navigator.permissions?.query) state = (await navigator.permissions.query({ name: 'geolocation' })).state; } catch { /* unknown */ }
+    return state === 'prompt' && geoWorked() ? 'granted' : state;
   };
   // ask for location once (the phone shows its own prompt): true · false (not allowed) · 'off' (allowed, GPS off)
   const askLocation = () => new Promise((resolve) => {
@@ -156,6 +206,8 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
   const openGpsCamera = async () => {
     setError('');
     if (!navigator.geolocation) return offerPlain('This phone cannot share its location.');
+    // in the DSKRISHNA app, Android itself asks for location (once, when the app opens): no extra question here
+    if (IN_APP) return launchGps();
     const state = await locationPermission();
     // allowed (or the browser can't tell): straight to the camera; GPS being off is handled when the photo comes back
     if (state === 'granted' || state === 'unknown') return launchGps();
@@ -167,6 +219,7 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
     if (!allow) return openPlainCamera();
     const got = await askLocation();
     if (got === true) {
+      markGeoWorked();
       if (await confirmDialog({ title: 'Location is on', message: 'Now take the photo: the location, date and time are stamped on it.', confirmLabel: 'Open GPS camera', cancelLabel: 'Cancel' })) launchGps();
       return;
     }
@@ -189,15 +242,14 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
       if (keep) addFiles([original]);
       return;
     }
+    markGeoWorked();
     try {
       setStatus('Stamping the location on the photo…');
       const address = await shortAddress(pos.coords.latitude, pos.coords.longitude);
       const file = await stampPhoto(original, pos, address);
       const gps = { lat: +pos.coords.latitude.toFixed(7), lon: +pos.coords.longitude.toFixed(7), accuracy: Math.round(pos.coords.accuracy), takenAt: new Date(pos.timestamp || Date.now()).toISOString() };
-      const ref = await api.uploadFile(file, { gps });
-      const withGps = { ...ref, gps: ref.gps || gps };
-      onChange([...latest.current, withGps]);
-      latest.current = [...latest.current, withGps];
+      // show the stamped photo first: it is added only on "Use photo"
+      setPreview({ file, gps, url: URL.createObjectURL(file) });
     } catch (e) {
       setError(`${e.message} The photo was not added.`);
     } finally {
@@ -205,6 +257,25 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
       setUploading((n) => n - 1);
     }
   };
+  const closePreview = () => setPreview((p) => { if (p?.url) URL.revokeObjectURL(p.url); return null; });
+  const usePreviewPhoto = async () => {
+    const p = preview;
+    if (!p) return;
+    closePreview();
+    setUploading((n) => n + 1);
+    try {
+      const ref = await api.uploadFile(p.file, { gps: p.gps });
+      const withGps = { ...ref, gps: ref.gps || p.gps };
+      onChange([...latest.current, withGps]);
+      latest.current = [...latest.current, withGps];
+    } catch (e) {
+      setError(`${e.message} The photo was not added.`);
+    } finally {
+      setUploading((n) => n - 1);
+    }
+  };
+  // "Retake": the tap opens the camera again straight away
+  const retake = () => { closePreview(); launchGps(); };
 
   const addFiles = async (fileList) => {
     setError('');
@@ -260,6 +331,18 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { const f = [...(e.target.files || [])]; if (gpsCamera && mode.current === 'gps') addGpsPhoto(f); else addFiles(f); e.target.value = ''; }} />
       {status && <span className="hint">{status}</span>}
       {error && <span className="error-text">{error}</span>}
+      {preview && (
+        <PhotoPreview
+          url={preview.url}
+          title="GPS photo"
+          info={`Location, date and time are stamped on the photo · ±${preview.gps.accuracy} m`}
+          onClose={closePreview}
+          actions={[
+            { label: 'Retake', onClick: retake },
+            { label: 'Use photo', onClick: usePreviewPhoto, primary: true },
+          ]}
+        />
+      )}
     </div>
   );
 }

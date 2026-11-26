@@ -163,8 +163,15 @@ function Shell() {
         onLoadEnd={() => {
           setLoaded(true);
           SplashScreen.hide();
-          // once the portal is showing: make sure photos can be taken (asked once per app start)
-          if (!askedCamera.current) { askedCamera.current = true; ensureCameraPermission(); }
+          // once the portal is showing: camera, then location, asked once per app start (nothing is shown when already
+          // allowed), so a GPS photo does not stop to ask for them
+          if (!askedCamera.current) {
+            askedCamera.current = true;
+            ensureCameraPermission()
+              .then(() => Location.getForegroundPermissionsAsync())
+              .then((p) => (p.granted || !p.canAskAgain ? p : Location.requestForegroundPermissionsAsync()))
+              .catch(() => {});
+          }
         }}
         onError={() => { setFailed(true); SplashScreen.hide(); }}
         onHttpError={(e) => { if (e.nativeEvent.statusCode >= 500 && !e.nativeEvent.url.includes('/api/')) setFailed(true); }}

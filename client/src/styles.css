@@ -2366,3 +2366,16 @@ body.drafting-full .sheet-layout.workspace.split > .ws-report { top: 12px; max-h
 @media (max-width: 900px) {
   .actions.sticky .sa-save .btn.sa-save-only { order: -1; flex: 0 0 auto; width: auto; padding: 0 14px; margin-right: 6px; }
 }
+
+/* Full-screen photo: the GPS photo just taken (Use photo / Retake), or a thumbnail tapped */
+.photo-preview { position: fixed; inset: 0; z-index: 1200; background: #0b0f17; color: #fff; display: flex; flex-direction: column; padding: calc(env(safe-area-inset-top, 0px) + 8px) 12px calc(env(safe-area-inset-bottom, 0px) + 12px); }
+.pp-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; }
+.pp-title { font-weight: 650; font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-close { width: 44px; height: 44px; border: 0; border-radius: 999px; background: rgba(255, 255, 255, 0.12); color: #fff; font-size: 1.1rem; cursor: pointer; flex-shrink: 0; }
+.pp-image { flex: 1; min-height: 0; display: grid; place-items: center; padding: 8px 0; }
+.pp-image img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; }
+.pp-loading { color: rgba(255, 255, 255, 0.7); }
+.pp-info { text-align: center; font-size: 0.8rem; color: rgba(255, 255, 255, 0.78); padding: 4px 8px 10px; }
+.pp-actions { display: flex; gap: 10px; }
+.pp-actions .btn { flex: 1; min-height: 50px; font-size: 1rem; }
+.pp-actions .btn:not(.primary) { background: rgba(255, 255, 255, 0.12); color: #fff; border-color: rgba(255, 255, 255, 0.25); }
