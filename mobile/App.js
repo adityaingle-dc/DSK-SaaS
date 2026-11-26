@@ -3,7 +3,7 @@
 // without a new APK. The shell adds what a plain WebView can't do: camera / GPS permissions, the Android back button,
 // an offline screen, opening WhatsApp / phone / Maps in their apps, sharing downloads and printing reports to PDF.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, BackHandler, Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, BackHandler, Image, Linking, PermissionsAndroid, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { WebView } from 'react-native-webview';
@@ -34,6 +34,26 @@ const isInternal = (url) => {
   }
 };
 
+// Camera: declared in app.json, but Android also needs it granted at runtime. Without it the WebView cannot open the
+// camera for a photo input, and its file picker is left waiting — after that even "+ Upload" stops responding. So the
+// app asks once, up front (nothing is shown when it is already allowed).
+async function ensureCameraPermission() {
+  if (Platform.OS !== 'android') return true;
+  const camera = PermissionsAndroid.PERMISSIONS.CAMERA;
+  try {
+    if (await PermissionsAndroid.check(camera)) return true;
+    const result = await PermissionsAndroid.request(camera, {
+      title: 'Allow the camera',
+      message: 'DSKRISHNA uses the camera to take site photos for the input sheet.',
+      buttonPositive: 'Allow',
+      buttonNegative: 'Not now',
+    });
+    return result === PermissionsAndroid.RESULTS.GRANTED;
+  } catch {
+    return false;
+  }
+}
+
 export default function App() {
   return (
     <SafeAreaProvider>
@@ -45,6 +65,7 @@ export default function App() {
 function Shell() {
   const web = useRef(null);
   const canGoBack = useRef(false);
+  const askedCamera = useRef(false);
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const net = useNetworkState();
@@ -139,7 +160,12 @@ function Shell() {
         onMessage={onMessage}
         onShouldStartLoadWithRequest={onShouldStart}
         onNavigationStateChange={(s) => { canGoBack.current = s.canGoBack; }}
-        onLoadEnd={() => { setLoaded(true); SplashScreen.hide(); }}
+        onLoadEnd={() => {
+          setLoaded(true);
+          SplashScreen.hide();
+          // once the portal is showing: make sure photos can be taken (asked once per app start)
+          if (!askedCamera.current) { askedCamera.current = true; ensureCameraPermission(); }
+        }}
         onError={() => { setFailed(true); SplashScreen.hide(); }}
         onHttpError={(e) => { if (e.nativeEvent.statusCode >= 500 && !e.nativeEvent.url.includes('/api/')) setFailed(true); }}
         onRenderProcessGone={() => web.current?.reload()}

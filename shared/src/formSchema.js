@@ -75,7 +75,8 @@ export const SECTIONS = [
       { key: 'contactPerson', label: 'Bank contact person', type: 'text' },
       { key: 'propertyType', label: 'Type of property', type: 'select', options: L.propertyType, optionLabels: LIST_LABELS.propertyType, required: true },
       { key: 'loanType', label: 'Type of loan', type: 'select', options: L.loanType, required: true },
-      { key: 'loanCategory', label: 'Loan category / condition of site', type: 'select', options: L.loanCategory, required: true },
+      // Existing Building added; "Other…" takes any other category typed in by hand
+      { key: 'loanCategory', label: 'Loan category / condition of site', type: 'select', options: [...L.loanCategory.slice(0, 2), 'Existing Building', ...L.loanCategory.slice(2).filter((o) => o !== 'Existing Building')], allowOther: true, required: true },
       {
         key: 'purpose', label: 'Purpose of valuation', type: 'select', options: purposeOptions, default: purposeOptions[0], wide: true,
         optionLabels: PURPOSE_SHORT,
@@ -111,7 +112,7 @@ export const SECTIONS = [
       { key: 'pincode', label: 'Pincode', type: 'text', ...PIN },
       { key: 'landmark', label: 'Landmark', type: 'text', wide: true },
       { key: 'siteShape', label: 'Site shape', type: 'select', options: L.siteShape },
-      { key: 'photos', label: 'Site photos', type: 'files', accept: 'image/*', imagesOnly: true, maxFiles: 24, wide: true, hint: 'Front view, road, surroundings, boundaries, inside. Take them with the camera or pick from the gallery. They go into the report.' },
+      { key: 'photos', label: 'Site photos', type: 'files', accept: 'image/*', imagesOnly: true, maxFiles: 24, gpsCamera: true, wide: true, hint: 'Front view, road, surroundings, boundaries, inside. Take them with the camera or pick from the gallery. They go into the report.' },
     ],
   },
   {

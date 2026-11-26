@@ -119,8 +119,8 @@ export function FileThumb({ file, onRemove }) {
   );
 }
 
-// gpsCamera: the camera button takes a GPS photo (location, date and time stamped on it); a photo without a location
-// is not added. "+ Upload" still adds photos from the gallery / files.
+// gpsCamera: the camera button takes a GPS photo (location, date and time stamped on it). Location off: the phone is
+// asked to turn it on; if it stays off, a normal photo is offered instead. "+ Upload" adds from the gallery / files.
 // compact: a small version for a table cell (thumbnails + short buttons)
 export default function FilesInput({ value = [], onChange, accept = 'image/*,application/pdf', max = MAX_FILES, noun = 'files per document', gpsCamera = false, compact = false, addLabel }) {
   const pickRef = useRef(null);
@@ -132,12 +132,45 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
   const locating = useRef(null);
   const [status, setStatus] = useState('');
 
-  const openGpsCamera = () => {
-    setError('');
+  // which photo the camera is taking: 'gps' (stamped) or 'plain' (a normal photo, when location is not available)
+  const mode = useRef('gps');
+  const openPlainCamera = () => { mode.current = 'plain'; cameraRef.current?.click(); };
+  const launchGps = () => {
+    mode.current = 'gps';
     locating.current?.stop();
     locating.current = startLocating();
     locating.current.promise.catch(() => {}); // handled when the photo comes back
     cameraRef.current?.click();
+  };
+  // location not available: offer a normal photo instead (the camera opens from the button tap in the dialog)
+  const offerPlain = async (why) => {
+    if (await confirmDialog({ title: 'Take a normal photo?', message: `${why} You can take a normal photo instead, without the location stamp.`, confirmLabel: 'Take normal photo', cancelLabel: 'Cancel' })) openPlainCamera();
+  };
+  const locationPermission = async () => {
+    try { return navigator.permissions?.query ? (await navigator.permissions.query({ name: 'geolocation' })).state : 'unknown'; } catch { return 'unknown'; }
+  };
+  // ask for location once (the phone shows its own prompt): true · false (not allowed) · 'off' (allowed, GPS off)
+  const askLocation = () => new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(() => resolve(true), (e) => resolve(e.code === 1 ? false : 'off'), { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+  });
+  const openGpsCamera = async () => {
+    setError('');
+    if (!navigator.geolocation) return offerPlain('This phone cannot share its location.');
+    const state = await locationPermission();
+    // allowed (or the browser can't tell): straight to the camera; GPS being off is handled when the photo comes back
+    if (state === 'granted' || state === 'unknown') return launchGps();
+    if (state === 'denied') {
+      return offerPlain('Location is blocked. To stamp photos with the location, allow it in the phone settings (Settings → Apps → DSKRISHNA or your browser → Permissions → Location).');
+    }
+    // not asked yet: ask to turn it on first
+    const allow = await confirmDialog({ title: 'Turn on location?', message: 'GPS photos get the location, date and time stamped on them. Allow location when the phone asks.', confirmLabel: 'Allow location', cancelLabel: 'Normal photo' });
+    if (!allow) return openPlainCamera();
+    const got = await askLocation();
+    if (got === true) {
+      if (await confirmDialog({ title: 'Location is on', message: 'Now take the photo: the location, date and time are stamped on it.', confirmLabel: 'Open GPS camera', cancelLabel: 'Cancel' })) launchGps();
+      return;
+    }
+    return offerPlain(got === 'off' ? 'Could not get the location. Turn on Location (GPS) in the phone settings to take GPS photos.' : 'Location was not allowed.');
   };
   const addGpsPhoto = async (fileList) => {
     const original = fileList?.[0];
@@ -146,8 +179,17 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
     if (latest.current.length >= max) { loc.stop(); return setError(`Up to ${max} ${noun}.`); }
     setUploading((n) => n + 1);
     setStatus('Getting the location…');
+    let pos = null; let why = null;
+    try { pos = await loc.promise; } catch (e) { why = e; } finally { loc.stop(); }
+    if (!pos) {
+      // no location (GPS off, no signal, not allowed): keep the photo as a normal one if wanted
+      setStatus('');
+      setUploading((n) => n - 1);
+      const keep = await confirmDialog({ title: 'No location for this photo', message: `${why?.message || 'Could not get the location.'} Add it as a normal photo, without the location stamp?`, confirmLabel: 'Add as normal photo', cancelLabel: 'Discard' });
+      if (keep) addFiles([original]);
+      return;
+    }
     try {
-      const pos = await loc.promise;
       setStatus('Stamping the location on the photo…');
       const address = await shortAddress(pos.coords.latitude, pos.coords.longitude);
       const file = await stampPhoto(original, pos, address);
@@ -159,7 +201,6 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
     } catch (e) {
       setError(`${e.message} The photo was not added.`);
     } finally {
-      loc.stop();
       setStatus('');
       setUploading((n) => n - 1);
     }
@@ -216,7 +257,7 @@ export default function FilesInput({ value = [], onChange, accept = 'image/*,app
           : <button type="button" className="btn small camera-btn" onClick={() => cameraRef.current?.click()}>Camera</button>}
       </div>
       <input ref={pickRef} type="file" accept={accept} multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
-      <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { const f = e.target.files; if (gpsCamera) addGpsPhoto(f); else addFiles(f); e.target.value = ''; }} />
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { const f = [...(e.target.files || [])]; if (gpsCamera && mode.current === 'gps') addGpsPhoto(f); else addFiles(f); e.target.value = ''; }} />
       {status && <span className="hint">{status}</span>}
       {error && <span className="error-text">{error}</span>}
     </div>

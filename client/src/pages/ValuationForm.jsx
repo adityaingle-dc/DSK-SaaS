@@ -288,6 +288,10 @@ export default function ValuationForm() {
         setServerErrors(err.errors);
         goToField(err.errors[0].field);
       }
+      // on a phone the message at the top is off-screen: say it where it is seen
+      if (window.matchMedia?.('(max-width: 900px)').matches) {
+        alertDialog({ title: "Couldn't save", message: `${err.message}${err.errors?.length ? '' : ' What you entered is kept on this phone.'}` });
+      }
       return null;
     } finally {
       setBusy(false);
@@ -307,6 +311,14 @@ export default function ValuationForm() {
     if (saved) navigate(returnTo || `/valuations/${saved._id}`, { replace: true });
   };
   // save and stay (the drafter's screen), or save and go to the sheet page (the evaluator's last step)
+  // save and stay on this step (the evaluator's last step: save now, submit later)
+  const saveHere = async () => {
+    const saved = unsaved() ? await persist() : true;
+    if (!saved) return;
+    if (saved !== true) setMeta((m) => ({ ...m, ...saved, customer: m?.customer, evaluator: m?.evaluator, drafter: m?.drafter }));
+    setSavedNote('Saved');
+    setTimeout(() => setSavedNote(''), 2500);
+  };
   const save = async () => {
     const saved = await persist();
     if (!saved) return;
@@ -561,6 +573,10 @@ export default function ValuationForm() {
             </button>
             {savedNote && <span className="sa-saved" role="status">✓ {savedNote}</span>}
             <div className="sa-save">
+              {/* the evaluator's last step: save without handing the sheet in yet */}
+              {isLast && finalAction.run === submit && (
+                <button type="button" className="btn sa-nav sa-save-only" title="Save what you have entered; submit when you are done" onClick={saveHere} disabled={busy}>Save</button>
+              )}
               {isLast ? (
                 <button type="button" className="btn primary sa-primary sa-final" title={finalAction.hint} onClick={finalAction.run} disabled={busy}>
                   {busy ? 'Saving…' : <><span className="sa-full">{finalAction.label}</span><span className="sa-short">{finalAction.short}</span></>}

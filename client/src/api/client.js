@@ -7,6 +7,23 @@ export const tokenStore = {
   clear: () => localStorage.removeItem(TOKEN_KEY),
 };
 
+// a request that gets no answer (weak mobile signal) is stopped after a while instead of leaving the screen on
+// "Saving…" for ever; the caller shows the message and the user can try again
+const NO_ANSWER = 'No answer from the server. Check your internet connection and try again.';
+async function fetchWithin(url, options, ms) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...options, signal: ctrl.signal });
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error(NO_ANSWER);
+    if (e instanceof TypeError) throw new Error(`Could not reach the server. ${navigator.onLine === false ? 'You are offline.' : 'Check your internet connection and try again.'}`);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function request(path, { method = 'GET', body, query } = {}) {
   const qs = query
     ? '?' + new URLSearchParams(Object.entries(query).filter(([, v]) => v !== '' && v != null)).toString()
@@ -15,11 +32,11 @@ async function request(path, { method = 'GET', body, query } = {}) {
   const token = tokenStore.get();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE}${path}${qs}`, {
+  const res = await fetchWithin(`${BASE}${path}${qs}`, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
-  });
+  }, 45000);
 
   if (res.status === 204) return null;
   const data = await res.json().catch(() => ({}));
@@ -41,7 +58,7 @@ async function uploadFile(file, meta = {}) {
   const form = new FormData();
   if (meta.gps) form.append('gps', JSON.stringify(meta.gps));
   form.append('file', file, file.name);
-  const res = await fetch(`${BASE}/files`, { method: 'POST', headers: authHeaders(), body: form });
+  const res = await fetchWithin(`${BASE}/files`, { method: 'POST', headers: authHeaders(), body: form }, 120000);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.message || `Upload failed (${res.status})`);
   return data; // { id, name, type, size }

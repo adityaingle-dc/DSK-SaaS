@@ -938,8 +938,10 @@ details[open] > summary .group-caret { transform: rotate(180deg); }
   .stepper-dot { width: 30px; height: 30px; font-size: 0.68rem; }
   .stepper-dot svg { width: 15px; height: 15px; }
   .stepper-item + .stepper-item::before { top: 14px; left: calc(-50% + 17px); right: calc(50% + 17px); }
-  .section-head { flex-wrap: wrap; }
-  .section-count { width: 100%; margin: -10px 0 0 50px; }
+  /* icon on the left; the title (however long) and "Step x of y" stacked beside it */
+  .section-head { display: grid; grid-template-columns: 38px minmax(0, 1fr); column-gap: 12px; row-gap: 2px; align-items: center; }
+  .section-head .section-step { grid-row: 1 / span 2; }
+  .section-count { width: auto; margin: 0; }
   .actions.sticky { bottom: calc(10px + var(--sa-bottom)); }
   .actions.sticky { flex-wrap: wrap; overflow: visible; gap: 8px; }
   .actions.sticky .spacer, .actions.sticky .btn-cancel { display: none; }
@@ -2339,3 +2341,28 @@ body.drafting-full .sheet-layout.workspace.split > .ws-report { top: 12px; max-h
 
 /* a value worked out from an earlier entry (shown, not entered) */
 .derived-value { padding: 9px 12px; border: 1px dashed var(--border-strong); border-radius: 8px; background: var(--surface-2); }
+
+/* Phones and touch screens: tapping a box must not zoom the page in (iPhone Safari zooms into text under 16px),
+   and small links / chips get a finger-sized touch area without changing how they look */
+@media (max-width: 900px), (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea { font-size: 16px !important; }
+  .link-btn, .label-link, .linklike, .call-link, .powered-by a { padding-block: 9px; margin-block: -9px; }
+  .wa-chip { min-height: 32px; min-width: 32px; justify-content: center; }
+  .phone-actions .call-link, .call-link { min-height: 32px; }
+  /* plain text links (names, "Request access", sheet numbers): a taller touch area, same look and line height */
+  a:not([class]) { padding-block: 7px; margin-block: -7px; }
+}
+/* Phones: amenities / services are one compact row each (item on the left, amount on the right) instead of a tall card */
+@media (max-width: 900px) {
+  .input-table.amount-table tbody { gap: 6px; }
+  .input-table.amount-table tr { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 10px; padding: 8px 10px 8px 12px; }
+  .input-table.amount-table tbody th { grid-column: auto; font-size: 0.88rem; font-weight: 600; }
+  .input-table.amount-table td[data-label]::before { display: none; }
+  .input-table.amount-table .tier-amount input { width: 118px; }
+}
+
+/* the evaluator's last step: "Save" (keep working) before "Submit to drafter" */
+.sa-save .sa-save-only { margin-right: 8px; }
+@media (max-width: 900px) {
+  .actions.sticky .sa-save .btn.sa-save-only { order: -1; flex: 0 0 auto; width: auto; padding: 0 14px; margin-right: 6px; }
+}

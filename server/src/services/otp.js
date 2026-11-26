@@ -37,10 +37,17 @@ export async function startOtp({ purpose, email, user, name, payload, send = tru
   // retire earlier unused codes (kept until expiry so they still count towards the limit)
   await Otp.updateMany({ email, purpose, usedAt: null }, { usedAt: new Date() });
 
-  const code = newCode();
-  const otp = new Otp({ purpose, email, user, payload, expiresAt: new Date(Date.now() + OTP_MINUTES * 60e3) });
-  otp.codeHash = hash(otp._id, send ? code : crypto.randomUUID());
-  await otp.save();
+const code = newCode();
+const otp = new Otp({
+  purpose,
+  email,
+  user,
+  payload,
+  expiresAt: new Date(Date.now() + OTP_MINUTES * 60e3)
+});
+otp.codeHash = hash(otp._id, send ? code : crypto.randomUUID());
+await otp.save();
+
   if (send) {
     try {
       await sendOtpMail({ to: email, name, code, purpose, minutes: OTP_MINUTES });
