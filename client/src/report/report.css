@@ -237,3 +237,16 @@ ol.f-list { list-style: decimal; }
 .keyplan-pair .keyplan { margin: 0; }
 .keyplan-pair figcaption b { color: #111; }
 .keyplan-missing { display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; font-size: 10pt; color: #6b7280; background: #f9fafb; border: 1px dashed #d1d5db; }
+
+/* signature blocks: the seal on the left, the signature with its caption centred right under it; the same space is
+   kept before approval, and for anyone signing on paper (Branch Manager) it is left blank for their sign and seal */
+.sign { align-items: flex-end; }
+.sign-right { display: flex; align-items: flex-end; gap: 4mm; text-align: center; }
+.sign-seal { width: 24mm; height: 24mm; flex-shrink: 0; display: grid; place-items: center; align-self: flex-start; }
+.sign-stamp { width: 24mm; height: 24mm; object-fit: contain; }
+.sign-col { display: flex; flex-direction: column; align-items: center; min-width: 50mm; }
+.sign-space { height: 30mm; width: 50mm; display: flex; align-items: flex-end; justify-content: center; margin-bottom: 1mm; }
+.sign-image { max-height: 30mm; max-width: 50mm; object-fit: contain; }
+.sign-pending { font-size: 7.5pt; color: #9ca3af; font-style: italic; align-self: center; }
+.seal-image { width: 13mm; height: 13mm; object-fit: contain; }
+@media print { .sign-pending { display: none; } }

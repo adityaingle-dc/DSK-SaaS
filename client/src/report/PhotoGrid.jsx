@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import { printSized, PRINT_PX } from '../utils/printImage.js';
 
 // Uploaded photos need the auth token, so they are fetched as blobs first (same as thumbnails).
 function Photo({ file }) {
   const [url, setUrl] = useState(null);
   useEffect(() => {
     let live = true;
-    api.fileUrl(file.id).then((u) => live && setUrl(u)).catch(() => {});
+    api.fileUrl(file.id).then((u) => printSized(u, PRINT_PX.photo)).then((u) => live && setUrl(u)).catch(() => {});
     return () => {
       live = false;
     };
@@ -30,7 +31,7 @@ export function FullPagePhoto({ file }) {
   const [url, setUrl] = useState(null);
   useEffect(() => {
     let live = true;
-    api.fileUrl(file.id).then((u) => live && setUrl(u)).catch(() => {});
+    api.fileUrl(file.id).then((u) => printSized(u, PRINT_PX.page)).then((u) => live && setUrl(u)).catch(() => {});
     return () => { live = false; };
   }, [file.id]);
   return <figure className="full-page-photo">{url ? <img src={url} alt={file.name} /> : <div className="photo-loading">Loading…</div>}</figure>;

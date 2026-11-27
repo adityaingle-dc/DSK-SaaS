@@ -25,6 +25,7 @@ export const ACTIONS = [
   'report.generated', 'report.approved', 'report.returned',
   'report.edited',
   'report.deleted',
+  'branding.updated', 'branding.reset',
   'file.uploaded',
   'file.deleted',
   'user.created',
@@ -41,7 +42,7 @@ const activitySchema = new mongoose.Schema(
     actorName: String, // denormalised so the log stays readable if a user is renamed
     actorRole: String,
     action: { type: String, enum: ACTIONS, required: true, index: true },
-    entityType: { type: String, enum: ['valuation', 'file', 'user', 'auth', 'customer', 'report'] },
+    entityType: { type: String, enum: ['valuation', 'file', 'user', 'auth', 'customer', 'report', 'branding'] },
     entityId: { type: mongoose.Schema.Types.ObjectId },
     summary: { type: String, maxlength: 300 }, // human-readable one-liner
     meta: { type: mongoose.Schema.Types.Mixed },

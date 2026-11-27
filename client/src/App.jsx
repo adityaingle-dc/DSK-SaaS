@@ -18,6 +18,7 @@ import Reports from './pages/Reports.jsx';
 import GenerateReport from './pages/GenerateReport.jsx';
 import StoredReport from './report/StoredReport.jsx';
 import ChangePassword from './pages/ChangePassword.jsx';
+import SignatureSeal from './pages/SignatureSeal.jsx';
 import ReportPage from './report/ReportPage.jsx';
 
 function Protected({ children }) {
@@ -70,6 +71,7 @@ export default function App() {
         <Route path="drafts" element={<Navigate to="/valuations" replace />} />
         <Route path="valuations/:id/report" element={<OfficeOnly><ReportPage /></OfficeOnly>} />
         <Route path="change-password" element={<ChangePassword />} />
+        <Route path="signature" element={<SuperadminOnly><SignatureSeal /></SuperadminOnly>} />
         <Route path="team" element={<SuperadminOnly><Team /></SuperadminOnly>} />
         <Route path="team/:id" element={<SuperadminOnly><TeamMember /></SuperadminOnly>} />
         <Route path="activity" element={<SuperadminOnly><Activity /></SuperadminOnly>} />

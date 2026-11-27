@@ -53,6 +53,7 @@ export function UserMenu({ user, logout, placement = 'up', compact = false }) {
             <small>{user.email}</small>
           </div>
           <Link to="/change-password" role="menuitem"><IconKey size={16} /> Change password</Link>
+          {user.role === 'superadmin' && <Link to="/signature" role="menuitem"><IconKey size={16} /> Signature &amp; seal</Link>}
           <button type="button" role="menuitem" className="menu-danger" onClick={logout}><IconLogout size={16} /> Log out</button>
         </div>
       )}
@@ -94,6 +95,7 @@ function MoreSheet({ open, onClose, items, user, logout }) {
         </nav>
         <div className="more-account">
           <Link to="/change-password"><IconKey size={16} /> Change password</Link>
+          {user.role === 'superadmin' && <Link to="/signature"><IconKey size={16} /> Signature &amp; seal</Link>}
           <button type="button" className="menu-danger" onClick={logout}><IconLogout size={16} /> Log out</button>
         </div>
         <PoweredBy className="more-powered" />
@@ -138,7 +140,7 @@ export default function Layout() {
     { to: '/team', label: 'Team', icon: <DuoUsers size={20} />, badge: pending > 0 && <span className="nav-badge">{pending}</span> },
     { to: '/activity', label: 'Activity', icon: <DuoPulse size={20} /> },
   ];
-  const moreActive = /^\/(area|team|activity|change-password)/.test(pathname);
+  const moreActive = /^\/(area|team|activity|change-password|signature)/.test(pathname);
 
   const badge = pending > 0 && <span className="nav-badge">{pending}</span>;
   const sheetsBadge = (isSuperadmin || isDrafter) && queue > 0 && <span className="nav-badge" title="Site inspections waiting for a drafter">{queue}</span>;

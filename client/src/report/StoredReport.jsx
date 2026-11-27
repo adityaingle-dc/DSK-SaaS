@@ -30,7 +30,8 @@ export default function StoredReport() {
   if (error) return <div className="alert">{error}</div>;
   if (!r) return <div className="center">Loading report…</div>;
 
-  const doc = { referenceNo: r.snapshot.referenceNo, status: r.snapshot.status, data: r.snapshot.data, results: r.snapshot.results };
+  // signed: the valuer's signature and seal are printed only once the report is approved
+  const doc = { referenceNo: r.snapshot.referenceNo, status: r.snapshot.status, data: r.snapshot.data, results: r.snapshot.results, signed: r.status === 'approved' };
   const generated = `Generated ${dateTime(r.createdAt)}${r.generatedBy?.name ? ` by ${r.generatedBy.name}` : ''}`;
   const edited = r.editedAt ? ` · wording edited ${dateTime(r.editedAt)}${r.editedBy?.name ? ` by ${r.editedBy.name}` : ''}` : '';
   const approved = r.status === 'approved';

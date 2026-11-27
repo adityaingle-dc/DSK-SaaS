@@ -1,4 +1,19 @@
+import { useEffect, useState } from 'react';
 import { catalog, documentDescription, FLOORS, sideRoles, REPORT_TEMPLATES, personName, personRelation, phones, SQFT_PER_SQM, SQYD_PER_SQM } from '@dsk/shared';
+import { api } from '../api/client.js';
+import { printSized, PRINT_PX } from '../utils/printImage.js';
+
+// the valuer's signature / seal image (loaded once per session, signed-in users only); only on an approved report
+function useBrand(name, on) {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    if (!on) return undefined;
+    let live = true;
+    api.brandUrl(name).then((u) => printSized(u, name === 'signature' ? PRINT_PX.signature : PRINT_PX.seal, true)).then((u) => live && setUrl(u)).catch(() => {});
+    return () => { live = false; };
+  }, [name, on]);
+  return on ? url : null;
+}
 
 const floorName = (f) => (FLOORS.includes(f) ? `${f} Floor` : f || '');
 import { F, Words, rs } from './Field.jsx';
@@ -51,6 +66,8 @@ export function buildContext(v) {
 
   return {
     v, d, r, g, a, p, s, kind, tpl, bankRef,
+    // the valuer's signature and seal print only once the superadmin has approved the report
+    signed: !!v.signed,
     // Bank of Baroda: same report, data arranged as in the bank's formats (BCC:BR:114:694) — Annexure II-a for land &
     // building, II-b for flats
     bob: /baroda/i.test(g.bankName || ''),
@@ -85,7 +102,7 @@ export function Sheet({ n, total, c, children, letterhead = false, continued = f
       {letterhead && <Letterhead />}
       <div className="sheet-body">{children}</div>
       <footer className="sheet-foot">
-        <span className="seal">{FIRM.seal.map((l) => <span key={l}>{l}</span>)}</span>
+        <FooterSeal c={c} />
         <span className="foot-note">{FOOTER_NOTE.map((l) => <span key={l}>{l}</span>)}</span>
         <span className="foot-page">
           <span>{n} of {total}</span>
@@ -94,6 +111,13 @@ export function Sheet({ n, total, c, children, letterhead = false, continued = f
       </footer>
     </section>
   );
+}
+
+// every page's footer: the valuer's seal once approved (before that, the small drawn "DSK" mark)
+function FooterSeal({ c }) {
+  const stamp = useBrand('stamp', c.signed);
+  if (stamp) return <img className="seal-image" src={stamp} alt="Seal of the approved valuer" />;
+  return <span className="seal">{FIRM.seal.map((l) => <span key={l}>{l}</span>)}</span>;
 }
 
 function Letterhead() {
@@ -123,15 +147,38 @@ const Row = ({ label, k, v, n, block = true, bold }) => (
 );
 
 function Signature({ c, label = 'Approved Valuer', title = 'Signature' }) {
+  const sign = useBrand('signature', c.signed);
+  const stamp = useBrand('stamp', c.signed);
   return (
     <div className="sign">
       <div>
         <div>Place: <F k="sig.place" v={c.place} /></div>
         <div>Date: <F k="sig.date" v={c.valuationDate} /></div>
       </div>
+      {/* seal on the left; the signature with its caption centred right under it (same space before approval) */}
       <div className="sign-right">
-        <strong>{title}</strong>
-        <div>{label}</div>
+        <div className="sign-seal">{stamp && <img className="sign-stamp" src={stamp} alt="Seal of the approved valuer" />}</div>
+        <div className="sign-col">
+          <div className="sign-space">
+            {sign ? <img className="sign-image" src={sign} alt="Signature of the approved valuer" /> : !c.signed && <span className="sign-pending">Signature and seal are added when the report is approved</span>}
+          </div>
+          <strong>{title}</strong>
+          <div>{label}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// someone else who signs on paper (e.g. the Branch Manager): blank space for their signature and seal, caption under it
+function OtherSignature({ lines }) {
+  return (
+    <div className="sign-right">
+      <div className="sign-seal sign-blank" aria-hidden="true" />
+      <div className="sign-col">
+        <div className="sign-space sign-blank" aria-hidden="true" />
+        <strong>Signature</strong>
+        {lines.map((l) => <div key={l}>{l}</div>)}
       </div>
     </div>
   );
@@ -847,7 +894,7 @@ function BankUse({ c }) {
       </div>
       <div className="sign">
         <div><div>Date:</div><div>Place:</div></div>
-        <div className="sign-right"><strong>Signature</strong><div>Name of the Branch Manager</div><div>with Office Seal</div></div>
+        <OtherSignature lines={['Name of the Branch Manager', 'with Office Seal']} />
       </div>
     </>
   );

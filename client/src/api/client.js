@@ -82,7 +82,43 @@ async function fileUrl(id) {
   return blobCache.get(id);
 }
 
+// the valuer's (superadmin's) signature / seal: replace or restore (superadmin), and show (signed-in users only)
+async function uploadBrand(name, file) {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  const res = await fetchWithin(`${BASE}/branding/${name}`, { method: 'PUT', headers: authHeaders(), body: form }, 120000);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || `Upload failed (${res.status})`);
+  blobCache.delete(`brand:${name}`);
+  return data;
+}
+async function resetBrand(name) {
+  const data = await request(`/branding/${name}`, { method: 'DELETE' });
+  blobCache.delete(`brand:${name}`);
+  return data;
+}
+async function brandUrl(name) {
+  const key = `brand:${name}`;
+  if (!blobCache.has(key)) {
+    blobCache.set(
+      key,
+      fetch(`${BASE}/branding/${name}`, { headers: authHeaders() }).then(async (res) => {
+        if (!res.ok) throw new Error(`Could not load the ${name} (${res.status})`);
+        return URL.createObjectURL(await res.blob());
+      }).catch((e) => {
+        blobCache.delete(key);
+        throw e;
+      })
+    );
+  }
+  return blobCache.get(key);
+}
+
 export const api = {
+  brandUrl,
+  uploadBrand,
+  resetBrand,
+  brandingInfo: () => request('/branding'),
   uploadFile,
   fileUrl,
   deleteFile: (id) => request(`/files/${id}`, { method: 'DELETE' }),
